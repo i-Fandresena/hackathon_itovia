@@ -33,6 +33,16 @@ Pour une **vraie base partagée** (offres visibles par tous, candidatures persis
    | Build Command | `npm run build` |
    | Output Directory | `dist` |
    | Install Command | `npm install` |
+   | Node.js Version | **22.x** |
+
+   > **Version de Node — cause d'échec la plus fréquente ici.** Vite 8 et
+   > `@vitejs/plugin-react` 6 exigent Node `^20.19` ou `>=22.12`. Le projet
+   > déclare donc `engines.node: "22.x"` dans `package.json` (et `.nvmrc`),
+   > ce que Vercel lit pour choisir sa version. Si un build échoue dès
+   > l'installation ou au lancement de `vite`, vérifiez d'abord ce réglage
+   > dans **Project → Settings → General → Node.js Version** : un projet
+   > créé il y a plusieurs mois peut être resté figé sur une version
+   > antérieure, incompatible avec la chaîne de build actuelle.
 
 4. **Environment Variables** (premier déploiement, optionnel) :
 
