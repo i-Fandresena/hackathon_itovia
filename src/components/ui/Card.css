@@ -1,0 +1,46 @@
+.card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.35rem;
+  box-shadow: var(--shadow-xs);
+  text-align: left;
+  width: 100%;
+  transition:
+    border-color 0.25s var(--ease-out),
+    box-shadow 0.25s var(--ease-out),
+    transform 0.25s var(--ease-out);
+}
+
+.card-hover {
+  cursor: pointer;
+}
+
+.card-hover:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+button.card {
+  font: inherit;
+  color: inherit;
+}
+
+.card-flat {
+  background: var(--color-bg);
+  box-shadow: none;
+}
+
+.card-dark {
+  background: var(--color-dark-elevated);
+  border-color: var(--color-dark-border);
+  color: #e8eaed;
+}
+
+.card-dark h1,
+.card-dark h2,
+.card-dark h3,
+.card-dark strong {
+  color: #fff;
+}

@@ -1,0 +1,49 @@
+.match-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.match-ring-track {
+  stroke: var(--color-bg-subtle);
+}
+
+.match-ring-progress {
+  stroke: url(#ringGrad);
+  stroke: var(--color-accent);
+}
+
+.match-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.match-ring-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.match-ring-unit {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  margin-top: -2px;
+}
+
+.match-ring-label {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-faint);
+  margin-top: 0.15rem;
+}

@@ -1,0 +1,37 @@
+.logo-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.logo-link:hover {
+  text-decoration: none;
+}
+
+.logo-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.logo-mark-svg {
+  flex-shrink: 0;
+}
+
+.logo-mark-bg {
+  fill: var(--color-ink);
+}
+
+.logo-dot {
+  fill: #ff6b4a;
+}
+
+.logo-wordmark {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--color-ink);
+}
+
+.logo-word-accent {
+  color: var(--color-accent);
+}

@@ -1,0 +1,96 @@
+.auth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - var(--header-h) - 160px);
+  position: relative;
+}
+
+.auth-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 50% 40% at 80% 20%, rgba(26, 86, 255, 0.06), transparent),
+    radial-gradient(ellipse 40% 30% at 10% 80%, rgba(12, 14, 18, 0.03), transparent);
+  pointer-events: none;
+}
+
+.auth-container {
+  max-width: 420px;
+  width: 100%;
+  padding-top: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-container .card {
+  box-shadow: var(--shadow-md);
+}
+
+.auth-container h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 0.35rem;
+}
+
+.auth-sub {
+  color: var(--color-ink-muted);
+  margin-bottom: 1.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+.auth-error {
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--color-danger-bg);
+  border-radius: var(--radius-sm);
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: 0.875rem;
+  color: var(--color-ink-muted);
+}
+
+.demo-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  justify-content: center;
+}
+
+.role-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  padding: 4px;
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.role-toggle button {
+  padding: 0.7rem 0.5rem;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-ink-muted);
+  transition: background 0.2s var(--ease-out), color 0.2s var(--ease-out);
+}
+
+.role-toggle button.active {
+  background: var(--color-bg-elevated);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-xs);
+}

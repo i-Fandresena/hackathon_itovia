@@ -1,0 +1,172 @@
+.prov-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+}
+
+/* Pas de `flex-wrap` : le badge de confiance doit occuper la même place sur
+   toutes les cartes, sinon la grille paraît cassée. C'est le titre qui passe
+   à la ligne. */
+.prov-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
+}
+
+.prov-card-id {
+  min-width: 0;
+}
+
+.prov-card h3 {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.2rem;
+  line-height: 1.3;
+}
+
+.prov-card h3 a {
+  color: var(--color-ink);
+  text-decoration: none;
+  transition: color 0.2s var(--ease-out);
+}
+
+.prov-card h3 a:hover {
+  color: var(--color-accent);
+}
+
+.prov-trade {
+  font-size: 0.875rem;
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+.prov-location {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+.prov-price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-muted);
+  font-size: 0.875rem;
+  color: var(--color-ink-secondary);
+}
+
+.prov-price strong {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-accent-hover);
+}
+
+.prov-price-note {
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+}
+
+.prov-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.prov-reasons li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.8125rem;
+  color: var(--color-ink-secondary);
+  line-height: 1.45;
+}
+
+.prov-reasons li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.5rem;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+.prov-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+}
+
+.prov-warning svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.prov-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 0.25rem;
+}
+
+.prov-card-foot .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.prov-link {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: color 0.2s var(--ease-out), gap 0.2s var(--ease-out);
+}
+
+.prov-link:hover {
+  color: var(--color-accent);
+  gap: 0.4rem;
+}
+
+.prov-list {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .prov-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1100px) {
+  .prov-list {
+    gap: 1.25rem;
+  }
+}

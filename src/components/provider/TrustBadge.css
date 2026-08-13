@@ -1,0 +1,77 @@
+.trust-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.trust-forte {
+  background: var(--color-success-bg);
+  border-color: rgba(5, 150, 105, 0.25);
+  color: var(--color-success);
+}
+
+.trust-moyenne {
+  background: var(--color-warning-bg);
+  border-color: rgba(217, 119, 6, 0.25);
+  color: var(--color-warning);
+}
+
+.trust-faible,
+.trust-empty {
+  background: var(--color-bg-subtle);
+  border-color: var(--color-border-strong);
+  color: var(--color-ink-muted);
+}
+
+.trust-score {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: inherit;
+}
+
+.trust-max {
+  font-weight: 500;
+  opacity: 0.65;
+  font-size: 0.75rem;
+}
+
+.trust-sep {
+  width: 1px;
+  height: 12px;
+  background: currentColor;
+  opacity: 0.25;
+}
+
+.trust-level {
+  font-weight: 600;
+}
+
+.trust-count,
+.trust-none {
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+.trust-forte .trust-count,
+.trust-moyenne .trust-count {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.trust-compact {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.trust-compact .trust-count {
+  display: none;
+}

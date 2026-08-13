@@ -1,0 +1,36 @@
+.mada-map {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mada-map-svg {
+  width: 120px;
+  height: auto;
+  opacity: 0.9;
+}
+
+.mada-outline {
+  fill: var(--color-accent-muted);
+  stroke: var(--color-accent);
+  stroke-width: 1.2;
+  stroke-opacity: 0.35;
+}
+
+.mada-dot {
+  fill: var(--color-accent);
+}
+
+.mada-pulse {
+  fill: var(--color-accent);
+  transform-origin: center;
+}
+
+.mada-caption {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}

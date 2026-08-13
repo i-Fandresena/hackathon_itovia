@@ -1,0 +1,115 @@
+.hero-visual-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  min-height: 340px;
+  margin: 0 auto;
+}
+
+.hero-visual-glow {
+  position: absolute;
+  inset: 10% 5%;
+  background: radial-gradient(ellipse at center, rgba(26, 86, 255, 0.18), transparent 70%);
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.hero-panel {
+  position: relative;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.hero-panel-back {
+  position: absolute;
+  inset: 12px -8px -12px 8px;
+  z-index: 0;
+  opacity: 0.55;
+  background: var(--color-bg-subtle);
+}
+
+.hero-panel-main {
+  z-index: 1;
+  padding: 1.5rem 1.5rem 1.25rem;
+}
+
+.hero-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.hero-panel-tag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-accent-hover);
+}
+
+.hero-panel-live {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+
+.hero-panel-title {
+  font-size: 1.125rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.25rem;
+}
+
+.hero-panel-meta {
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+  margin-bottom: 1.25rem;
+}
+
+.hero-panel-body {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.hero-panel-reasons {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.hero-panel-reasons li {
+  font-size: 0.75rem;
+  color: var(--color-ink-secondary);
+  padding-left: 0.75rem;
+  position: relative;
+  line-height: 1.4;
+}
+
+.hero-panel-reasons li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 3px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--color-ink);
+}
+
+.hero-panel-bar {
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-accent), #5b8cff);
+  border-radius: var(--radius-full);
+  max-width: 100%;
+}

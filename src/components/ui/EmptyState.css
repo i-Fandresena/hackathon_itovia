@@ -1,0 +1,31 @@
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent-muted);
+  color: var(--color-accent-hover);
+  border-radius: 50%;
+}
+
+.empty-state h3 {
+  font-size: 1.1rem;
+  margin-bottom: 0.35rem;
+}
+
+.empty-state p {
+  color: var(--color-text-muted);
+  max-width: 360px;
+  margin: 0 auto 1rem;
+  font-size: 0.95rem;
+}
