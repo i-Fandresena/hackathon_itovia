@@ -1,0 +1,4 @@
+interface:
+  display_name: "OffRec CEO Strategy"
+  short_description: "Pilot, pitch et croissance d'OffRec"
+  default_prompt: "Use $offrec-ceo-strategy to make a defensible OffRec product or business decision."
