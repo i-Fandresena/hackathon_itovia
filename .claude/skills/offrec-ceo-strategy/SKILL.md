@@ -13,9 +13,9 @@ description: Make evidence-led CEO, product, go-to-market, pitch, partnership, p
 Use this skill to keep product, business, social impact and pitch work aligned.
 Read `AGENTS.md` first. Then choose only the needed reference:
 
-- Market evidence, sources and claims: `references/madagascar-market.md`.
-- Strategic direction and execution targets: `../../STRATEGIE_OFFREC_2026.md`.
-- Product scope and delivery criteria: `../../CAHIER_DES_CHARGES.md`.
+- Market evidence, sources and claims: `../../../skills/offrec-ceo-strategy/references/madagascar-market.md`.
+- Strategic direction and execution targets: `../../../STRATEGIE_OFFREC_2026.md`.
+- Product scope and delivery criteria: `../../../CAHIER_DES_CHARGES.md`.
 
 ## Non-negotiable positioning
 
@@ -46,9 +46,9 @@ overstates what OffRec actually does today:
   `src/data/seedDirectory.ts` are demo fixtures for a jury walkthrough, not
   real members or real chantiers. Do not present them as market validation.
 - Market-size and informality statistics are sourced with a date in
-  `references/madagascar-market.md`; re-verify a figure at its cited URL
-  before it goes into a live pitch, and refresh any source older than six
-  months.
+  `../../../skills/offrec-ceo-strategy/references/madagascar-market.md`;
+  re-verify a figure at its cited URL before it goes into a live pitch, and
+  refresh any source older than six months.
 
 ## Decision workflow
 

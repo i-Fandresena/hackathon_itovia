@@ -11,8 +11,9 @@ Lire aussi les documents métier concernés avant une modification :
 
 Pour toute décision de stratégie, produit, concurrence, pitch, marque,
 partenariat, modèle économique ou roadmap, utiliser le skill projet
-`skills/offrec-ceo-strategy/SKILL.md`. Il impose de séparer faits, hypothèses,
-cibles et résultats réels.
+`offrec-ceo-strategy` (`skills/offrec-ceo-strategy/SKILL.md`, ou
+`.claude/skills/offrec-ceo-strategy/SKILL.md` selon l'agent). Il impose de
+séparer faits, hypothèses, cibles et résultats réels.
 
 ## Produit et état actuel
 
