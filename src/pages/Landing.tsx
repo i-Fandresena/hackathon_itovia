@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowRight, Briefcase, Check, Hammer, Search } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import dashboardPreview from '../assets/dashboard-preview.png'
 import { FadeUp, Stagger } from '../components/motion/Motion'
 import { OpportunityCard } from '../components/opportunity/OpportunityCard'
@@ -59,10 +59,24 @@ const STAT_ITEMS = [
 ]
 
 export function Landing() {
-  const { opportunities } = useApp()
+  const { opportunities, currentUser } = useApp()
   const featured = opportunities.filter((o) => o.featured).slice(0, 4)
   // Carte du milieu active par défaut, comme dans la maquette.
   const [active, setActive] = useState(1)
+  const navigate = useNavigate()
+
+  // Un membre déjà connecté qui atterrit sur « / » (ex. lien direct, retour
+  // arrière) doit rejoindre son tableau de bord plutôt que revoir la page
+  // marketing dans la coquille applicative — voir même logique dans Login.tsx.
+  useEffect(() => {
+    if (currentUser) {
+      navigate(currentUser.role === 'candidate' ? '/candidat' : '/recruteur', {
+        replace: true,
+      })
+    }
+  }, [currentUser, navigate])
+
+  if (currentUser) return null
 
   return (
     <div className="landing">

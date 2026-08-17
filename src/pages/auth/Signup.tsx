@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -9,7 +9,7 @@ import type { UserRole } from '../../types'
 import './Auth.css'
 
 export function Signup() {
-  const { register } = useApp()
+  const { register, currentUser } = useApp()
   const navigate = useNavigate()
   const [role, setRole] = useState<UserRole>('candidate')
   const [email, setEmail] = useState('')
@@ -19,6 +19,14 @@ export function Signup() {
   const [phone, setPhone] = useState('')
   const [province, setProvince] = useState<string>(PROVINCES[0])
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (currentUser) {
+      navigate(currentUser.role === 'candidate' ? '/candidat' : '/recruteur', {
+        replace: true,
+      })
+    }
+  }, [currentUser, navigate])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -56,6 +64,8 @@ export function Signup() {
       navigate('/recruteur')
     }
   }
+
+  if (currentUser) return null
 
   return (
     <div className="page auth-page">
