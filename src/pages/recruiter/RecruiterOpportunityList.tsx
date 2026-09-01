@@ -14,9 +14,9 @@ export function RecruiterOpportunityList() {
     useApp()
   const myOpps = opportunities.filter((o) => o.recruiterId === currentUser?.id)
 
-  const handleDelete = (id: string, title: string) => {
+  const handleDelete = async (id: string, title: string) => {
     if (window.confirm(`Supprimer l’offre « ${title} » ?`)) {
-      deleteOpportunity(id)
+      await deleteOpportunity(id)
     }
   }
 

@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: offrec
+      POSTGRES_PASSWORD: offrec
+      POSTGRES_DB: offrec
+    ports:
+      # 5432 est déjà pris par un service PostgreSQL natif sur cette machine.
+      - '5433:5432'
+    volumes:
+      - offrec_db_data:/var/lib/postgresql/data
+
+volumes:
+  offrec_db_data:

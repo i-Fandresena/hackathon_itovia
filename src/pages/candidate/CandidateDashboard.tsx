@@ -1,5 +1,6 @@
 import { ArrowRight, UserCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { FadeUp } from '../../components/motion/Motion'
 import { OpportunityCard } from '../../components/opportunity/OpportunityCard'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -34,26 +35,35 @@ export function CandidateDashboard() {
   return (
     <div className="page">
       <div className="container">
-        <header className="page-header">
-          <h1>Bonjour, {profile.fullName.split(' ')[0]}</h1>
-          <p>
-            Voici vos opportunités recommandées pour {profile.province}.
-          </p>
-        </header>
+        <FadeUp>
+          <header className="page-header">
+            <p className="eyebrow">Espace candidat</p>
+            <h1>Bonjour, {profile.fullName.split(' ')[0]}</h1>
+            <p>
+              Voici vos opportunités recommandées pour {profile.province}.
+            </p>
+          </header>
+        </FadeUp>
 
         <div className="grid-3" style={{ marginBottom: '1.5rem' }}>
-          <Card className="stat-card">
-            <strong>{ranked.length > 0 ? ranked[0].match.score : '—'}%</strong>
-            <span>Meilleur match actuel</span>
-          </Card>
-          <Card className="stat-card">
-            <strong>{opportunities.length}</strong>
-            <span>Offres disponibles</span>
-          </Card>
-          <Card className="stat-card">
-            <strong>{bookmarks}</strong>
-            <span>Favoris enregistrés</span>
-          </Card>
+          <FadeUp index={0}>
+            <Card className="stat-card">
+              <strong>{ranked.length > 0 ? ranked[0].match.score : '—'}%</strong>
+              <span>Meilleur match actuel</span>
+            </Card>
+          </FadeUp>
+          <FadeUp index={1}>
+            <Card className="stat-card">
+              <strong>{opportunities.length}</strong>
+              <span>Offres disponibles</span>
+            </Card>
+          </FadeUp>
+          <FadeUp index={2}>
+            <Card className="stat-card">
+              <strong>{bookmarks}</strong>
+              <span>Favoris enregistrés</span>
+            </Card>
+          </FadeUp>
         </div>
 
         <div className="section-head-row" style={{ marginBottom: '1rem' }}>

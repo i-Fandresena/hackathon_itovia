@@ -74,6 +74,7 @@
 }
 
 .side-nav a {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.7rem;
@@ -82,9 +83,13 @@
   font-size: 0.875rem;
   font-weight: 550;
   color: var(--color-ink-secondary);
-  transition:
-    background 0.2s var(--ease-out),
-    color 0.2s var(--ease-out);
+  transition: color 0.2s var(--ease-out);
+}
+
+/* icône, libellé et badge doivent peindre au-dessus de la pastille animée */
+.side-nav a > svg,
+.side-nav a > span {
+  position: relative;
 }
 
 .side-nav a span:first-of-type {
@@ -97,12 +102,25 @@
 }
 
 .side-nav a.active {
-  background: var(--color-accent);
   color: #fff;
+}
+
+.side-nav a.active:hover {
+  background: transparent;
+}
+
+/* Pastille animée (Framer Motion, layoutId partagé) qui glisse d'un lien
+   actif à l'autre au lieu d'apparaître/disparaître brutalement. */
+.side-nav-pill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-accent);
+  border-radius: var(--radius-md);
   box-shadow: 0 6px 16px rgba(26, 86, 255, 0.25);
 }
 
 .side-badge {
+  position: relative;
   min-width: 20px;
   height: 20px;
   padding: 0 6px;

@@ -7,17 +7,38 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { SEED_APPLICATIONS, SEED_OPPORTUNITIES, SEED_USERS } from '../data/seed'
 import {
-  SEED_MEMBERS,
-  SEED_PROVIDERS,
-  SEED_RECOMMENDATIONS,
-} from '../data/seedDirectory'
-import { loadJson, saveJson } from '../lib/storage'
+  ApiError,
+  apiAddBookmark,
+  apiApplyToOpportunity,
+  apiConfirmRecommendation,
+  apiCreateOpportunity,
+  apiCreateProvider,
+  apiCreateRecommendation,
+  apiDeleteOpportunity,
+  apiDirectoryRaw,
+  apiListOpportunities,
+  apiLogin,
+  apiLogout,
+  apiMarkNotificationRead,
+  apiMe,
+  apiMyApplications,
+  apiMyBookmarks,
+  apiMyNotifications,
+  apiReceivedApplications,
+  apiRegister,
+  apiRemoveBookmark,
+  apiUpdateCandidateProfile,
+  apiUpdateOpportunity,
+  type ApiUser,
+  type CreateProviderPayload,
+  type CreateRecommendationPayload,
+} from '../lib/api'
 import { canRecommend } from '../lib/trust'
 import type {
   Application,
   CandidateProfile,
+  IndividualProfile,
   Member,
   Notification,
   Opportunity,
@@ -27,19 +48,6 @@ import type {
   User,
   UserRole,
 } from '../types'
-
-interface AppState {
-  users: User[]
-  opportunities: Opportunity[]
-  applications: Application[]
-  bookmarks: string[]
-  notifications: Notification[]
-  members: Member[]
-  providers: Provider[]
-  recommendations: Recommendation[]
-  currentUserId: string | null
-  hydrated: boolean
-}
 
 /** Champs saisis par le membre ; le reste est dérivé du contexte. */
 export type RecommendationInput = Pick<
@@ -61,440 +69,373 @@ export type ProviderInput = Omit<
   'id' | 'createdAt' | 'addedByMemberId' | 'claimedByMemberId'
 >
 
-interface AppContextValue extends AppState {
+type OpportunityInput = Omit<Opportunity, 'id' | 'createdAt' | 'recruiterId' | 'companyName'>
+
+interface Result {
+  ok: boolean
+  error?: string
+}
+
+interface AppContextValue {
   currentUser: User | null
-  login: (
-    email: string,
-    password: string,
-  ) => { ok: boolean; error?: string; user?: User }
-  logout: () => void
+  opportunities: Opportunity[]
+  applications: Application[]
+  bookmarks: string[]
+  notifications: Notification[]
+  members: Member[]
+  providers: Provider[]
+  recommendations: Recommendation[]
+  hydrated: boolean
+
+  login: (email: string, password: string) => Promise<Result & { user?: User }>
+  logout: () => Promise<void>
   register: (
     email: string,
     password: string,
     role: UserRole,
-    profile: CandidateProfile | RecruiterProfile,
-  ) => { ok: boolean; error?: string }
-  updateCandidateProfile: (profile: CandidateProfile) => void
-  updateRecruiterProfile: (profile: RecruiterProfile) => void
-  addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt'>) => Opportunity
-  updateOpportunity: (id: string, data: Partial<Opportunity>) => void
-  deleteOpportunity: (id: string) => void
-  toggleBookmark: (opportunityId: string) => void
+    profile: CandidateProfile | RecruiterProfile | IndividualProfile,
+  ) => Promise<Result>
+  updateCandidateProfile: (profile: CandidateProfile) => Promise<Result>
+  addOpportunity: (opp: OpportunityInput) => Promise<Result & { opportunity?: Opportunity }>
+  updateOpportunity: (id: string, data: OpportunityInput) => Promise<Result>
+  deleteOpportunity: (id: string) => Promise<Result>
+  toggleBookmark: (opportunityId: string) => Promise<void>
   isBookmarked: (opportunityId: string) => boolean
-  applyToOpportunity: (
-    opportunityId: string,
-    message?: string,
-  ) => { ok: boolean; error?: string }
+  applyToOpportunity: (opportunityId: string, message?: string) => Promise<Result>
   hasApplied: (opportunityId: string) => boolean
   getApplicationsForOpportunity: (opportunityId: string) => Application[]
   getApplicationsForRecruiter: (recruiterId: string) => Application[]
-  addNotification: (userId: string, title: string, message: string) => void
-  markNotificationRead: (id: string) => void
+  markNotificationRead: (id: string) => Promise<void>
   unreadCount: number
 
   /** Identité communautaire du compte connecté (porte la réputation). */
   currentMemberId: string | null
   membersById: Map<string, Member>
   getProvider: (id: string) => Provider | undefined
-  addProvider: (input: ProviderInput, authorDistrict: string) => Provider | null
-  addRecommendation: (input: RecommendationInput) => { ok: boolean; error?: string }
-  canRecommendProvider: (providerId: string) => { ok: boolean; error?: string }
-  toggleConfirmation: (recommendationId: string) => void
+  addProvider: (input: ProviderInput, authorDistrict: string) => Promise<Provider | null>
+  addRecommendation: (input: RecommendationInput) => Promise<Result>
+  canRecommendProvider: (providerId: string) => Result
+  toggleConfirmation: (recommendationId: string) => Promise<void>
   hasConfirmed: (recommendationId: string) => boolean
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
 
-const STORAGE_KEY = 'app_state_v1'
-
-function uid(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
-
-function defaultState(): AppState {
-  return {
-    users: SEED_USERS,
-    opportunities: SEED_OPPORTUNITIES,
-    applications: SEED_APPLICATIONS,
-    bookmarks: [],
-    notifications: [],
-    members: SEED_MEMBERS,
-    providers: SEED_PROVIDERS,
-    recommendations: SEED_RECOMMENDATIONS,
-    currentUserId: null,
-    hydrated: false,
-  }
-}
-
-/** Un compte utilisateur donne accès à une seule identité communautaire. */
-function memberIdFor(userId: string): string {
-  return `member-user-${userId}`
-}
-
-function displayNameFor(user: User): string {
+function displayNameFor(user: ApiUser): string {
   const full = user.candidateProfile?.fullName ?? user.recruiterProfile?.companyName
   if (!full) return 'Membre'
   const [first, ...rest] = full.trim().split(/\s+/)
   return rest.length ? `${first} ${rest[rest.length - 1][0]}.` : first
 }
 
-/** Le quartier déclaré à la dernière contribution fait foi. */
-function upsertMember(members: Member[], user: User, district: string): Member[] {
-  const id = memberIdFor(user.id)
-  if (members.some((m) => m.id === id)) {
-    return members.map((m) => (m.id === id ? { ...m, district } : m))
-  }
-  return [
-    ...members,
-    {
-      id,
-      displayName: displayNameFor(user),
-      district,
-      city: user.candidateProfile?.city ?? user.recruiterProfile?.city ?? 'Antananarivo',
-      joinedAt: user.createdAt,
-      phoneVerified: false,
-    },
-  ]
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiError ? err.message : fallback
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AppState>(defaultState)
+  const [currentUser, setCurrentUser] = useState<ApiUser | null>(null)
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([])
+  const [applications, setApplications] = useState<Application[]>([])
+  const [bookmarks, setBookmarks] = useState<string[]>([])
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [members, setMembers] = useState<Member[]>([])
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([])
+  const [hydrated, setHydrated] = useState(false)
 
-  useEffect(() => {
-    const saved = loadJson<Partial<AppState>>(STORAGE_KEY, {})
-    setState((prev) => ({
-      ...prev,
-      users: saved.users?.length ? saved.users : prev.users,
-      opportunities: saved.opportunities?.length
-        ? saved.opportunities
-        : prev.opportunities,
-      applications: saved.applications ?? prev.applications,
-      bookmarks: saved.bookmarks ?? [],
-      notifications: saved.notifications ?? [],
-      members: saved.members?.length ? saved.members : prev.members,
-      providers: saved.providers?.length ? saved.providers : prev.providers,
-      recommendations: saved.recommendations?.length
-        ? saved.recommendations
-        : prev.recommendations,
-      currentUserId: saved.currentUserId ?? null,
-      hydrated: true,
-    }))
+  const loadDirectory = useCallback(async () => {
+    const { providers: p, recommendations: r, members: m } = await apiDirectoryRaw()
+    setProviders(p)
+    setRecommendations(r)
+    setMembers(m)
+  }, [])
+
+  const loadRoleScopedData = useCallback(async (user: ApiUser | null) => {
+    if (!user) {
+      setApplications([])
+      setBookmarks([])
+      setNotifications([])
+      return
+    }
+    if (user.role === 'candidate') {
+      const [apps, marks, notifs] = await Promise.all([
+        apiMyApplications(),
+        apiMyBookmarks(),
+        apiMyNotifications(),
+      ])
+      const profile = user.candidateProfile
+      setApplications(
+        apps.map((a) => ({
+          id: a.id,
+          opportunityId: a.opportunityId,
+          candidateId: a.candidateId,
+          candidateName: profile?.fullName ?? '',
+          candidateEmail: profile?.email ?? user.email,
+          candidatePhone: profile?.phone ?? '',
+          candidateProvince: profile?.province ?? '',
+          message: a.message,
+          createdAt: a.createdAt,
+        })),
+      )
+      setBookmarks(marks)
+      setNotifications(notifs)
+    } else if (user.role === 'recruiter') {
+      const [apps, notifs] = await Promise.all([apiReceivedApplications(), apiMyNotifications()])
+      setApplications(apps)
+      setBookmarks([])
+      setNotifications(notifs)
+    } else {
+      const notifs = await apiMyNotifications()
+      setApplications([])
+      setBookmarks([])
+      setNotifications(notifs)
+    }
   }, [])
 
   useEffect(() => {
-    if (!state.hydrated) return
-    saveJson(STORAGE_KEY, {
-      users: state.users,
-      opportunities: state.opportunities,
-      applications: state.applications,
-      bookmarks: state.bookmarks,
-      notifications: state.notifications,
-      members: state.members,
-      providers: state.providers,
-      recommendations: state.recommendations,
-      currentUserId: state.currentUserId,
-    })
-  }, [state])
+    let cancelled = false
+    async function init() {
+      const [user] = await Promise.all([
+        apiMe().catch(() => null),
+        apiListOpportunities()
+          .then((opps) => !cancelled && setOpportunities(opps))
+          .catch(() => undefined),
+        loadDirectory().catch(() => undefined),
+      ])
+      if (cancelled) return
+      setCurrentUser(user)
+      await loadRoleScopedData(user).catch(() => undefined)
+      if (!cancelled) setHydrated(true)
+    }
+    init()
+    return () => {
+      cancelled = true
+    }
+  }, [loadDirectory, loadRoleScopedData])
 
-  const currentUser = useMemo(
-    () => state.users.find((u) => u.id === state.currentUserId) ?? null,
-    [state.users, state.currentUserId],
+  const login = useCallback(
+    async (email: string, password: string) => {
+      try {
+        const { user } = await apiLogin(email, password)
+        setCurrentUser(user)
+        await loadRoleScopedData(user)
+        return { ok: true, user }
+      } catch (err) {
+        return { ok: false, error: errorMessage(err, 'Email ou mot de passe incorrect.') }
+      }
+    },
+    [loadRoleScopedData],
   )
 
-  const login = useCallback((email: string, password: string) => {
-    const user = state.users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password,
-    )
-    if (!user) {
-      return { ok: false, error: 'Email ou mot de passe incorrect.' }
+  const logout = useCallback(async () => {
+    try {
+      await apiLogout()
+    } catch {
+      // La déconnexion locale doit réussir même si l'appel réseau échoue.
     }
-    setState((s) => ({ ...s, currentUserId: user.id }))
-    return { ok: true, user }
-  }, [state.users])
-
-  const logout = useCallback(() => {
-    setState((s) => ({ ...s, currentUserId: null }))
+    setCurrentUser(null)
+    setApplications([])
+    setBookmarks([])
+    setNotifications([])
   }, [])
 
   const register = useCallback(
-    (
+    async (
       email: string,
       password: string,
       role: UserRole,
-      profile: CandidateProfile | RecruiterProfile,
+      profile: CandidateProfile | RecruiterProfile | IndividualProfile,
     ) => {
-      if (state.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-        return { ok: false, error: 'Un compte existe déjà avec cet email.' }
+      try {
+        const { user } = await apiRegister({
+          email,
+          password,
+          role,
+          candidateProfile: role === 'candidate' ? (profile as CandidateProfile) : undefined,
+          recruiterProfile: role === 'recruiter' ? (profile as RecruiterProfile) : undefined,
+          individualProfile: role === 'particulier' ? (profile as IndividualProfile) : undefined,
+        })
+        setCurrentUser(user)
+        await loadRoleScopedData(user)
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: errorMessage(err, 'Un compte existe déjà avec cet email.') }
       }
-      const user: User = {
-        id: uid(),
-        email,
-        password,
-        role,
-        createdAt: new Date().toISOString(),
-        ...(role === 'candidate'
-          ? { candidateProfile: profile as CandidateProfile }
-          : { recruiterProfile: profile as RecruiterProfile }),
-      }
-      setState((s) => ({
-        ...s,
-        users: [...s.users, user],
-        currentUserId: user.id,
-      }))
-      return { ok: true }
     },
-    [state.users],
+    [loadRoleScopedData],
   )
 
   const updateCandidateProfile = useCallback(
-    (profile: CandidateProfile) => {
-      if (!state.currentUserId) return
-      setState((s) => ({
-        ...s,
-        users: s.users.map((u) =>
-          u.id === s.currentUserId ? { ...u, candidateProfile: profile } : u,
-        ),
-      }))
-    },
-    [state.currentUserId],
-  )
-
-  const updateRecruiterProfile = useCallback(
-    (profile: RecruiterProfile) => {
-      if (!state.currentUserId) return
-      setState((s) => ({
-        ...s,
-        users: s.users.map((u) =>
-          u.id === s.currentUserId ? { ...u, recruiterProfile: profile } : u,
-        ),
-      }))
-    },
-    [state.currentUserId],
-  )
-
-  const addOpportunity = useCallback(
-    (data: Omit<Opportunity, 'id' | 'createdAt'>) => {
-      const opp: Opportunity = {
-        ...data,
-        id: uid(),
-        createdAt: new Date().toISOString(),
+    async (profile: CandidateProfile) => {
+      try {
+        const saved = await apiUpdateCandidateProfile(profile)
+        setCurrentUser((u) => (u ? { ...u, candidateProfile: saved } : u))
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: errorMessage(err, 'Enregistrement impossible.') }
       }
-      setState((s) => ({ ...s, opportunities: [opp, ...s.opportunities] }))
-      return opp
     },
     [],
   )
 
-  const updateOpportunity = useCallback((id: string, data: Partial<Opportunity>) => {
-    setState((s) => ({
-      ...s,
-      opportunities: s.opportunities.map((o) =>
-        o.id === id ? { ...o, ...data } : o,
-      ),
-    }))
+  const addOpportunity = useCallback(async (data: OpportunityInput) => {
+    try {
+      const opportunity = await apiCreateOpportunity(data)
+      setOpportunities((s) => [opportunity, ...s])
+      return { ok: true, opportunity }
+    } catch (err) {
+      return { ok: false, error: errorMessage(err, 'Publication impossible.') }
+    }
   }, [])
 
-  const deleteOpportunity = useCallback((id: string) => {
-    setState((s) => ({
-      ...s,
-      opportunities: s.opportunities.filter((o) => o.id !== id),
-      applications: s.applications.filter((a) => a.opportunityId !== id),
-      bookmarks: s.bookmarks.filter((b) => b !== id),
-    }))
+  const updateOpportunity = useCallback(async (id: string, data: OpportunityInput) => {
+    try {
+      const opportunity = await apiUpdateOpportunity(id, data)
+      setOpportunities((s) => s.map((o) => (o.id === id ? opportunity : o)))
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errorMessage(err, 'Modification impossible.') }
+    }
   }, [])
 
-  const toggleBookmark = useCallback((opportunityId: string) => {
-    setState((s) => {
-      const has = s.bookmarks.includes(opportunityId)
-      return {
-        ...s,
-        bookmarks: has
-          ? s.bookmarks.filter((b) => b !== opportunityId)
-          : [...s.bookmarks, opportunityId],
+  const deleteOpportunity = useCallback(async (id: string) => {
+    try {
+      await apiDeleteOpportunity(id)
+      setOpportunities((s) => s.filter((o) => o.id !== id))
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errorMessage(err, 'Suppression impossible.') }
+    }
+  }, [])
+
+  const toggleBookmark = useCallback(
+    async (opportunityId: string) => {
+      const has = bookmarks.includes(opportunityId)
+      try {
+        if (has) {
+          await apiRemoveBookmark(opportunityId)
+          setBookmarks((b) => b.filter((id) => id !== opportunityId))
+        } else {
+          await apiAddBookmark(opportunityId)
+          setBookmarks((b) => [...b, opportunityId])
+        }
+      } catch (err) {
+        console.error('toggleBookmark', err)
       }
-    })
-  }, [])
+    },
+    [bookmarks],
+  )
 
   const isBookmarked = useCallback(
-    (opportunityId: string) => state.bookmarks.includes(opportunityId),
-    [state.bookmarks],
-  )
-
-  const addNotification = useCallback(
-    (userId: string, title: string, message: string) => {
-      const n: Notification = {
-        id: uid(),
-        userId,
-        title,
-        message,
-        read: false,
-        createdAt: new Date().toISOString(),
-      }
-      setState((s) => ({ ...s, notifications: [n, ...s.notifications] }))
-    },
-    [],
+    (opportunityId: string) => bookmarks.includes(opportunityId),
+    [bookmarks],
   )
 
   const applyToOpportunity = useCallback(
-    (opportunityId: string, message?: string) => {
-      const user = state.users.find((u) => u.id === state.currentUserId)
-      if (!user?.candidateProfile) {
-        return { ok: false, error: 'Profil candidat requis.' }
+    async (opportunityId: string, message?: string) => {
+      try {
+        await apiApplyToOpportunity(opportunityId, message)
+        await loadRoleScopedData(currentUser)
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: errorMessage(err, 'Envoi impossible.') }
       }
-      if (
-        state.applications.some(
-          (a) =>
-            a.opportunityId === opportunityId && a.candidateId === user.id,
-        )
-      ) {
-        return { ok: false, error: 'Vous avez déjà manifesté votre intérêt.' }
-      }
-      const app: Application = {
-        id: uid(),
-        opportunityId,
-        candidateId: user.id,
-        candidateName: user.candidateProfile.fullName,
-        candidateEmail: user.candidateProfile.email,
-        candidatePhone: user.candidateProfile.phone,
-        candidateProvince: user.candidateProfile.province,
-        message,
-        createdAt: new Date().toISOString(),
-      }
-      setState((s) => ({ ...s, applications: [...s.applications, app] }))
-      const opp = state.opportunities.find((o) => o.id === opportunityId)
-      if (opp) {
-        addNotification(
-          opp.recruiterId,
-          'Nouvelle candidature',
-          `${user.candidateProfile.fullName} s’est intéressé·e à « ${opp.title} ».`,
-        )
-      }
-      addNotification(
-        user.id,
-        'Candidature envoyée',
-        `Votre intérêt pour « ${opp?.title ?? 'cette offre'} » a été enregistré.`,
-      )
-      return { ok: true }
     },
-    [state, addNotification],
+    [currentUser, loadRoleScopedData],
   )
 
   const hasApplied = useCallback(
     (opportunityId: string) => {
-      if (!state.currentUserId) return false
-      return state.applications.some(
-        (a) =>
-          a.opportunityId === opportunityId &&
-          a.candidateId === state.currentUserId,
+      if (!currentUser) return false
+      return applications.some(
+        (a) => a.opportunityId === opportunityId && a.candidateId === currentUser.id,
       )
     },
-    [state.applications, state.currentUserId],
+    [applications, currentUser],
   )
 
   const getApplicationsForOpportunity = useCallback(
-    (opportunityId: string) =>
-      state.applications.filter((a) => a.opportunityId === opportunityId),
-    [state.applications],
+    (opportunityId: string) => applications.filter((a) => a.opportunityId === opportunityId),
+    [applications],
   )
 
   const getApplicationsForRecruiter = useCallback(
     (recruiterId: string) => {
       const oppIds = new Set(
-        state.opportunities
-          .filter((o) => o.recruiterId === recruiterId)
-          .map((o) => o.id),
+        opportunities.filter((o) => o.recruiterId === recruiterId).map((o) => o.id),
       )
-      return state.applications.filter((a) => oppIds.has(a.opportunityId))
+      return applications.filter((a) => oppIds.has(a.opportunityId))
     },
-    [state.applications, state.opportunities],
+    [applications, opportunities],
   )
 
-  const markNotificationRead = useCallback((id: string) => {
-    setState((s) => ({
-      ...s,
-      notifications: s.notifications.map((n) =>
-        n.id === id ? { ...n, read: true } : n,
-      ),
-    }))
+  const markNotificationRead = useCallback(async (id: string) => {
+    setNotifications((s) => s.map((n) => (n.id === id ? { ...n, read: true } : n)))
+    try {
+      await apiMarkNotificationRead(id)
+    } catch (err) {
+      console.error('markNotificationRead', err)
+    }
   }, [])
 
   const unreadCount = useMemo(
-    () =>
-      state.notifications.filter(
-        (n) => n.userId === state.currentUserId && !n.read,
-      ).length,
-    [state.notifications, state.currentUserId],
+    () => notifications.filter((n) => !n.read).length,
+    [notifications],
   )
 
   /* ---------------------------------------------------------------------
    * Annuaire de confiance
    * ------------------------------------------------------------------ */
 
-  const currentMemberId = useMemo(
-    () => (state.currentUserId ? memberIdFor(state.currentUserId) : null),
-    [state.currentUserId],
-  )
+  const currentMemberId = currentUser?.memberId ?? null
 
-  const membersById = useMemo(
-    () => new Map(state.members.map((m) => [m.id, m])),
-    [state.members],
-  )
+  const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members])
 
   const getProvider = useCallback(
-    (id: string) => state.providers.find((p) => p.id === id),
-    [state.providers],
+    (id: string) => providers.find((p) => p.id === id),
+    [providers],
   )
 
   const canRecommendProvider = useCallback(
-    (providerId: string) => {
-      if (!currentMemberId) {
+    (providerId: string): Result => {
+      if (!currentUser) {
         return { ok: false, error: 'Connectez-vous pour publier une recommandation.' }
       }
-      const provider = state.providers.find((p) => p.id === providerId)
+      const provider = providers.find((p) => p.id === providerId)
       if (!provider) return { ok: false, error: 'Prestataire introuvable.' }
-      return canRecommend(currentMemberId, provider, state.recommendations)
+      if (!currentMemberId) return { ok: true }
+      return canRecommend(currentMemberId, provider, recommendations)
     },
-    [currentMemberId, state.providers, state.recommendations],
+    [currentUser, currentMemberId, providers, recommendations],
   )
 
   const addProvider = useCallback(
-    (input: ProviderInput, authorDistrict: string) => {
-      const user = state.users.find((u) => u.id === state.currentUserId)
-      if (!user) return null
-      const provider: Provider = {
+    async (input: ProviderInput, authorDistrict: string) => {
+      if (!currentUser) return null
+      const payload: CreateProviderPayload = {
         ...input,
-        id: uid(),
-        addedByMemberId: memberIdFor(user.id),
-        createdAt: new Date().toISOString(),
+        authorDisplayName: displayNameFor(currentUser),
+        authorDistrict,
       }
-      setState((s) => ({
-        ...s,
-        members: upsertMember(s.members, user, authorDistrict),
-        providers: [provider, ...s.providers],
-      }))
-      return provider
+      try {
+        const provider = await apiCreateProvider(payload)
+        await loadDirectory()
+        return provider
+      } catch (err) {
+        console.error('addProvider', err)
+        return null
+      }
     },
-    [state.users, state.currentUserId],
+    [currentUser, loadDirectory],
   )
 
   const addRecommendation = useCallback(
-    (input: RecommendationInput) => {
-      const user = state.users.find((u) => u.id === state.currentUserId)
-      if (!user) {
+    async (input: RecommendationInput) => {
+      if (!currentUser) {
         return { ok: false, error: 'Connectez-vous pour publier une recommandation.' }
       }
-      const provider = state.providers.find((p) => p.id === input.providerId)
-      if (!provider) return { ok: false, error: 'Prestataire introuvable.' }
-
-      const memberId = memberIdFor(user.id)
-      const guard = canRecommend(memberId, provider, state.recommendations)
-      if (!guard.ok) return guard
-
-      const rec: Recommendation = {
-        id: uid(),
-        providerId: input.providerId,
-        authorMemberId: memberId,
-        authorName: displayNameFor(user),
+      const payload: CreateRecommendationPayload = {
+        authorDisplayName: displayNameFor(currentUser),
         authorDistrict: input.authorDistrict,
         rating: input.rating,
         wouldUseAgain: input.wouldUseAgain,
@@ -504,65 +445,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
         priceUnit: input.priceUnit,
         comment: input.comment,
         proof: input.proof,
-        confirmations: [],
-        createdAt: new Date().toISOString(),
       }
-
-      setState((s) => ({
-        ...s,
-        members: upsertMember(s.members, user, input.authorDistrict),
-        recommendations: [rec, ...s.recommendations],
-      }))
-
-      addNotification(
-        user.id,
-        'Recommandation publiée',
-        `Votre retour sur « ${provider.name} » est en ligne.`,
-      )
-      return { ok: true }
+      try {
+        await apiCreateRecommendation(input.providerId, payload)
+        await loadDirectory()
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: errorMessage(err, 'Publication impossible.') }
+      }
     },
-    [state.users, state.currentUserId, state.providers, state.recommendations, addNotification],
+    [currentUser, loadDirectory],
   )
 
   const toggleConfirmation = useCallback(
-    (recommendationId: string) => {
-      if (!currentMemberId) return
-      setState((s) => ({
-        ...s,
-        recommendations: s.recommendations.map((r) => {
-          if (r.id !== recommendationId) return r
-          // On ne confirme pas son propre retour.
-          if (r.authorMemberId === currentMemberId) return r
-          const has = r.confirmations.includes(currentMemberId)
-          return {
-            ...r,
-            confirmations: has
-              ? r.confirmations.filter((id) => id !== currentMemberId)
-              : [...r.confirmations, currentMemberId],
-          }
-        }),
-      }))
+    async (recommendationId: string) => {
+      if (!currentUser) return
+      const rec = recommendations.find((r) => r.id === recommendationId)
+      if (!rec || rec.authorMemberId === currentMemberId) return
+      try {
+        await apiConfirmRecommendation(recommendationId)
+        await loadDirectory()
+      } catch (err) {
+        console.error('toggleConfirmation', err)
+      }
     },
-    [currentMemberId],
+    [currentUser, currentMemberId, recommendations, loadDirectory],
   )
 
   const hasConfirmed = useCallback(
     (recommendationId: string) => {
       if (!currentMemberId) return false
-      const rec = state.recommendations.find((r) => r.id === recommendationId)
+      const rec = recommendations.find((r) => r.id === recommendationId)
       return !!rec?.confirmations.includes(currentMemberId)
     },
-    [currentMemberId, state.recommendations],
+    [currentMemberId, recommendations],
   )
 
   const value: AppContextValue = {
-    ...state,
     currentUser,
+    opportunities,
+    applications,
+    bookmarks,
+    notifications,
+    members,
+    providers,
+    recommendations,
+    hydrated,
     login,
     logout,
     register,
     updateCandidateProfile,
-    updateRecruiterProfile,
     addOpportunity,
     updateOpportunity,
     deleteOpportunity,
@@ -572,7 +504,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     hasApplied,
     getApplicationsForOpportunity,
     getApplicationsForRecruiter,
-    addNotification,
     markNotificationRead,
     unreadCount,
     currentMemberId,

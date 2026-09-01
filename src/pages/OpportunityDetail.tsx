@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, MapPin } from 'lucide-react'
+import { ArrowLeft, Bookmark, MapPin, MessageCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
@@ -11,6 +11,8 @@ import {
   OPPORTUNITY_TYPE_LABELS,
 } from '../data/constants'
 import { useApp } from '../context/AppContext'
+import { apiStartConversation } from '../lib/api'
+import { ReportButton } from '../components/ui/ReportButton'
 import { formatDate } from '../lib/format'
 import { scoreOpportunity } from '../lib/recommendation'
 
@@ -58,13 +60,22 @@ export function OpportunityDetail({
     )
   }
 
-  const handleApply = () => {
-    const result = applyToOpportunity(opportunity.id, message)
+  const handleApply = async () => {
+    const result = await applyToOpportunity(opportunity.id, message)
     if (result.ok) {
       setFeedback('Votre intérêt a été envoyé au recruteur.')
     } else {
       setFeedback(result.error ?? 'Erreur')
     }
+  }
+
+  const handleContact = async () => {
+    const { conversationId } = await apiStartConversation(
+      opportunity.recruiterId,
+      `Bonjour, je vous contacte au sujet de l’offre « ${opportunity.title} ».`,
+      opportunity.id,
+    )
+    navigate(`/messages?c=${conversationId}`)
   }
 
   return (
@@ -113,6 +124,10 @@ export function OpportunityDetail({
           {formatDate(opportunity.deadline)}
         </p>
 
+        <div style={{ marginBottom: '1rem' }}>
+          <ReportButton targetType="opportunity" targetId={opportunity.id} />
+        </div>
+
         {match && canApply && (
           <div style={{ marginBottom: '1.25rem' }}>
             <p className="detail-rec-label">Recommandé pour votre profil</p>
@@ -141,9 +156,15 @@ export function OpportunityDetail({
               Manifester mon intérêt
             </h2>
             {hasApplied(opportunity.id) ? (
-              <p style={{ color: 'var(--color-accent)', fontWeight: 600 }}>
-                Vous avez déjà postulé à cette offre.
-              </p>
+              <>
+                <p style={{ color: 'var(--color-accent)', fontWeight: 600, marginBottom: '0.75rem' }}>
+                  Vous avez déjà postulé à cette offre.
+                </p>
+                <Button variant="outline" size="sm" onClick={handleContact}>
+                  <MessageCircle size={16} />
+                  Contacter le recruteur
+                </Button>
+              </>
             ) : (
               <>
                 <Field label="Message (optionnel)">
@@ -153,7 +174,13 @@ export function OpportunityDetail({
                     placeholder="Présentez-vous en quelques lignes…"
                   />
                 </Field>
-                <Button onClick={handleApply}>Envoyer ma candidature</Button>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <Button onClick={handleApply}>Envoyer ma candidature</Button>
+                  <Button variant="outline" onClick={handleContact}>
+                    <MessageCircle size={16} />
+                    Contacter le recruteur
+                  </Button>
+                </div>
               </>
             )}
             {feedback && (

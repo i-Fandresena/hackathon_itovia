@@ -4,16 +4,28 @@
   justify-content: center;
   min-height: calc(100vh - var(--header-h) - 160px);
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 2rem 0;
 }
 
+/* Même recette que le ciel du hero de la landing, en version discrète :
+   l'écran de connexion doit rester reconnaissable comme OffRec. */
 .auth-page::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -20% -10%;
+  z-index: -1;
   background:
-    radial-gradient(ellipse 50% 40% at 80% 20%, rgba(26, 86, 255, 0.06), transparent),
-    radial-gradient(ellipse 40% 30% at 10% 80%, rgba(12, 14, 18, 0.03), transparent);
+    radial-gradient(ellipse 55% 45% at 82% 8%, rgba(26, 86, 255, 0.14), transparent 60%),
+    radial-gradient(ellipse 45% 38% at 6% 92%, rgba(26, 86, 255, 0.08), transparent 65%);
   pointer-events: none;
+}
+
+.auth-eyebrow {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.85rem;
 }
 
 .auth-container {
@@ -26,6 +38,8 @@
 
 .auth-container .card {
   box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
 }
 
 .auth-container h1 {
@@ -33,9 +47,11 @@
   font-weight: 700;
   letter-spacing: -0.03em;
   margin-bottom: 0.35rem;
+  text-align: center;
 }
 
 .auth-sub {
+  text-align: center;
   color: var(--color-ink-muted);
   margin-bottom: 1.5rem;
   font-size: 0.9375rem;
@@ -68,7 +84,7 @@
 
 .role-toggle {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
   margin-bottom: 1.5rem;
   padding: 4px;
@@ -78,19 +94,31 @@
 }
 
 .role-toggle button {
-  padding: 0.7rem 0.5rem;
+  position: relative;
+  padding: 0.7rem 0.4rem;
   border: none;
   background: transparent;
   border-radius: var(--radius-sm);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
+  line-height: 1.25;
   cursor: pointer;
   color: var(--color-ink-muted);
-  transition: background 0.2s var(--ease-out), color 0.2s var(--ease-out);
+  transition: color 0.2s var(--ease-out);
 }
 
 .role-toggle button.active {
-  background: var(--color-bg-elevated);
   color: var(--color-ink);
+}
+
+.role-toggle-pill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-xs);
+}
+
+.role-toggle button span {
+  position: relative;
 }

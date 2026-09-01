@@ -7,6 +7,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Loading } from '../../components/ui/Loading'
+import { ReportButton } from '../../components/ui/ReportButton'
 import { useApp } from '../../context/AppContext'
 import { formatAriary } from '../../lib/format'
 import { evaluateProvider } from '../../lib/trust'
@@ -143,6 +144,9 @@ export function ProviderDetail() {
             {provider.claimedByMemberId && (
               <Badge variant="primary">Fiche revendiquée par le prestataire</Badge>
             )}
+          </div>
+          <div style={{ marginTop: '0.75rem' }}>
+            <ReportButton targetType="provider" targetId={provider.id} />
           </div>
         </Card>
 

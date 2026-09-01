@@ -1,4 +1,4 @@
-export type UserRole = 'candidate' | 'recruiter'
+export type UserRole = 'candidate' | 'recruiter' | 'particulier' | 'admin'
 
 export type EducationLevel =
   | 'bac'
@@ -44,6 +44,15 @@ export interface RecruiterProfile {
   sector: string
 }
 
+/** Profil d'un particulier qui recherche un professionnel (hors recrutement). */
+export interface IndividualProfile {
+  fullName: string
+  email: string
+  phone: string
+  province: string
+  city: string
+}
+
 export interface User {
   id: string
   email: string
@@ -51,6 +60,7 @@ export interface User {
   role: UserRole
   candidateProfile?: CandidateProfile
   recruiterProfile?: RecruiterProfile
+  individualProfile?: IndividualProfile
   createdAt: string
 }
 

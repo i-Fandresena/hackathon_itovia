@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import { Loading } from '../ui/Loading'
+import { homePathForRole } from '../../lib/roles'
 import type { UserRole } from '../../types'
 
 interface ProtectedRouteProps {
@@ -27,9 +28,7 @@ export function ProtectedRoute({ role, children }: ProtectedRouteProps) {
   }
 
   if (role && currentUser.role !== role) {
-    const redirect =
-      currentUser.role === 'candidate' ? '/candidat' : '/recruteur'
-    return <Navigate to={redirect} replace />
+    return <Navigate to={homePathForRole(currentUser.role)} replace />
   }
 
   return <>{children}</>

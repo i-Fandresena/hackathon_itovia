@@ -18,6 +18,11 @@ import { RecruiterDashboard } from './pages/recruiter/RecruiterDashboard'
 import { RecruiterOpportunityForm } from './pages/recruiter/RecruiterOpportunityForm'
 import { RecruiterOpportunityList } from './pages/recruiter/RecruiterOpportunityList'
 import { RecruiterApplications } from './pages/recruiter/RecruiterApplications'
+import { IndividualDashboard } from './pages/individual/IndividualDashboard'
+import { AdminDashboard } from './pages/admin/AdminDashboard'
+import { AdminModeration } from './pages/admin/AdminModeration'
+import { Messages } from './pages/messages/Messages'
+import { RecruiterBilling } from './pages/recruiter/RecruiterBilling'
 
 export default function App() {
   return (
@@ -145,6 +150,49 @@ export default function App() {
               element={
                 <ProtectedRoute role="recruiter">
                   <RecruiterApplications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="recruteur/abonnement"
+              element={
+                <ProtectedRoute role="recruiter">
+                  <RecruiterBilling />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="messages"
+              element={
+                <ProtectedRoute>
+                  <Messages />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="particulier"
+              element={
+                <ProtectedRoute role="particulier">
+                  <IndividualDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="admin"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/moderation"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminModeration />
                 </ProtectedRoute>
               }
             />

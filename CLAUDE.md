@@ -11,6 +11,8 @@ OffRec — hackathon prototype (React 19 + TypeScript + Vite) for a Madagascar j
 
 All state currently lives in `localStorage` (no backend wired up yet — see Data layer below).
 
+`AGENTS.md` is the cross-tool collaboration doc (French) and, per its own text, takes precedence over this file if the two ever disagree — check it too, especially for collaboration/delivery discipline (git hygiene, what must never be committed). `CAHIER_DES_CHARGES.md` is the product spec. For product/strategy/pitch/roadmap decisions, use the `offrec-ceo-strategy` skill rather than improvising.
+
 ## Commands
 
 ```bash
@@ -57,11 +59,13 @@ The core differentiator of the directory. `evaluateProvider()` does **not** aver
 `rankProviders()` (used for directory sort order) further pulls scores toward a Bayesian prior (`PRIOR_SCORE`/`PRIOR_WEIGHT`) so a single 5★ review can't outrank a well-confirmed 4.4★ — but the *displayed* score from `evaluateProvider()` is always the real weighted average, never the prior-adjusted one.
 
 Anti-abuse invariants enforced in `canRecommend()` / `eligibleRecommendations()` and mirrored in `supabase/schema.sql` for when a real backend lands:
-- one recommendation per member per provider,
+- one recommendation per member per provider (`eligibleRecommendations()` also dedupes to the most recent per author, as a read-side backstop),
 - a provider that has "claimed" its own listing (`claimedByMemberId`) cannot have its own recommendations counted,
 - no self-confirmation, no recommendation deletion.
 
 If you touch scoring, `evaluateProvider()`'s `reasons`/`warnings` arrays are user-facing explanations of the score — keep them consistent with whatever weighting logic changes.
+
+Real names and private phone numbers of members must never reach seeds, public directory data, or the UI — this is a hard privacy rule from the field-data collection process (`collecte/GUIDE-COLLECTE.md`, `collecte/import-collecte.mjs`), not just a style preference.
 
 ### Opportunity matching (`src/lib/recommendation.ts`)
 

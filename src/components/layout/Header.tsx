@@ -16,8 +16,8 @@ export function Header({ floating }: HeaderProps = {}) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     navigate('/')
     setMenuOpen(false)
   }

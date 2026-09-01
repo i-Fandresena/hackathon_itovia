@@ -7,7 +7,7 @@ import type {
   Recommendation,
   ScoredProvider,
   TrustResult,
-} from '../types'
+} from '../types/index.js'
 
 /**
  * Moteur de confiance de l'annuaire.

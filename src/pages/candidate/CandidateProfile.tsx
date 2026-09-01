@@ -41,6 +41,7 @@ export function CandidateProfile() {
     },
   )
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (currentUser?.candidateProfile) {
@@ -66,9 +67,14 @@ export function CandidateProfile() {
     }))
   }
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    updateCandidateProfile({ ...profile, city: profile.city || profile.province })
+    setError('')
+    const result = await updateCandidateProfile({ ...profile, city: profile.city || profile.province })
+    if (!result.ok) {
+      setError(result.error ?? 'Enregistrement impossible.')
+      return
+    }
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
@@ -204,6 +210,7 @@ export function CandidateProfile() {
               </Select>
             </Field>
             {saved && <p className="save-ok">Profil enregistré avec succès.</p>}
+            {error && <p style={{ color: 'var(--color-danger, #c0392b)' }}>{error}</p>}
             <Button type="submit" fullWidth>
               Enregistrer le profil
             </Button>

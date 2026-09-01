@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { STATS } from '../data/constants'
 import { useApp } from '../context/AppContext'
+import { homePathForRole } from '../lib/roles'
 import './Landing.css'
 
 /** Les trois publics de la plateforme. La carte active est mise en avant,
@@ -70,9 +71,7 @@ export function Landing() {
   // marketing dans la coquille applicative — voir même logique dans Login.tsx.
   useEffect(() => {
     if (currentUser) {
-      navigate(currentUser.role === 'candidate' ? '/candidat' : '/recruteur', {
-        replace: true,
-      })
+      navigate(homePathForRole(currentUser.role), { replace: true })
     }
   }, [currentUser, navigate])
 

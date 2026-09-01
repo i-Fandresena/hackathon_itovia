@@ -1,12 +1,25 @@
-import { Users } from 'lucide-react'
+import { MessageCircle, Users } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { useApp } from '../../context/AppContext'
+import { apiStartConversation } from '../../lib/api'
 import { formatDate } from '../../lib/format'
 
 export function RecruiterApplications() {
   const { currentUser, opportunities, getApplicationsForRecruiter } = useApp()
   const apps = getApplicationsForRecruiter(currentUser?.id ?? '')
+  const navigate = useNavigate()
+
+  const handleContact = async (candidateId: string, opportunityId: string, opportunityTitle: string) => {
+    const { conversationId } = await apiStartConversation(
+      candidateId,
+      `Bonjour, nous avons bien reçu votre candidature pour « ${opportunityTitle} ».`,
+      opportunityId,
+    )
+    navigate(`/messages?c=${conversationId}`)
+  }
 
   return (
     <div className="page">
@@ -38,9 +51,19 @@ export function RecruiterApplications() {
                   {a.message && (
                     <p style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>« {a.message} »</p>
                   )}
-                  <time style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                    {formatDate(a.createdAt)}
-                  </time>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+                    <time style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                      {formatDate(a.createdAt)}
+                    </time>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleContact(a.candidateId, a.opportunityId, opp?.title ?? '')}
+                    >
+                      <MessageCircle size={14} />
+                      Contacter
+                    </Button>
+                  </div>
                 </Card>
               )
             })}

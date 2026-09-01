@@ -97,12 +97,12 @@ export function RecommendationForm() {
     return Object.keys(next).length === 0
   }
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setFormError('')
     if (!validate()) return
 
-    const result = addRecommendation({
+    const result = await addRecommendation({
       providerId: provider.id,
       rating,
       wouldUseAgain,

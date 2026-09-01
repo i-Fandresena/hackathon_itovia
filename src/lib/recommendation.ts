@@ -1,4 +1,4 @@
-import type { CandidateProfile, MatchResult, Opportunity } from '../types'
+import type { CandidateProfile, MatchResult, Opportunity } from '../types/index.js'
 
 const LEVEL_ORDER = ['debutant', 'junior', 'intermediaire', 'senior'] as const
 

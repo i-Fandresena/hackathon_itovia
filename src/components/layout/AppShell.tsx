@@ -19,8 +19,8 @@ export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     setMenuOpen(false)
     navigate('/')
   }

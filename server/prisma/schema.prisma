@@ -1,0 +1,393 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  candidate
+  recruiter
+  particulier
+  admin
+}
+
+/// Pipeline de modération : Warning -> Restriction -> Suspension -> Bannissement.
+enum UserStatus {
+  active
+  warned
+  restricted
+  suspended
+  banned
+}
+
+enum ReportTargetType {
+  opportunity
+  provider
+  recommendation
+  user
+}
+
+enum ReportStatus {
+  open
+  resolved
+}
+
+enum ModerationActionType {
+  dismiss
+  warning
+  restriction
+  suspension
+  ban
+}
+
+enum OpportunityType {
+  emploi
+  stage
+  mission
+  freelance
+  alternance
+}
+
+enum ExperienceLevel {
+  debutant
+  junior
+  intermediaire
+  senior
+}
+
+enum EducationLevel {
+  bac
+  licence
+  master
+  autodidacte
+  technique
+}
+
+enum Availability {
+  immediate
+  m1
+  m3
+  flexible
+}
+
+enum ProofType {
+  facture
+  photo
+  aucune
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  role         UserRole
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now())
+
+  candidateProfile  CandidateProfile?
+  recruiterProfile  RecruiterProfile?
+  individualProfile IndividualProfile?
+  member            Member?
+
+  opportunities Opportunity[]  @relation("RecruiterOpportunities")
+  applications  Application[]
+  bookmarks     Bookmark[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  subscription        Subscription?
+  transactions        Transaction[]
+  sentMessages        Message[]      @relation("SentMessages")
+  conversationsAsA    Conversation[] @relation("ConversationParticipantA")
+  conversationsAsB    Conversation[] @relation("ConversationParticipantB")
+
+  reportsFiled      Report[]           @relation("ReportsFiled")
+  reportsAgainst    Report[]           @relation("ReportsAgainst")
+  moderationActions ModerationAction[] @relation("ModerationActionsTaken")
+  moderationTargets ModerationAction[] @relation("ModerationActionsReceived")
+}
+
+model CandidateProfile {
+  userId                  String            @id
+  user                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName                String
+  phone                   String
+  province                String
+  city                    String
+  educationLevel          EducationLevel
+  skills                  String[]
+  experienceLevel         ExperienceLevel
+  desiredOpportunityTypes OpportunityType[]
+  availability            Availability
+}
+
+model RecruiterProfile {
+  userId      String @id
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName String
+  phone       String
+  province    String
+  city        String
+  sector      String
+}
+
+model IndividualProfile {
+  userId   String @id
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName String
+  phone    String
+  province String
+  city     String
+}
+
+model Opportunity {
+  id              String          @id @default(uuid())
+  recruiterId     String
+  recruiter       User            @relation("RecruiterOpportunities", fields: [recruiterId], references: [id], onDelete: Cascade)
+  companyName     String
+  title           String
+  category        String
+  description     String
+  province        String
+  city            String
+  opportunityType OpportunityType
+  requiredSkills  String[]
+  level           ExperienceLevel
+  deadline        DateTime
+  featured        Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+
+  applications Application[]
+  bookmarks    Bookmark[]
+
+  @@index([province])
+  @@index([opportunityType])
+}
+
+model Application {
+  id            String      @id @default(uuid())
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  candidateId   String
+  candidate     User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  message       String?
+  createdAt     DateTime    @default(now())
+
+  @@unique([opportunityId, candidateId])
+}
+
+model Bookmark {
+  candidateId   String
+  candidate     User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@id([candidateId, opportunityId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Member {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName   String
+  district      String
+  city          String   @default("Antananarivo")
+  phoneVerified Boolean  @default(false)
+  joinedAt      DateTime @default(now())
+
+  providersAdded  Provider[]                   @relation("AddedByMember")
+  providersClaimed Provider[]                  @relation("ClaimedByMember")
+  recommendations Recommendation[]
+  confirmations   RecommendationConfirmation[]
+}
+
+model Provider {
+  id                String   @id @default(uuid())
+  name              String
+  trade             String
+  description       String   @default("")
+  district          String
+  city              String   @default("Antananarivo")
+  province          String   @default("Antananarivo")
+  phone             String
+  whatsapp          String?
+  addedByMemberId   String
+  addedByMember     Member   @relation("AddedByMember", fields: [addedByMemberId], references: [id])
+  claimedByMemberId String?
+  claimedByMember   Member?  @relation("ClaimedByMember", fields: [claimedByMemberId], references: [id])
+  createdAt         DateTime @default(now())
+
+  recommendations Recommendation[]
+
+  @@index([trade])
+  @@index([district])
+}
+
+model Recommendation {
+  id              String    @id @default(uuid())
+  providerId      String
+  provider        Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  authorMemberId  String
+  authorMember    Member    @relation(fields: [authorMemberId], references: [id], onDelete: Cascade)
+  authorDistrict  String
+  rating          Int
+  wouldUseAgain   Boolean
+  jobLabel        String
+  jobDate         DateTime
+  pricePaid       Int?
+  priceUnit       String?
+  comment         String
+  proof           ProofType @default(aucune)
+  createdAt       DateTime  @default(now())
+
+  confirmations RecommendationConfirmation[]
+
+  @@unique([providerId, authorMemberId])
+  @@index([providerId])
+}
+
+model RecommendationConfirmation {
+  recommendationId String
+  recommendation   Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  memberId         String
+  member           Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
+
+  @@id([recommendationId, memberId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AiInteraction {
+  id            String   @id @default(uuid())
+  userId        String?
+  feature       String
+  promptSummary String
+  flagged       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+// Messagerie interne (candidat <-> recruteur, particulier <-> annuaire…)
+
+model Conversation {
+  id              String   @id @default(uuid())
+  participantAId  String
+  participantA    User     @relation("ConversationParticipantA", fields: [participantAId], references: [id], onDelete: Cascade)
+  participantBId  String
+  participantB    User     @relation("ConversationParticipantB", fields: [participantBId], references: [id], onDelete: Cascade)
+  /// Contexte optionnel : l'offre à l'origine de la conversation.
+  opportunityId   String?
+  createdAt       DateTime @default(now())
+
+  messages Message[]
+
+  @@unique([participantAId, participantBId, opportunityId])
+  @@index([participantAId])
+  @@index([participantBId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+}
+
+// Abonnements entreprise + paiement simulé
+
+/// Grille tarifaire centralisée — jamais de prix codé en dur côté frontend.
+model SubscriptionPlan {
+  code                   String   @id
+  name                   String
+  priceAr                Int
+  maxActiveOpportunities Int?
+  features               String[]
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id          String           @id @default(uuid())
+  recruiterId String           @unique
+  recruiter   User             @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+  planCode    String
+  plan        SubscriptionPlan @relation(fields: [planCode], references: [code])
+  startedAt   DateTime         @default(now())
+}
+
+/// Paiement simulé : hypothèse de démonstration, pas une intégration réelle.
+model Transaction {
+  id          String   @id @default(uuid())
+  recruiterId String
+  recruiter   User     @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+  type        String
+  amountAr    Int
+  description String
+  createdAt   DateTime @default(now())
+
+  @@index([recruiterId])
+}
+
+// Modération : Warning -> Restriction -> Suspension -> Bannissement.
+
+model Report {
+  id           String           @id @default(uuid())
+  reporterId   String
+  reporter     User             @relation("ReportsFiled", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType   ReportTargetType
+  targetId     String
+  /// Utilisateur responsable du contenu signalé, résolu côté serveur.
+  targetUserId String?
+  targetUser   User?            @relation("ReportsAgainst", fields: [targetUserId], references: [id], onDelete: SetNull)
+  reason       String
+  status       ReportStatus     @default(open)
+  createdAt    DateTime         @default(now())
+
+  moderationAction ModerationAction?
+
+  @@index([status])
+}
+
+model ModerationAction {
+  id           String               @id @default(uuid())
+  reportId     String?              @unique
+  report       Report?              @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  adminId      String
+  admin        User                 @relation("ModerationActionsTaken", fields: [adminId], references: [id], onDelete: Cascade)
+  targetUserId String?
+  targetUser   User?                @relation("ModerationActionsReceived", fields: [targetUserId], references: [id], onDelete: SetNull)
+  action       ModerationActionType
+  note         String?
+  createdAt    DateTime             @default(now())
+}

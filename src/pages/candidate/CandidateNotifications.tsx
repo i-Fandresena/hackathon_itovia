@@ -5,8 +5,8 @@ import { useApp } from '../../context/AppContext'
 import { formatDate } from '../../lib/format'
 
 export function CandidateNotifications() {
-  const { notifications, currentUserId, markNotificationRead } = useApp()
-  const mine = notifications.filter((n) => n.userId === currentUserId)
+  const { notifications, markNotificationRead } = useApp()
+  const mine = notifications
 
   return (
     <div className="page">

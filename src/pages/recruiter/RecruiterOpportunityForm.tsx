@@ -39,8 +39,9 @@ export function RecruiterOpportunityForm() {
   const { id } = useParams<{ id: string }>()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
-  const { currentUser, opportunities, addOpportunity, updateOpportunity } = useApp()
+  const { opportunities, addOpportunity, updateOpportunity } = useApp()
   const [form, setForm] = useState(defaultForm)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -69,22 +70,15 @@ export function RecruiterOpportunityForm() {
     }))
   }
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const company = currentUser?.recruiterProfile?.companyName ?? 'Entreprise'
-    const payload = {
-      recruiterId: currentUser?.id ?? '',
-      companyName: company,
-      ...form,
+    setError('')
+    const result = isEdit && id ? await updateOpportunity(id, form) : await addOpportunity(form)
+    if (!result.ok) {
+      setError(result.error ?? 'Enregistrement impossible.')
+      return
     }
-
-    if (isEdit && id) {
-      updateOpportunity(id, payload)
-      navigate('/recruteur/offres')
-    } else {
-      addOpportunity(payload)
-      navigate('/recruteur/offres')
-    }
+    navigate('/recruteur/offres')
   }
 
   return (
@@ -193,6 +187,7 @@ export function RecruiterOpportunityForm() {
                 onChange={(e) => setForm({ ...form, deadline: e.target.value })}
               />
             </Field>
+            {error && <p style={{ color: 'var(--color-danger, #c0392b)' }}>{error}</p>}
             <Button type="submit" fullWidth>
               {isEdit ? 'Enregistrer' : 'Publier l’offre'}
             </Button>

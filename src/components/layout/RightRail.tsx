@@ -11,15 +11,9 @@ import './RightRail.css'
  * fragiles et alimenter les prix constatés.
  */
 export function RightRail() {
-  const { notifications, currentUserId, providers, recommendations } = useApp()
+  const { notifications, providers, recommendations } = useApp()
 
-  const recentNotifications = useMemo(
-    () =>
-      notifications
-        .filter((n) => n.userId === currentUserId)
-        .slice(0, 3),
-    [notifications, currentUserId],
-  )
+  const recentNotifications = useMemo(() => notifications.slice(0, 3), [notifications])
 
   /** Fiches reposant sur 0 ou 1 retour : ce sont les trous de l'annuaire. */
   const toConfirm = useMemo(() => {

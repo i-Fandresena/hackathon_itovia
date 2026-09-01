@@ -1,23 +1,37 @@
 import { useMemo } from 'react'
 import { NavLink } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
+  AlertTriangle,
   Bell,
   Bookmark,
   Briefcase,
+  CreditCard,
   FilePlus2,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
+  Search,
+  ShieldCheck,
   Store,
   UserRound,
   Users,
   Wrench,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import type { UserRole } from '../../types'
 import './Sidebar.css'
 
 interface SidebarProps {
   onNavigate?: () => void
   onLogout: () => void
+}
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  candidate: 'Candidat',
+  recruiter: 'Recruteur',
+  particulier: 'Particulier',
+  admin: 'Administrateur',
 }
 
 /**
@@ -30,16 +44,23 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
     currentMemberId,
     recommendations,
     providers,
+    members,
     opportunities,
     bookmarks,
     unreadCount,
   } = useApp()
 
-  const isRecruiter = currentUser?.role === 'recruiter'
+  const role = currentUser?.role ?? 'candidate'
   const displayName =
     currentUser?.candidateProfile?.fullName ??
     currentUser?.recruiterProfile?.companyName ??
+    currentUser?.individualProfile?.fullName ??
+    currentUser?.email ??
     'Membre'
+  const city =
+    currentUser?.candidateProfile?.city ??
+    currentUser?.recruiterProfile?.city ??
+    currentUser?.individualProfile?.city
 
   const contributions = useMemo(
     () => recommendations.filter((r) => r.authorMemberId === currentMemberId).length,
@@ -53,27 +74,41 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
   }, [providers])
 
-  const links = isRecruiter
-    ? [
-        { to: '/recruteur', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
-        { to: '/recruteur/publier', label: 'Publier une offre', icon: FilePlus2 },
-        { to: '/recruteur/offres', label: 'Mes offres', icon: Briefcase },
-        { to: '/recruteur/candidatures', label: 'Candidatures', icon: Users },
-        { to: '/annuaire', label: 'Annuaire', icon: Store },
-      ]
-    : [
-        { to: '/candidat', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
-        { to: '/annuaire', label: 'Annuaire', icon: Store },
-        { to: '/candidat/offres', label: 'Offres', icon: Briefcase },
-        { to: '/candidat/favoris', label: 'Favoris', icon: Bookmark },
-        {
-          to: '/candidat/notifications',
-          label: 'Notifications',
-          icon: Bell,
-          badge: unreadCount,
-        },
-        { to: '/candidat/profil', label: 'Profil', icon: UserRound },
-      ]
+  const LINKS_BY_ROLE: Record<
+    UserRole,
+    { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; badge?: number }[]
+  > = {
+    recruiter: [
+      { to: '/recruteur', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
+      { to: '/recruteur/publier', label: 'Publier une offre', icon: FilePlus2 },
+      { to: '/recruteur/offres', label: 'Mes offres', icon: Briefcase },
+      { to: '/recruteur/candidatures', label: 'Candidatures', icon: Users },
+      { to: '/messages', label: 'Messages', icon: MessageCircle },
+      { to: '/recruteur/abonnement', label: 'Abonnement', icon: CreditCard },
+      { to: '/annuaire', label: 'Annuaire', icon: Store },
+    ],
+    candidate: [
+      { to: '/candidat', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
+      { to: '/annuaire', label: 'Annuaire', icon: Store },
+      { to: '/candidat/offres', label: 'Offres', icon: Briefcase },
+      { to: '/candidat/favoris', label: 'Favoris', icon: Bookmark },
+      { to: '/messages', label: 'Messages', icon: MessageCircle },
+      { to: '/candidat/notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
+      { to: '/candidat/profil', label: 'Profil', icon: UserRound },
+    ],
+    particulier: [
+      { to: '/particulier', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
+      { to: '/annuaire', label: 'Rechercher un pro', icon: Search },
+      { to: '/messages', label: 'Messages', icon: MessageCircle },
+    ],
+    admin: [
+      { to: '/admin', label: 'Tableau de bord', icon: ShieldCheck, end: true },
+      { to: '/admin/moderation', label: 'Modération', icon: AlertTriangle },
+      { to: '/annuaire', label: 'Annuaire', icon: Store },
+      { to: '/messages', label: 'Messages', icon: MessageCircle },
+    ],
+  }
+  const links = LINKS_BY_ROLE[role]
 
   return (
     <div className="side">
@@ -83,10 +118,8 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
         </span>
         <p className="side-name">{displayName}</p>
         <p className="side-role">
-          {isRecruiter ? 'Recruteur' : 'Membre'}
-          {currentUser?.candidateProfile?.city
-            ? ` · ${currentUser.candidateProfile.city}`
-            : ''}
+          {ROLE_LABELS[role]}
+          {city ? ` · ${city}` : ''}
         </p>
         <div className="side-stats">
           <div>
@@ -94,8 +127,16 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
             <span>retours</span>
           </div>
           <div>
-            <strong>{isRecruiter ? opportunities.length : bookmarks.length}</strong>
-            <span>{isRecruiter ? 'offres' : 'favoris'}</span>
+            <strong>
+              {role === 'recruiter'
+                ? opportunities.length
+                : role === 'candidate'
+                  ? bookmarks.length
+                  : members.length}
+            </strong>
+            <span>
+              {role === 'recruiter' ? 'offres' : role === 'candidate' ? 'favoris' : 'membres'}
+            </span>
           </div>
           <div>
             <strong>{providers.length}</strong>
@@ -112,11 +153,22 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
             end={'end' in l ? l.end : undefined}
             onClick={onNavigate}
           >
-            <l.icon size={18} aria-hidden />
-            <span>{l.label}</span>
-            {'badge' in l && l.badge ? (
-              <span className="side-badge">{l.badge}</span>
-            ) : null}
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <motion.span
+                    layoutId="sidebar-active-pill"
+                    className="side-nav-pill"
+                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                  />
+                )}
+                <l.icon size={18} aria-hidden />
+                <span>{l.label}</span>
+                {'badge' in l && l.badge ? (
+                  <span className="side-badge">{l.badge}</span>
+                ) : null}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
