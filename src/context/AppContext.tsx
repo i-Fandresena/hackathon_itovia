@@ -174,6 +174,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           candidatePhone: profile?.phone ?? '',
           candidateProvince: profile?.province ?? '',
           message: a.message,
+          status: a.status,
           createdAt: a.createdAt,
         })),
       )

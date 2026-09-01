@@ -17,6 +17,7 @@ export const SEED_USERS: User[] = [
       phone: '+261 34 12 345 67',
       province: 'Antananarivo',
       city: 'Antananarivo',
+      gender: 'femme',
       educationLevel: 'licence',
       skills: ['Excel', 'Communication', 'Réseaux sociaux', 'Canva', 'Français'],
       experienceLevel: 'junior',
@@ -250,6 +251,7 @@ export const SEED_APPLICATIONS: Application[] = [
     candidatePhone: '+261 34 12 345 67',
     candidateProvince: 'Antananarivo',
     message: 'Très motivée par le marketing local.',
+    status: 'envoyee',
     createdAt: '2026-03-16T09:00:00Z',
   },
 ]

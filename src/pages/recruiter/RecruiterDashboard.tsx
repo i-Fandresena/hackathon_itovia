@@ -18,7 +18,7 @@ export function RecruiterDashboard() {
   return (
     <div className="page">
       <div className="container">
-        <FadeUp>
+        <FadeUp eager>
           <header className="page-header">
             <p className="eyebrow">Espace recruteur</p>
             <h1>
@@ -29,19 +29,19 @@ export function RecruiterDashboard() {
         </FadeUp>
 
         <div className="grid-3" style={{ marginBottom: '1.5rem' }}>
-          <FadeUp index={0}>
+          <FadeUp eager index={0}>
             <Card className="stat-card">
               <strong>{myOpps.length}</strong>
               <span>Offres publiées</span>
             </Card>
           </FadeUp>
-          <FadeUp index={1}>
+          <FadeUp eager index={1}>
             <Card className="stat-card">
               <strong>{apps.length}</strong>
               <span>Candidatures reçues</span>
             </Card>
           </FadeUp>
-          <FadeUp index={2}>
+          <FadeUp eager index={2}>
             <Card className="stat-card">
               <strong>{unread}</strong>
               <span>Notifications non lues</span>

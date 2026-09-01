@@ -48,7 +48,7 @@ export function Login() {
         <p className="auth-eyebrow">
           <span className="eyebrow">Recommandations locales, vérifiées</span>
         </p>
-        <FadeUp>
+        <FadeUp eager>
           <Card>
             <h1>Connexion</h1>
             <p className="auth-sub">Accédez à votre espace OffRec</p>

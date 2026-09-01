@@ -5,10 +5,10 @@ import { FadeUp } from '../../components/motion/Motion'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Field, Input, Select } from '../../components/ui/Form'
-import { PROVINCES } from '../../data/constants'
+import { GENDER_LABELS, PROVINCES } from '../../data/constants'
 import { useApp } from '../../context/AppContext'
 import { homePathForRole } from '../../lib/roles'
-import type { UserRole } from '../../types'
+import type { Gender, UserRole } from '../../types'
 import './Auth.css'
 
 const ROLE_OPTIONS: { role: UserRole; label: string }[] = [
@@ -27,6 +27,7 @@ export function Signup() {
   const [companyName, setCompanyName] = useState('')
   const [phone, setPhone] = useState('')
   const [province, setProvince] = useState<string>(PROVINCES[0])
+  const [gender, setGender] = useState<Gender>('femme')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export function Signup() {
         phone,
         province,
         city: province,
+        gender,
         educationLevel: 'licence',
         skills: [],
         experienceLevel: 'debutant',
@@ -93,7 +95,7 @@ export function Signup() {
         <p className="auth-eyebrow">
           <span className="eyebrow">Recommandations locales, vérifiées</span>
         </p>
-        <FadeUp>
+        <FadeUp eager>
           <Card>
             <h1>Créer un compte</h1>
             <p className="auth-sub">Rejoignez OffRec en quelques secondes</p>
@@ -152,6 +154,17 @@ export function Signup() {
                   placeholder="+261 34 00 000 00"
                 />
               </Field>
+              {role === 'candidate' && (
+                <Field label="Genre">
+                  <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
+                    {(Object.keys(GENDER_LABELS) as Gender[]).map((k) => (
+                      <option key={k} value={k}>
+                        {GENDER_LABELS[k]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
               <Field label="Province">
                 <Select
                   value={province}

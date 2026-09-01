@@ -6,9 +6,14 @@ type FadeUpProps = {
   index?: number
   className?: string
   children?: ReactNode
+  /** Pages de données (tableaux de bord) : le contenu doit apparaître dès le
+   *  montage, pas seulement au scroll — sinon tout ce qui est sous le pli
+   *  reste invisible tant que personne ne fait défiler. Réservé au récit au
+   *  scroll de la landing (comportement par défaut, inchangé). */
+  eager?: boolean
 }
 
-export function FadeUp({ index = 0, children, className }: FadeUpProps) {
+export function FadeUp({ index = 0, children, className, eager = false }: FadeUpProps) {
   const reduce = useReducedMotion()
   if (reduce) return <div className={className}>{children}</div>
   return (
@@ -16,7 +21,7 @@ export function FadeUp({ index = 0, children, className }: FadeUpProps) {
       className={className}
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, margin: '-40px' }}
+      viewport={{ once: true, margin: eager ? '2000px' : '-40px' }}
       variants={fadeUp}
       custom={index}
     >

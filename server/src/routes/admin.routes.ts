@@ -1,7 +1,8 @@
+import bcrypt from 'bcryptjs'
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
-import { moderationResolveSchema } from '../lib/validation.js'
+import { createAgentSchema, moderationResolveSchema } from '../lib/validation.js'
 
 const ACTION_TO_STATUS = {
   warning: 'warned',
@@ -20,6 +21,7 @@ router.get('/stats', async (_req, res, next) => {
       candidateCount,
       recruiterCount,
       individualCount,
+      agentCount,
       opportunityCount,
       applicationCount,
       providerCount,
@@ -31,6 +33,7 @@ router.get('/stats', async (_req, res, next) => {
       prisma.user.count({ where: { role: 'candidate' } }),
       prisma.user.count({ where: { role: 'recruiter' } }),
       prisma.user.count({ where: { role: 'particulier' } }),
+      prisma.user.count({ where: { role: 'agent' } }),
       prisma.opportunity.count(),
       prisma.application.count(),
       prisma.provider.count(),
@@ -49,8 +52,41 @@ router.get('/stats', async (_req, res, next) => {
       prisma.transaction.aggregate({ _sum: { amountAr: true }, _count: true }),
     ])
 
+    // KPI d'inclusion féminine (cahier des charges §4, §10) : part de femmes
+    // parmi les profils « recommandés » — candidats ayant postulé au moins
+    // une fois, et talents non-diplômés recommandés/placés par un agent.
+    const [candidatesWithApplications, talentsRecommended, placementsByStage, activeRecruiters] =
+      await Promise.all([
+        prisma.application.findMany({
+          distinct: ['candidateId'],
+          select: { candidate: { select: { candidateProfile: { select: { gender: true } } } } },
+        }),
+        prisma.talentProfile.findMany({
+          where: { status: { in: ['recommande', 'place'] } },
+          select: { gender: true },
+        }),
+        prisma.placement.groupBy({ by: ['stage'], _count: true }),
+        prisma.opportunity.findMany({ distinct: ['recruiterId'], select: { recruiterId: true } }),
+      ])
+    const genderPool = [
+      ...candidatesWithApplications
+        .map((c) => c.candidate.candidateProfile?.gender)
+        .filter((g): g is 'femme' | 'homme' | 'autre' => Boolean(g)),
+      ...talentsRecommended.map((t) => t.gender),
+    ]
+    const femalePercent =
+      genderPool.length > 0
+        ? Math.round((genderPool.filter((g) => g === 'femme').length / genderPool.length) * 1000) / 10
+        : 0
+    const placementCount = placementsByStage.reduce((sum, p) => sum + p._count, 0)
+
     res.json({
-      users: { candidates: candidateCount, recruiters: recruiterCount, individuals: individualCount },
+      users: {
+        candidates: candidateCount,
+        recruiters: recruiterCount,
+        individuals: individualCount,
+        agents: agentCount,
+      },
       opportunities: opportunityCount,
       applications: applicationCount,
       providers: providerCount,
@@ -62,6 +98,13 @@ router.get('/stats', async (_req, res, next) => {
         totalAr: revenueAgg._sum.amountAr ?? 0,
         transactionCount: revenueAgg._count,
       },
+      employment: {
+        femalePercent,
+        genderPoolSize: genderPool.length,
+        placements: placementCount,
+        placementsByStage: Object.fromEntries(placementsByStage.map((p) => [p.stage, p._count])),
+        activePartnerCompanies: activeRecruiters.length,
+      },
       recentActivity: recentAuditLogs.map((log) => ({
         id: log.id,
         action: log.action,
@@ -69,6 +112,40 @@ router.get('/stats', async (_req, res, next) => {
         userRole: log.user?.role ?? null,
         createdAt: log.createdAt.toISOString(),
       })),
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Provisionne un compte agent : pas de self-service (cahier des charges §12
+ * — un statut de vérification agent non fiable détruirait la promesse
+ * « compétences vérifiées »).
+ */
+router.post('/agents', async (req, res, next) => {
+  try {
+    const body = createAgentSchema.parse(req.body)
+    const existing = await prisma.user.findUnique({ where: { email: body.email.toLowerCase() } })
+    if (existing) {
+      res.status(409).json({ error: 'Un compte existe déjà avec cet email.' })
+      return
+    }
+    const passwordHash = await bcrypt.hash(body.password, 12)
+    const user = await prisma.user.create({
+      data: {
+        email: body.email.toLowerCase(),
+        passwordHash,
+        role: 'agent',
+        agentProfile: { create: body.agentProfile },
+      },
+      include: { agentProfile: true },
+    })
+    await prisma.auditLog.create({
+      data: { userId: req.session!.sub, action: 'admin:create_agent', metadata: { agentUserId: user.id } },
+    })
+    res.status(201).json({
+      agent: { id: user.id, email: user.email, agentProfile: user.agentProfile },
     })
   } catch (err) {
     next(err)

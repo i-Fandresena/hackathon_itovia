@@ -3,9 +3,10 @@ import type {
   ConfidenceLevel,
   EducationLevel,
   ExperienceLevel,
+  Gender,
   OpportunityType,
   ProofType,
-} from '../types'
+} from '../types/index.js'
 
 export const PROVINCES = [
   'Antananarivo',
@@ -78,9 +79,15 @@ export const OPPORTUNITY_TYPE_LABELS: Record<OpportunityType, string> = {
 
 export const AVAILABILITY_LABELS: Record<Availability, string> = {
   immediate: 'Disponible immédiatement',
-  '1mois': 'Dans 1 mois',
-  '3mois': 'Dans 3 mois',
+  m1: 'Dans 1 mois',
+  m3: 'Dans 3 mois',
   flexible: 'Flexible',
+}
+
+export const GENDER_LABELS: Record<Gender, string> = {
+  femme: 'Femme',
+  homme: 'Homme',
+  autre: 'Autre / préfère ne pas préciser',
 }
 
 export const STATS = {

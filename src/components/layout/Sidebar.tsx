@@ -6,6 +6,7 @@ import {
   Bell,
   Bookmark,
   Briefcase,
+  ClipboardCheck,
   CreditCard,
   FilePlus2,
   LayoutDashboard,
@@ -14,6 +15,7 @@ import {
   Search,
   ShieldCheck,
   Store,
+  UserPlus,
   UserRound,
   Users,
   Wrench,
@@ -32,6 +34,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   recruiter: 'Recruteur',
   particulier: 'Particulier',
   admin: 'Administrateur',
+  agent: 'Agent de terrain',
 }
 
 /**
@@ -83,6 +86,7 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
       { to: '/recruteur/publier', label: 'Publier une offre', icon: FilePlus2 },
       { to: '/recruteur/offres', label: 'Mes offres', icon: Briefcase },
       { to: '/recruteur/candidatures', label: 'Candidatures', icon: Users },
+      { to: '/recruteur/placements', label: 'Placements', icon: ClipboardCheck },
       { to: '/messages', label: 'Messages', icon: MessageCircle },
       { to: '/recruteur/abonnement', label: 'Abonnement', icon: CreditCard },
       { to: '/annuaire', label: 'Annuaire', icon: Store },
@@ -104,7 +108,13 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
     admin: [
       { to: '/admin', label: 'Tableau de bord', icon: ShieldCheck, end: true },
       { to: '/admin/moderation', label: 'Modération', icon: AlertTriangle },
+      { to: '/admin/agents', label: 'Agents de terrain', icon: UserPlus },
       { to: '/annuaire', label: 'Annuaire', icon: Store },
+      { to: '/messages', label: 'Messages', icon: MessageCircle },
+    ],
+    agent: [
+      { to: '/agent', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
+      { to: '/agent/talents/nouveau', label: 'Nouveau talent', icon: ClipboardCheck },
       { to: '/messages', label: 'Messages', icon: MessageCircle },
     ],
   }

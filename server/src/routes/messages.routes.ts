@@ -10,11 +10,13 @@ function displayNameOf(user: {
   candidateProfile: { fullName: string } | null
   recruiterProfile: { companyName: string } | null
   individualProfile: { fullName: string } | null
+  agentProfile: { fullName: string } | null
 }): string {
   return (
     user.candidateProfile?.fullName ??
     user.recruiterProfile?.companyName ??
     user.individualProfile?.fullName ??
+    user.agentProfile?.fullName ??
     user.email
   )
 }
@@ -23,6 +25,7 @@ const PARTICIPANT_INCLUDE = {
   candidateProfile: { select: { fullName: true } },
   recruiterProfile: { select: { companyName: true } },
   individualProfile: { select: { fullName: true } },
+  agentProfile: { select: { fullName: true } },
 } as const
 
 router.get('/conversations', requireAuth, async (req, res, next) => {

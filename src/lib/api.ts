@@ -1,13 +1,19 @@
 import type {
+  AgentProfile,
   Application,
+  ApplicationStatus,
   CandidateProfile,
   IndividualProfile,
-  Member,
   Notification,
+  Member,
   Opportunity,
+  Placement,
+  PlacementStage,
   Provider,
   Recommendation,
   RecruiterProfile,
+  TalentProfile,
+  TalentVerification,
   User,
   UserRole,
 } from '../types/index.js'
@@ -85,6 +91,23 @@ export function apiUpdateCandidateProfile(profile: CandidateProfile) {
   }).then((r) => r.candidateProfile)
 }
 
+/** Dépôt de CV : extraction simple + suggestions de compétences, jamais
+ *  appliquées automatiquement au profil (le candidat confirme dans l'UI). */
+export async function apiUploadCv(file: File): Promise<{ cvUrl: string; suggestedSkills: string[] }> {
+  const form = new FormData()
+  form.append('cv', file)
+  const res = await fetch(`${API_BASE}/auth/profile/candidate/cv`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  })
+  const body = await res.json().catch(() => undefined)
+  if (!res.ok) {
+    throw new ApiError(body?.error ?? `Erreur ${res.status}`, res.status)
+  }
+  return body
+}
+
 /* ------------------------------------------------------------------ */
 /* Opportunités / candidatures / favoris                              */
 /* ------------------------------------------------------------------ */
@@ -144,6 +167,7 @@ export interface MyApplicationRaw {
   opportunityId: string
   candidateId: string
   message?: string
+  status: ApplicationStatus
   createdAt: string
   opportunity: Opportunity
 }
@@ -157,6 +181,35 @@ export function apiMyApplications() {
 export function apiReceivedApplications() {
   return request<{ applications: Application[] }>('/applications/received').then(
     (r) => r.applications,
+  )
+}
+
+export function apiUpdateApplicationStatus(id: string, status: ApplicationStatus) {
+  return request<{ application: Application }>(`/applications/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  }).then((r) => r.application)
+}
+
+export interface ShortlistMatched {
+  source: 'matche_ia'
+  candidateId: string
+  fullName: string
+  email: string
+  match: { score: number; reasons: string[] }
+}
+
+export interface ShortlistProposed {
+  source: 'verifie_humain'
+  talentId: string
+  fullName: string
+  trade: string
+  status: string
+}
+
+export function apiShortlist(opportunityId: string) {
+  return request<{ matched: ShortlistMatched[]; proposed: ShortlistProposed[] }>(
+    `/opportunities/${opportunityId}/shortlist`,
   )
 }
 
@@ -338,11 +391,104 @@ export function apiSubscribe(planCode: string) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Agent de terrain (verticale emploi vérifié)                         */
+/* ------------------------------------------------------------------ */
+
+export function apiMyTalents() {
+  return request<{ talents: TalentProfile[] }>('/agent/talents').then((r) => r.talents)
+}
+
+export interface TalentDetail extends TalentProfile {
+  verifications: TalentVerification[]
+  proposals: { id: string; opportunityId: string; proposedAt: string; opportunity: Opportunity }[]
+}
+
+export function apiTalentDetail(id: string) {
+  return request<{ talent: TalentDetail }>(`/agent/talents/${id}`).then((r) => r.talent)
+}
+
+export interface TalentInput {
+  fullName: string
+  phone: string
+  province: string
+  city: string
+  gender: 'femme' | 'homme' | 'autre'
+  skills: string[]
+  availability: string
+}
+
+export function apiCreateTalent(input: TalentInput) {
+  return request<{ talent: TalentProfile }>('/agent/talents', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }).then((r) => r.talent)
+}
+
+export function apiUpdateTalent(id: string, input: TalentInput) {
+  return request<{ talent: TalentProfile }>(`/agent/talents/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  }).then((r) => r.talent)
+}
+
+export function apiVerifyTalent(
+  id: string,
+  payload: { trade: string; checklist: Record<string, boolean>; note?: string },
+) {
+  return request<{ verification: TalentVerification }>(`/agent/talents/${id}/verify`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function apiProposeTalent(id: string, opportunityId: string) {
+  return request<void>(`/agent/talents/${id}/propose`, {
+    method: 'POST',
+    body: JSON.stringify({ opportunityId }),
+  })
+}
+
+export function apiAgentStats() {
+  return request<{ profilesCreated: number; verificationRate: number; placements: number }>(
+    '/agent/stats',
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Placements et success fee                                          */
+/* ------------------------------------------------------------------ */
+
+export interface PlacementInput {
+  opportunityId?: string
+  candidateId?: string
+  talentId?: string
+  monthlySalaryAr?: number
+}
+
+export function apiCreatePlacement(input: PlacementInput) {
+  return request<{ placement: Placement }>('/placements', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }).then((r) => r.placement)
+}
+
+export function apiMyPlacements() {
+  return request<{ placements: Placement[] }>('/placements/mine').then((r) => r.placements)
+}
+
+export function apiUpdatePlacementStage(id: string, stage: PlacementStage) {
+  return request<{ placement: Placement }>(`/placements/${id}/stage`, {
+    method: 'PUT',
+    body: JSON.stringify({ stage }),
+  }).then((r) => r.placement)
+}
+
+/* ------------------------------------------------------------------ */
 /* Admin                                                               */
 /* ------------------------------------------------------------------ */
 
 export interface AdminStats {
-  users: { candidates: number; recruiters: number; individuals: number }
+  users: { candidates: number; recruiters: number; individuals: number; agents: number }
   opportunities: number
   applications: number
   providers: number
@@ -350,6 +496,13 @@ export interface AdminStats {
   members: number
   openReports: number
   revenue: { payingRecruiters: number; totalAr: number; transactionCount: number }
+  employment: {
+    femalePercent: number
+    genderPoolSize: number
+    placements: number
+    placementsByStage: Record<string, number>
+    activePartnerCompanies: number
+  }
   recentActivity: {
     id: string
     action: string
@@ -361,6 +514,17 @@ export interface AdminStats {
 
 export function apiAdminStats() {
   return request<AdminStats>('/admin/stats')
+}
+
+export function apiAdminCreateAgent(payload: {
+  email: string
+  password: string
+  agentProfile: Omit<AgentProfile, 'email'>
+}) {
+  return request<{ agent: { id: string; email: string; agentProfile: AgentProfile } }>(
+    '/admin/agents',
+    { method: 'POST', body: JSON.stringify(payload) },
+  )
 }
 
 export type ReportTargetType = 'opportunity' | 'provider' | 'recommendation' | 'user'

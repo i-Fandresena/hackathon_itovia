@@ -299,6 +299,7 @@ const CANDIDATES = [
     phone: '+261 34 12 345 67',
     province: 'Antananarivo',
     city: 'Antananarivo',
+    gender: 'femme' as const,
     educationLevel: 'licence',
     skills: ['Excel', 'Communication', 'Réseaux sociaux', 'Canva', 'Français'],
     experienceLevel: 'junior',
@@ -312,6 +313,7 @@ const CANDIDATES = [
     phone: '+261 33 45 678 12',
     province: 'Antananarivo',
     city: 'Antananarivo',
+    gender: 'homme' as const,
     educationLevel: 'master',
     skills: ['JavaScript', 'React', 'Git', 'Python', 'SQL'],
     experienceLevel: 'intermediaire',
@@ -325,6 +327,7 @@ const CANDIDATES = [
     phone: '+261 32 56 789 23',
     province: 'Toamasina',
     city: 'Toamasina',
+    gender: 'femme' as const,
     educationLevel: 'bac',
     skills: ['Excel', 'Vente terrain', 'Malagasy', 'Français'],
     experienceLevel: 'debutant',
@@ -338,6 +341,7 @@ const CANDIDATES = [
     phone: '+261 34 67 890 34',
     province: 'Fianarantsoa',
     city: 'Fianarantsoa',
+    gender: 'homme' as const,
     educationLevel: 'technique',
     skills: ['Photoshop', 'Canva', 'Rédaction'],
     experienceLevel: 'junior',
@@ -351,11 +355,77 @@ const CANDIDATES = [
     phone: '+261 33 78 901 45',
     province: 'Mahajanga',
     city: 'Mahajanga',
+    gender: 'femme' as const,
     educationLevel: 'autodidacte',
     skills: ['Livraison', 'Communication', 'Service client'],
     experienceLevel: 'debutant',
     desiredOpportunityTypes: ['emploi'],
     availability: 'immediate',
+  },
+] as const
+
+/** Agents de terrain (verticale emploi vérifié) — comptes provisionnés par l'admin. */
+const AGENTS = [
+  {
+    key: 'agent-1',
+    email: 'agent.analamanga@demo.mg',
+    fullName: 'Voninkazo Rasolofoson',
+    phone: '+261 34 20 111 22',
+    province: 'Antananarivo',
+    city: 'Antananarivo',
+  },
+  {
+    key: 'agent-2',
+    email: 'agent.terrain2@demo.mg',
+    fullName: 'Tovonirina Andriamampianina',
+    phone: '+261 33 21 333 44',
+    province: 'Antananarivo',
+    city: 'Antananarivo',
+  },
+] as const
+
+/**
+ * Talents non-diplômés : profils créés et suivis par un agent, pas de
+ * compte de connexion propre (décision produit du 2026-09-01). Mix de
+ * statuts et de genres cohérent avec le KPI d'inclusion féminine cible
+ * (55-60 % de profils recommandés).
+ */
+const TALENTS = [
+  {
+    key: 'talent-1', agentKey: 'agent-1', fullName: 'Vololona Randria',
+    phone: '+261 34 40 111 22', province: 'Antananarivo', city: 'Antananarivo',
+    gender: 'femme' as const, trade: 'Couture', skills: ['Couture', 'Broderie', 'Retouche'],
+    availability: 'immediate' as const, status: 'place' as const,
+  },
+  {
+    key: 'talent-2', agentKey: 'agent-1', fullName: 'Herimanana Rakotoson',
+    phone: '+261 33 41 222 33', province: 'Antananarivo', city: 'Antananarivo',
+    gender: 'homme' as const, trade: 'Électricité bâtiment', skills: ['Installation électrique', 'Dépannage'],
+    availability: 'flexible' as const, status: 'recommande' as const,
+  },
+  {
+    key: 'talent-3', agentKey: 'agent-1', fullName: 'Sahondra Rabemananjara',
+    phone: '+261 32 42 333 44', province: 'Antananarivo', city: 'Antananarivo',
+    gender: 'femme' as const, trade: 'Cuisine / restauration', skills: ['Cuisine malgache', 'Hygiène alimentaire'],
+    availability: 'immediate' as const, status: 'verifie' as const,
+  },
+  {
+    key: 'talent-4', agentKey: 'agent-2', fullName: 'Fenosoa Andriamihaja',
+    phone: '+261 34 43 444 55', province: 'Antananarivo', city: 'Antananarivo',
+    gender: 'femme' as const, trade: 'Vente / commerce', skills: ['Vente terrain', 'Caisse', 'Relation client'],
+    availability: 'immediate' as const, status: 'recommande' as const,
+  },
+  {
+    key: 'talent-5', agentKey: 'agent-2', fullName: 'Rado Ramanantsoa',
+    phone: '+261 33 44 555 66', province: 'Antananarivo', city: 'Antananarivo',
+    gender: 'homme' as const, trade: 'Conduite / livraison', skills: ['Permis B', 'Livraison', 'Ponctualité'],
+    availability: 'immediate' as const, status: 'verifie' as const,
+  },
+  {
+    key: 'talent-6', agentKey: 'agent-2', fullName: 'Onja Rasoanirina',
+    phone: '+261 32 45 666 77', province: 'Antananarivo', city: 'Antananarivo',
+    gender: 'femme' as const, trade: 'Ménage / entretien', skills: ['Nettoyage', 'Repassage', 'Organisation'],
+    availability: 'm1' as const, status: 'en_attente' as const,
   },
 ] as const
 
@@ -512,6 +582,7 @@ async function main() {
             phone: c.phone,
             province: c.province,
             city: c.city,
+            gender: c.gender,
             educationLevel: c.educationLevel,
             skills: [...c.skills],
             experienceLevel: c.experienceLevel,
@@ -522,6 +593,21 @@ async function main() {
       },
     })
     userIdByKey.set(c.key, user.id)
+  }
+
+  console.log('Comptes agents de terrain…')
+  for (const a of AGENTS) {
+    const user = await prisma.user.create({
+      data: {
+        email: a.email,
+        passwordHash,
+        role: 'agent',
+        agentProfile: {
+          create: { fullName: a.fullName, phone: a.phone, province: a.province, city: a.city },
+        },
+      },
+    })
+    userIdByKey.set(a.key, user.id)
   }
 
   console.log('Compte particulier de démonstration…')
@@ -591,12 +677,29 @@ async function main() {
     opportunityIdByKey.set(o.key, opportunity.id)
   }
 
-  console.log('Une candidature de démonstration…')
+  console.log('Des candidatures de démonstration…')
   await prisma.application.create({
     data: {
       opportunityId: opportunityIdByKey.get('opp-1')!,
       candidateId: userIdByKey.get('candidat-1')!,
       message: 'Très motivée par le marketing local.',
+      status: 'contactee',
+    },
+  })
+  await prisma.application.create({
+    data: {
+      opportunityId: opportunityIdByKey.get('opp-2')!,
+      candidateId: userIdByKey.get('candidat-2')!,
+      message: 'Trois ans d’expérience React, disponible immédiatement.',
+      status: 'vue',
+    },
+  })
+  await prisma.application.create({
+    data: {
+      opportunityId: opportunityIdByKey.get('opp-5')!,
+      candidateId: userIdByKey.get('candidat-3')!,
+      message: 'Expérience en vente terrain à Toamasina, mobile sur Mahajanga.',
+      status: 'envoyee',
     },
   })
 
@@ -686,9 +789,81 @@ async function main() {
     },
   })
 
+  console.log('Talents non-diplômés et vérifications…')
+  const talentIdByKey = new Map<string, string>()
+  for (const t of TALENTS) {
+    const talent = await prisma.talentProfile.create({
+      data: {
+        agentId: userIdByKey.get(t.agentKey)!,
+        fullName: t.fullName,
+        phone: t.phone,
+        province: t.province,
+        city: t.city,
+        gender: t.gender,
+        skills: [...t.skills],
+        availability: t.availability,
+        status: t.status,
+      },
+    })
+    talentIdByKey.set(t.key, talent.id)
+    if (t.status !== 'en_attente') {
+      await prisma.talentVerification.create({
+        data: {
+          talentId: talent.id,
+          trade: t.trade,
+          checklist: Object.fromEntries(t.skills.map((s) => [s, true])),
+          note: `Compétences vérifiées sur le terrain par ${AGENTS.find((a) => a.key === t.agentKey)!.fullName}.`,
+        },
+      })
+    }
+  }
+
+  console.log('Propositions d’opportunités par les agents…')
+  const proposals: { talentKey: string; opportunityKey: string }[] = [
+    { talentKey: 'talent-1', opportunityKey: 'opp-4' },
+    { talentKey: 'talent-2', opportunityKey: 'opp-9' },
+    { talentKey: 'talent-4', opportunityKey: 'opp-5' },
+  ]
+  for (const p of proposals) {
+    await prisma.talentOpportunityProposal.create({
+      data: { talentId: talentIdByKey.get(p.talentKey)!, opportunityId: opportunityIdByKey.get(p.opportunityKey)! },
+    })
+  }
+
+  console.log('Placements et suivi du success fee…')
+  await prisma.placement.create({
+    data: {
+      opportunityId: opportunityIdByKey.get('opp-1')!,
+      recruiterId: userIdByKey.get('techmada')!,
+      candidateId: userIdByKey.get('candidat-1')!,
+      monthlySalaryAr: 450000,
+      stage: 'etape1_payee',
+    },
+  })
+  await prisma.placement.create({
+    data: {
+      opportunityId: opportunityIdByKey.get('opp-4')!,
+      recruiterId: userIdByKey.get('agence-fianar')!,
+      talentId: talentIdByKey.get('talent-1')!,
+      monthlySalaryAr: 320000,
+      stage: 'etape1_due',
+    },
+  })
+  await prisma.placement.create({
+    data: {
+      opportunityId: opportunityIdByKey.get('opp-5')!,
+      recruiterId: userIdByKey.get('mahajanga-commerce')!,
+      talentId: talentIdByKey.get('talent-4')!,
+      monthlySalaryAr: 300000,
+      stage: 'etape2_due',
+    },
+  })
+
   console.log('Terminé.')
   console.log('Comptes démo (mot de passe "demo123") :')
-  console.log('  candidat@demo.mg, recruteur@demo.mg, particulier@demo.mg, admin@demo.mg')
+  console.log(
+    '  candidat@demo.mg, recruteur@demo.mg, particulier@demo.mg, admin@demo.mg, agent.analamanga@demo.mg',
+  )
   void individualUser
 }
 

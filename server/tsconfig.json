@@ -13,5 +13,5 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["src", "../src/types/index.ts", "../src/lib/trust.ts", "../src/lib/recommendation.ts"]
+  "include": ["src", "../src/types/index.ts", "../src/lib/trust.ts", "../src/lib/recommendation.ts", "../src/data/constants.ts"]
 }

@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
+import path from 'node:path'
 import { attachSession } from './middleware/auth.js'
 import { errorHandler, notFound } from './middleware/errorHandler.js'
 import authRoutes from './routes/auth.routes.js'
@@ -14,6 +15,8 @@ import adminRoutes from './routes/admin.routes.js'
 import messageRoutes from './routes/messages.routes.js'
 import billingRoutes from './routes/billing.routes.js'
 import reportRoutes from './routes/reports.routes.js'
+import agentRoutes from './routes/agent.routes.js'
+import placementRoutes from './routes/placements.routes.js'
 
 export function createApp() {
   const app = express()
@@ -28,6 +31,7 @@ export function createApp() {
   app.use(express.json({ limit: '1mb' }))
   app.use(cookieParser())
   app.use(attachSession)
+  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() })
@@ -43,6 +47,8 @@ export function createApp() {
   app.use('/api/messages', messageRoutes)
   app.use('/api/billing', billingRoutes)
   app.use('/api/reports', reportRoutes)
+  app.use('/api/agent', agentRoutes)
+  app.use('/api/placements', placementRoutes)
 
   app.use(notFound)
   app.use(errorHandler)

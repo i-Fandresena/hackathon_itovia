@@ -21,8 +21,14 @@ import { RecruiterApplications } from './pages/recruiter/RecruiterApplications'
 import { IndividualDashboard } from './pages/individual/IndividualDashboard'
 import { AdminDashboard } from './pages/admin/AdminDashboard'
 import { AdminModeration } from './pages/admin/AdminModeration'
+import { AdminAgents } from './pages/admin/AdminAgents'
 import { Messages } from './pages/messages/Messages'
 import { RecruiterBilling } from './pages/recruiter/RecruiterBilling'
+import { RecruiterShortlist } from './pages/recruiter/RecruiterShortlist'
+import { RecruiterPlacements } from './pages/recruiter/RecruiterPlacements'
+import { AgentDashboard } from './pages/agent/AgentDashboard'
+import { TalentForm } from './pages/agent/TalentForm'
+import { TalentDetail } from './pages/agent/TalentDetail'
 
 export default function App() {
   return (
@@ -161,6 +167,22 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="recruteur/offres/:id/shortlist"
+              element={
+                <ProtectedRoute role="recruiter">
+                  <RecruiterShortlist />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="recruteur/placements"
+              element={
+                <ProtectedRoute role="recruiter">
+                  <RecruiterPlacements />
+                </ProtectedRoute>
+              }
+            />
 
             <Route
               path="messages"
@@ -193,6 +215,47 @@ export default function App() {
               element={
                 <ProtectedRoute role="admin">
                   <AdminModeration />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/agents"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminAgents />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="agent"
+              element={
+                <ProtectedRoute role="agent">
+                  <AgentDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="agent/talents/nouveau"
+              element={
+                <ProtectedRoute role="agent">
+                  <TalentForm />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="agent/talents/:id"
+              element={
+                <ProtectedRoute role="agent">
+                  <TalentDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="agent/talents/:id/modifier"
+              element={
+                <ProtectedRoute role="agent">
+                  <TalentForm />
                 </ProtectedRoute>
               }
             />

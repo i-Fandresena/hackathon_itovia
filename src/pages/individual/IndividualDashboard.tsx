@@ -27,7 +27,7 @@ export function IndividualDashboard() {
   return (
     <div className="page">
       <div className="container">
-        <FadeUp>
+        <FadeUp eager>
           <header className="page-header">
             <p className="eyebrow">Espace particulier</p>
             <h1>{firstName ? `Bonjour, ${firstName}` : 'De quoi avez-vous besoin ?'}</h1>
@@ -35,7 +35,7 @@ export function IndividualDashboard() {
           </header>
         </FadeUp>
 
-        <FadeUp index={1}>
+        <FadeUp eager index={1}>
           <Card style={{ marginBottom: '1.5rem' }}>
             <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 220 }}>
@@ -56,19 +56,19 @@ export function IndividualDashboard() {
         </FadeUp>
 
         <div className="grid-3" style={{ marginBottom: '1.5rem' }}>
-          <FadeUp index={0}>
+          <FadeUp eager index={0}>
             <Card className="stat-card">
               <strong>{providers.length}</strong>
               <span>Prestataires référencés</span>
             </Card>
           </FadeUp>
-          <FadeUp index={1}>
+          <FadeUp eager index={1}>
             <Card className="stat-card">
               <strong>{TRADES.length}</strong>
               <span>Métiers couverts</span>
             </Card>
           </FadeUp>
-          <FadeUp index={2}>
+          <FadeUp eager index={2}>
             <Card className="stat-card">
               <strong>Antananarivo</strong>
               <span>Zone couverte</span>

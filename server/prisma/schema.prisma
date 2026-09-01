@@ -12,6 +12,43 @@ enum UserRole {
   recruiter
   particulier
   admin
+  agent
+}
+
+enum Gender {
+  femme
+  homme
+  autre
+}
+
+/// Pipeline talent non-diplômé : jamais automatique au-delà d'une action
+/// explicite de l'agent (cahier des charges §7.3 règle 14).
+enum TalentStatus {
+  en_attente
+  verifie
+  recommande
+  place
+}
+
+enum ApplicationStatus {
+  envoyee
+  vue
+  contactee
+  refusee
+}
+
+enum AccountTier {
+  gratuit
+  premium
+}
+
+/// Suivi déclaratif du success fee — jamais de paiement automatisé au MVP.
+enum PlacementStage {
+  etape1_due
+  etape1_payee
+  etape2_due
+  etape2_payee
+  annule
 }
 
 /// Pipeline de modération : Warning -> Restriction -> Suspension -> Bannissement.
@@ -90,6 +127,7 @@ model User {
   candidateProfile  CandidateProfile?
   recruiterProfile  RecruiterProfile?
   individualProfile IndividualProfile?
+  agentProfile      AgentProfile?
   member            Member?
 
   opportunities Opportunity[]  @relation("RecruiterOpportunities")
@@ -97,6 +135,10 @@ model User {
   bookmarks     Bookmark[]
   notifications Notification[]
   auditLogs     AuditLog[]
+
+  talentsManaged        TalentProfile[]
+  placementsAsRecruiter Placement[]     @relation("PlacementsAsRecruiter")
+  placementsAsCandidate Placement[]     @relation("PlacementsAsCandidate")
 
   subscription        Subscription?
   transactions        Transaction[]
@@ -117,24 +159,37 @@ model CandidateProfile {
   phone                   String
   province                String
   city                    String
+  gender                  Gender
   educationLevel          EducationLevel
   skills                  String[]
   experienceLevel         ExperienceLevel
   desiredOpportunityTypes OpportunityType[]
   availability            Availability
+  cvUrl                   String?
+  cvSkillsSuggested       String[]          @default([])
 }
 
 model RecruiterProfile {
-  userId      String @id
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String      @id
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName String
   phone       String
   province    String
   city        String
   sector      String
+  tier        AccountTier @default(gratuit)
 }
 
 model IndividualProfile {
+  userId   String @id
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName String
+  phone    String
+  province String
+  city     String
+}
+
+model AgentProfile {
   userId   String @id
   user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   fullName String
@@ -162,19 +217,22 @@ model Opportunity {
 
   applications Application[]
   bookmarks    Bookmark[]
+  talentProposals TalentOpportunityProposal[]
+  placements      Placement[]
 
   @@index([province])
   @@index([opportunityType])
 }
 
 model Application {
-  id            String      @id @default(uuid())
+  id            String            @id @default(uuid())
   opportunityId String
-  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  opportunity   Opportunity       @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
   candidateId   String
-  candidate     User        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate     User              @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   message       String?
-  createdAt     DateTime    @default(now())
+  status        ApplicationStatus @default(envoyee)
+  createdAt     DateTime          @default(now())
 
   @@unique([opportunityId, candidateId])
 }
@@ -390,4 +448,79 @@ model ModerationAction {
   action       ModerationActionType
   note         String?
   createdAt    DateTime             @default(now())
+}
+
+// Verticale emploi vérifié : agents de terrain, talents non-diplômés,
+// placements et success fee (cahier des charges §7.3, §8 phases F-I).
+
+/// Créé et modifié uniquement par l'agent qui le suit (§7.3 règle 14) :
+/// pas de compte de connexion propre au MVP.
+model TalentProfile {
+  id           String       @id @default(uuid())
+  agentId      String
+  agent        User         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  fullName     String
+  phone        String
+  province     String
+  city         String
+  gender       Gender
+  skills       String[]
+  availability Availability
+  status       TalentStatus @default(en_attente)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  verifications TalentVerification[]
+  proposals     TalentOpportunityProposal[]
+  placements    Placement[]
+
+  @@index([agentId])
+}
+
+/// Un enregistrement par événement de vérification : historique conservé,
+/// jamais écrasé (cohérent avec §7 « aucune suppression »).
+model TalentVerification {
+  id         String        @id @default(uuid())
+  talentId   String
+  talent     TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  trade      String
+  checklist  Json
+  note       String?
+  verifiedAt DateTime      @default(now())
+
+  @@index([talentId])
+}
+
+/// Historique des opportunités proposées à ce talent (cahier MVP §4.1) ;
+/// côté « vérifié humain » d'une shortlist (§7.3 règle 17).
+model TalentOpportunityProposal {
+  id            String      @id @default(uuid())
+  talentId      String
+  talent        TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  proposedAt    DateTime    @default(now())
+
+  @@unique([talentId, opportunityId])
+  @@index([opportunityId])
+}
+
+/// Exactement un de candidateId/talentId renseigné — vérifié en code
+/// (validation Zod), pas en contrainte DB.
+model Placement {
+  id              String         @id @default(uuid())
+  opportunityId   String?
+  opportunity     Opportunity?   @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  recruiterId     String
+  recruiter       User           @relation("PlacementsAsRecruiter", fields: [recruiterId], references: [id], onDelete: Cascade)
+  candidateId     String?
+  candidate       User?          @relation("PlacementsAsCandidate", fields: [candidateId], references: [id], onDelete: SetNull)
+  talentId        String?
+  talent          TalentProfile? @relation(fields: [talentId], references: [id], onDelete: SetNull)
+  monthlySalaryAr Int?
+  stage           PlacementStage @default(etape1_due)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([recruiterId])
 }

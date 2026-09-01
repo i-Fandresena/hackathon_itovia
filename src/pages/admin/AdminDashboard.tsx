@@ -46,7 +46,7 @@ export function AdminDashboard() {
   return (
     <div className="page">
       <div className="container">
-        <FadeUp>
+        <FadeUp eager>
           <header className="page-header">
             <p className="eyebrow">Administration</p>
             <h1>Administration</h1>
@@ -55,7 +55,7 @@ export function AdminDashboard() {
         </FadeUp>
 
         {stats.openReports > 0 && (
-          <FadeUp>
+          <FadeUp eager>
             <Card style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <AlertTriangle size={18} />
@@ -68,8 +68,8 @@ export function AdminDashboard() {
           </FadeUp>
         )}
 
-        <FadeUp index={0}>
-          <div className="grid-3" style={{ marginBottom: '1rem' }}>
+        <FadeUp eager index={0}>
+          <div className="grid-3" style={{ marginBottom: '1.5rem' }}>
             <Card className="stat-card">
               <strong>{stats.users.candidates}</strong>
               <span>Candidats</span>
@@ -82,10 +82,32 @@ export function AdminDashboard() {
               <strong>{stats.users.individuals}</strong>
               <span>Particuliers</span>
             </Card>
+            <Card className="stat-card">
+              <strong>{stats.users.agents}</strong>
+              <span>Agents de terrain</span>
+            </Card>
           </div>
         </FadeUp>
 
-        <FadeUp index={1}>
+        <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Emploi vérifié</h2>
+        <FadeUp eager index={1}>
+          <div className="grid-3" style={{ marginBottom: '1.5rem' }}>
+            <Card className="stat-card">
+              <strong>{stats.employment.femalePercent}%</strong>
+              <span>Profils recommandés — femmes ({stats.employment.genderPoolSize} mesurés)</span>
+            </Card>
+            <Card className="stat-card">
+              <strong>{stats.employment.placements}</strong>
+              <span>Placements</span>
+            </Card>
+            <Card className="stat-card">
+              <strong>{stats.employment.activePartnerCompanies}</strong>
+              <span>Entreprises partenaires actives</span>
+            </Card>
+          </div>
+        </FadeUp>
+
+        <FadeUp eager index={2}>
           <div className="grid-3" style={{ marginBottom: '1.5rem' }}>
             <Card className="stat-card">
               <strong>{stats.opportunities}</strong>
@@ -111,7 +133,7 @@ export function AdminDashboard() {
         </FadeUp>
 
         <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Revenus (simulé)</h2>
-        <FadeUp index={2}>
+        <FadeUp eager index={3}>
           <div className="grid-3" style={{ marginBottom: '1.5rem' }}>
             <Card className="stat-card">
               <strong>{stats.revenue.totalAr.toLocaleString('fr-FR')} Ar</strong>

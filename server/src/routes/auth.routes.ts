@@ -1,12 +1,33 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import rateLimit from 'express-rate-limit'
+import multer from 'multer'
+// Import direct du sous-module : le point d'entrée `pdf-parse` exécute du
+// code de debug qui tente de lire un fichier de test au chargement quand
+// `module.parent` est indéfini (cas de l'interop CJS/ESM via tsx).
+import pdfParse from 'pdf-parse/lib/pdf-parse.js'
+import { randomUUID } from 'node:crypto'
+import { writeFile, mkdir } from 'node:fs/promises'
+import path from 'node:path'
 import { prisma } from '../lib/prisma.js'
 import { signSession } from '../lib/jwt.js'
 import { requireAuth } from '../middleware/auth.js'
 import { candidateProfileSchema, loginSchema, registerSchema } from '../lib/validation.js'
 import { requireRole } from '../middleware/rbac.js'
 import { serializeUser } from '../lib/serialize.js'
+import { COMMON_SKILLS } from '../../../src/data/constants.js'
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype !== 'application/pdf') {
+      cb(new Error('Seuls les fichiers PDF sont acceptés.'))
+      return
+    }
+    cb(null, true)
+  },
+})
 
 const router = Router()
 
@@ -21,6 +42,7 @@ const USER_INCLUDE = {
   candidateProfile: true,
   recruiterProfile: true,
   individualProfile: true,
+  agentProfile: true,
   member: true,
 } as const
 
@@ -150,6 +172,48 @@ router.put('/profile/candidate', requireRole('candidate'), async (req, res, next
       update: body,
     })
     res.json({ candidateProfile: profile })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Dépôt de CV (MVP §4.2 du cahier des charges) : extraction texte simple +
+ * reconnaissance de mots-clés contre le vocabulaire de compétences existant
+ * — pas de matching sémantique IA (hors périmètre MVP). Les compétences
+ * suggérées ne sont jamais appliquées automatiquement au profil : le
+ * candidat les confirme dans l'UI (§7.3 règle 19, additif jamais décisionnaire).
+ */
+router.post('/profile/candidate/cv', requireRole('candidate'), upload.single('cv'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'Fichier PDF requis.' })
+      return
+    }
+
+    const uploadsDir = path.resolve(process.cwd(), 'uploads', 'cv')
+    await mkdir(uploadsDir, { recursive: true })
+    const fileName = `${randomUUID()}.pdf`
+    await writeFile(path.join(uploadsDir, fileName), req.file.buffer)
+    const cvUrl = `/uploads/cv/${fileName}`
+
+    let extractedText = ''
+    try {
+      const parsed = await pdfParse(req.file.buffer)
+      extractedText = parsed.text.toLowerCase()
+    } catch {
+      extractedText = ''
+    }
+    const suggestedSkills = COMMON_SKILLS.filter((skill) =>
+      extractedText.includes(skill.toLowerCase()),
+    )
+
+    await prisma.candidateProfile.update({
+      where: { userId: req.session!.sub },
+      data: { cvUrl, cvSkillsSuggested: suggestedSkills },
+    })
+
+    res.json({ cvUrl, suggestedSkills })
   } catch (err) {
     next(err)
   }

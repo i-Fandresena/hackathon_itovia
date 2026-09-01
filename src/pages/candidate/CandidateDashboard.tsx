@@ -35,7 +35,7 @@ export function CandidateDashboard() {
   return (
     <div className="page">
       <div className="container">
-        <FadeUp>
+        <FadeUp eager>
           <header className="page-header">
             <p className="eyebrow">Espace candidat</p>
             <h1>Bonjour, {profile.fullName.split(' ')[0]}</h1>
@@ -46,19 +46,19 @@ export function CandidateDashboard() {
         </FadeUp>
 
         <div className="grid-3" style={{ marginBottom: '1.5rem' }}>
-          <FadeUp index={0}>
+          <FadeUp eager index={0}>
             <Card className="stat-card">
               <strong>{ranked.length > 0 ? ranked[0].match.score : '—'}%</strong>
               <span>Meilleur match actuel</span>
             </Card>
           </FadeUp>
-          <FadeUp index={1}>
+          <FadeUp eager index={1}>
             <Card className="stat-card">
               <strong>{opportunities.length}</strong>
               <span>Offres disponibles</span>
             </Card>
           </FadeUp>
-          <FadeUp index={2}>
+          <FadeUp eager index={2}>
             <Card className="stat-card">
               <strong>{bookmarks}</strong>
               <span>Favoris enregistrés</span>

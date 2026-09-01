@@ -119,6 +119,54 @@ router.delete('/:id', requireRole('recruiter'), async (req, res, next) => {
   }
 })
 
+/**
+ * Shortlist entreprise : combine les candidats diplômés matchés par IA
+ * (moteur `scoreOpportunity`, réutilisé tel quel) et les talents non-
+ * diplômés proposés par un agent pour cette offre. Le badge distinctif
+ * (§7.3 règle 17) part de la source des données, jamais fusionné.
+ */
+router.get('/:id/shortlist', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const opportunity = await prisma.opportunity.findUnique({ where: { id: req.params.id } })
+    if (!opportunity || opportunity.recruiterId !== req.session!.sub) {
+      res.status(404).json({ error: 'Offre introuvable.' })
+      return
+    }
+    const domainOpportunity = toDomainOpportunity(opportunity)
+
+    const candidateProfiles = await prisma.candidateProfile.findMany({
+      include: { user: { select: { id: true, email: true } } },
+    })
+    const matched = candidateProfiles
+      .map((p) => ({
+        source: 'matche_ia' as const,
+        candidateId: p.userId,
+        fullName: p.fullName,
+        email: p.user.email,
+        match: scoreOpportunity(toDomainCandidateProfile(p, p.user.email), domainOpportunity),
+      }))
+      .sort((a, b) => b.match.score - a.match.score)
+      .slice(0, 7)
+
+    const proposals = await prisma.talentOpportunityProposal.findMany({
+      where: { opportunityId: opportunity.id },
+      include: { talent: true },
+      orderBy: { proposedAt: 'desc' },
+    })
+    const proposed = proposals.map((p) => ({
+      source: 'verifie_humain' as const,
+      talentId: p.talent.id,
+      fullName: p.talent.fullName,
+      trade: p.talent.skills[0] ?? '',
+      status: p.talent.status,
+    }))
+
+    res.json({ matched, proposed: proposed.slice(0, 10) })
+  } catch (err) {
+    next(err)
+  }
+})
+
 router.post('/:id/apply', requireRole('candidate'), async (req, res, next) => {
   try {
     const opportunity = await prisma.opportunity.findUnique({ where: { id: req.params.id } })

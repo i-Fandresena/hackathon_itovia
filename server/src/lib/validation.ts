@@ -5,12 +5,17 @@ export const experienceLevels = ['debutant', 'junior', 'intermediaire', 'senior'
 export const opportunityTypes = ['emploi', 'stage', 'mission', 'freelance', 'alternance'] as const
 export const availabilities = ['immediate', 'm1', 'm3', 'flexible'] as const
 export const proofTypes = ['facture', 'photo', 'aucune'] as const
+export const genders = ['femme', 'homme', 'autre'] as const
+export const talentStatuses = ['en_attente', 'verifie', 'recommande', 'place'] as const
+export const applicationStatuses = ['envoyee', 'vue', 'contactee', 'refusee'] as const
+export const placementStages = ['etape1_due', 'etape1_payee', 'etape2_due', 'etape2_payee', 'annule'] as const
 
 export const candidateProfileSchema = z.object({
   fullName: z.string().min(2),
   phone: z.string().min(6),
   province: z.string().min(2),
   city: z.string().min(2),
+  gender: z.enum(genders),
   educationLevel: z.enum(educationLevels),
   skills: z.array(z.string().min(1)).default([]),
   experienceLevel: z.enum(experienceLevels),
@@ -105,6 +110,59 @@ export const reportInputSchema = z.object({
 export const moderationResolveSchema = z.object({
   action: z.enum(moderationActionTypes),
   note: z.string().max(1000).optional(),
+})
+
+export const talentProfileInputSchema = z.object({
+  fullName: z.string().min(2),
+  phone: z.string().min(6),
+  province: z.string().min(2),
+  city: z.string().min(2),
+  gender: z.enum(genders),
+  skills: z.array(z.string().min(1)).default([]),
+  availability: z.enum(availabilities),
+})
+
+export const talentVerificationInputSchema = z.object({
+  trade: z.string().min(2),
+  checklist: z.record(z.string(), z.boolean()),
+  note: z.string().max(1000).optional(),
+})
+
+export const talentProposeSchema = z.object({
+  opportunityId: z.string().uuid(),
+})
+
+export const applicationStatusSchema = z.object({
+  status: z.enum(applicationStatuses),
+})
+
+export const placementInputSchema = z
+  .object({
+    opportunityId: z.string().uuid().optional(),
+    candidateId: z.string().uuid().optional(),
+    talentId: z.string().uuid().optional(),
+    monthlySalaryAr: z.number().int().positive().optional(),
+  })
+  .refine((v) => Boolean(v.candidateId) !== Boolean(v.talentId), {
+    message: 'Un placement concerne soit un candidat diplômé, soit un talent non-diplômé — jamais les deux.',
+    path: ['candidateId'],
+  })
+
+export const placementStageSchema = z.object({
+  stage: z.enum(placementStages),
+})
+
+export const agentProfileSchema = z.object({
+  fullName: z.string().min(2),
+  phone: z.string().min(6),
+  province: z.string().min(2),
+  city: z.string().min(2),
+})
+
+export const createAgentSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères.'),
+  agentProfile: agentProfileSchema,
 })
 
 export const providerInputSchema = z.object({

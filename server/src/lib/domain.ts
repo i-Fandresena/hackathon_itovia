@@ -41,11 +41,14 @@ export interface DbCandidateProfile {
   phone: string
   province: string
   city: string
+  gender: string
   educationLevel: string
   skills: string[]
   experienceLevel: string
   desiredOpportunityTypes: string[]
   availability: string
+  cvUrl?: string | null
+  cvSkillsSuggested?: string[]
 }
 
 export function toDomainCandidateProfile(p: DbCandidateProfile, email = ''): CandidateProfile {
@@ -55,10 +58,13 @@ export function toDomainCandidateProfile(p: DbCandidateProfile, email = ''): Can
     phone: p.phone,
     province: p.province,
     city: p.city,
+    gender: p.gender as CandidateProfile['gender'],
     educationLevel: p.educationLevel as CandidateProfile['educationLevel'],
     skills: p.skills,
     experienceLevel: p.experienceLevel as CandidateProfile['experienceLevel'],
     desiredOpportunityTypes: p.desiredOpportunityTypes as CandidateProfile['desiredOpportunityTypes'],
     availability: p.availability as CandidateProfile['availability'],
+    cvUrl: p.cvUrl ?? undefined,
+    cvSkillsSuggested: p.cvSkillsSuggested ?? [],
   }
 }

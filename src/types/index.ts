@@ -1,4 +1,22 @@
-export type UserRole = 'candidate' | 'recruiter' | 'particulier' | 'admin'
+export type UserRole = 'candidate' | 'recruiter' | 'particulier' | 'admin' | 'agent'
+
+export type Gender = 'femme' | 'homme' | 'autre'
+
+/** Pipeline talent non-diplômé : jamais automatique au-delà d'une action
+ *  explicite de l'agent qui le suit. */
+export type TalentStatus = 'en_attente' | 'verifie' | 'recommande' | 'place'
+
+export type ApplicationStatus = 'envoyee' | 'vue' | 'contactee' | 'refusee'
+
+export type AccountTier = 'gratuit' | 'premium'
+
+/** Suivi déclaratif du success fee — jamais de paiement automatisé au MVP. */
+export type PlacementStage =
+  | 'etape1_due'
+  | 'etape1_payee'
+  | 'etape2_due'
+  | 'etape2_payee'
+  | 'annule'
 
 export type EducationLevel =
   | 'bac'
@@ -20,7 +38,7 @@ export type OpportunityType =
   | 'freelance'
   | 'alternance'
 
-export type Availability = 'immediate' | '1mois' | '3mois' | 'flexible'
+export type Availability = 'immediate' | 'm1' | 'm3' | 'flexible'
 
 export interface CandidateProfile {
   fullName: string
@@ -28,11 +46,14 @@ export interface CandidateProfile {
   phone: string
   province: string
   city: string
+  gender: Gender
   educationLevel: EducationLevel
   skills: string[]
   experienceLevel: ExperienceLevel
   desiredOpportunityTypes: OpportunityType[]
   availability: Availability
+  cvUrl?: string
+  cvSkillsSuggested?: string[]
 }
 
 export interface RecruiterProfile {
@@ -42,10 +63,20 @@ export interface RecruiterProfile {
   province: string
   city: string
   sector: string
+  tier?: AccountTier
 }
 
 /** Profil d'un particulier qui recherche un professionnel (hors recrutement). */
 export interface IndividualProfile {
+  fullName: string
+  email: string
+  phone: string
+  province: string
+  city: string
+}
+
+/** Profil d'un agent de terrain (verticale emploi vérifié). */
+export interface AgentProfile {
   fullName: string
   email: string
   phone: string
@@ -61,7 +92,55 @@ export interface User {
   candidateProfile?: CandidateProfile
   recruiterProfile?: RecruiterProfile
   individualProfile?: IndividualProfile
+  agentProfile?: AgentProfile
   createdAt: string
+}
+
+/** Talent non-diplômé : créé et géré uniquement par l'agent qui le suit,
+ *  pas de compte de connexion propre au MVP. */
+export interface TalentProfile {
+  id: string
+  agentId: string
+  fullName: string
+  phone: string
+  province: string
+  city: string
+  gender: Gender
+  skills: string[]
+  availability: Availability
+  status: TalentStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TalentVerification {
+  id: string
+  talentId: string
+  trade: string
+  checklist: Record<string, boolean>
+  note?: string
+  verifiedAt: string
+}
+
+export interface TalentOpportunityProposal {
+  id: string
+  talentId: string
+  opportunityId: string
+  proposedAt: string
+}
+
+/** Mise en relation aboutie, porteuse du suivi success fee. Exactement un
+ *  de candidateId/talentId est renseigné. */
+export interface Placement {
+  id: string
+  opportunityId?: string
+  recruiterId: string
+  candidateId?: string
+  talentId?: string
+  monthlySalaryAr?: number
+  stage: PlacementStage
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Opportunity {
@@ -90,6 +169,7 @@ export interface Application {
   candidatePhone: string
   candidateProvince: string
   message?: string
+  status: ApplicationStatus
   createdAt: string
 }
 

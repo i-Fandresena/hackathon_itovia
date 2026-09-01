@@ -20,6 +20,9 @@ dist-ssr
 # Sortie générée par collecte/import-collecte.mjs
 collecte/sortie/
 
+# CV déposés par les candidats (données utilisateur, jamais versionnées)
+server/uploads/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
