@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
 import {
+  talentLeadStatusSchema,
   talentProfileInputSchema,
   talentProposeSchema,
   talentVerificationInputSchema,
@@ -10,6 +11,53 @@ import {
 const router = Router()
 
 router.use(requireRole('agent'))
+
+/**
+ * Demandes de contact "non-diplômé" déposées en self-service (voir
+ * public.routes.ts) — partagées entre tous les agents tant qu'aucun
+ * profil réel n'a été créé, puisqu'aucun agent n'en est encore responsable.
+ */
+router.get('/leads', async (req, res, next) => {
+  try {
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined
+    const leads = await prisma.talentLead.findMany({
+      where: status ? { status: status as never } : undefined,
+      orderBy: { createdAt: 'desc' },
+    })
+    res.json({ leads })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.get('/leads/:id', async (req, res, next) => {
+  try {
+    const lead = await prisma.talentLead.findUnique({ where: { id: req.params.id } })
+    if (!lead) {
+      res.status(404).json({ error: 'Demande introuvable.' })
+      return
+    }
+    res.json({ lead })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.patch('/leads/:id', async (req, res, next) => {
+  try {
+    const body = talentLeadStatusSchema.parse(req.body)
+    const lead = await prisma.talentLead
+      .update({ where: { id: req.params.id }, data: { status: body.status } })
+      .catch(() => null)
+    if (!lead) {
+      res.status(404).json({ error: 'Demande introuvable.' })
+      return
+    }
+    res.json({ lead })
+  } catch (err) {
+    next(err)
+  }
+})
 
 router.get('/talents', async (req, res, next) => {
   try {
@@ -44,9 +92,15 @@ router.get('/talents/:id', async (req, res, next) => {
 
 router.post('/talents', async (req, res, next) => {
   try {
-    const body = talentProfileInputSchema.parse(req.body)
-    const talent = await prisma.talentProfile.create({
-      data: { ...body, agentId: req.session!.sub },
+    const { fromLeadId, ...body } = talentProfileInputSchema.parse(req.body)
+    const talent = await prisma.$transaction(async (tx) => {
+      const created = await tx.talentProfile.create({
+        data: { ...body, agentId: req.session!.sub },
+      })
+      if (fromLeadId) {
+        await tx.talentLead.update({ where: { id: fromLeadId }, data: { status: 'converti' } })
+      }
+      return created
     })
     res.status(201).json({ talent })
   } catch (err) {

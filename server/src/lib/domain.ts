@@ -6,6 +6,7 @@ export interface DbOpportunity {
   companyName: string
   title: string
   category: string
+  sector: string
   description: string
   province: string
   city: string
@@ -24,6 +25,7 @@ export function toDomainOpportunity(o: DbOpportunity): Opportunity {
     companyName: o.companyName,
     title: o.title,
     category: o.category,
+    sector: o.sector as Opportunity['sector'],
     description: o.description,
     province: o.province,
     city: o.city,

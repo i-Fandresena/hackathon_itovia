@@ -12,6 +12,8 @@ import type {
   Provider,
   Recommendation,
   RecruiterProfile,
+  Sector,
+  TalentLead,
   TalentProfile,
   TalentVerification,
   User,
@@ -424,8 +426,11 @@ export interface TalentInput {
   province: string
   city: string
   gender: 'femme' | 'homme' | 'autre'
+  trade: string
+  sector: Sector
   skills: string[]
   availability: string
+  fromLeadId?: string
 }
 
 export function apiCreateTalent(input: TalentInput) {
@@ -463,6 +468,43 @@ export function apiAgentStats() {
   return request<{ profilesCreated: number; verificationRate: number; placements: number }>(
     '/agent/stats',
   )
+}
+
+/**
+ * Demande de contact "non-diplômé" — endpoint public, aucun compte requis
+ * ni créé (§7.3.14) : un agent reprend la demande depuis /agent/leads.
+ */
+export interface TalentLeadInput {
+  fullName: string
+  phone: string
+  province: string
+  city: string
+  gender: 'femme' | 'homme' | 'autre'
+  trade: string
+  sector: Sector
+  message?: string
+}
+
+export function apiSubmitTalentLead(input: TalentLeadInput) {
+  return request<{ lead: TalentLead }>('/talent-leads', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }).then((r) => r.lead)
+}
+
+export function apiListLeads() {
+  return request<{ leads: TalentLead[] }>('/agent/leads').then((r) => r.leads)
+}
+
+export function apiLeadDetail(id: string) {
+  return request<{ lead: TalentLead }>(`/agent/leads/${id}`).then((r) => r.lead)
+}
+
+export function apiUpdateLeadStatus(id: string, status: TalentLead['status']) {
+  return request<{ lead: TalentLead }>(`/agent/leads/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  }).then((r) => r.lead)
 }
 
 /* ------------------------------------------------------------------ */

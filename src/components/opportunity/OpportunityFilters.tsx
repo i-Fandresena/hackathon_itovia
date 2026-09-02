@@ -1,12 +1,14 @@
 import { Search } from 'lucide-react'
-import { CATEGORIES, PROVINCES } from '../../data/constants'
+import { CATEGORIES, PROVINCES, SECTOR_LABELS, SECTORS } from '../../data/constants'
 import { Field, Input, Select } from '../ui/Form'
+import type { Sector } from '../../types'
 import './OpportunityFilters.css'
 
 export interface FilterState {
   search: string
   province: string
   category: string
+  sector: Sector | ''
 }
 
 interface OpportunityFiltersProps {
@@ -53,17 +55,38 @@ export function OpportunityFilters({ filters, onChange }: OpportunityFiltersProp
           ))}
         </Select>
       </Field>
+      <Field label="Secteur">
+        <Select
+          value={filters.sector}
+          onChange={(e) => onChange({ ...filters, sector: e.target.value as Sector | '' })}
+        >
+          <option value="">Tous les secteurs</option>
+          {SECTORS.map((s) => (
+            <option key={s} value={s}>
+              {SECTOR_LABELS[s]}
+            </option>
+          ))}
+        </Select>
+      </Field>
     </div>
   )
 }
 
 export function filterOpportunities<
-  T extends { title: string; companyName: string; province: string; category: string; requiredSkills: string[] },
+  T extends {
+    title: string
+    companyName: string
+    province: string
+    category: string
+    sector: Sector
+    requiredSkills: string[]
+  },
 >(items: T[], filters: FilterState): T[] {
   const q = filters.search.trim().toLowerCase()
   return items.filter((o) => {
     if (filters.province && o.province !== filters.province) return false
     if (filters.category && o.category !== filters.category) return false
+    if (filters.sector && o.sector !== filters.sector) return false
     if (!q) return true
     const haystack = [
       o.title,

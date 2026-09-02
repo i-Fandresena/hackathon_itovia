@@ -227,6 +227,23 @@
   overflow: hidden;
 }
 
+.split-success {
+  padding: 1rem 1.1rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 0.9rem;
+  border-radius: 10px;
+  line-height: 1.5;
+}
+
+.split-subtoggle-hint {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  margin: -1rem 0 1rem;
+  line-height: 1.4;
+}
+
 /* Bouton principal bleu */
 .split-submit-btn {
   width: 100%;

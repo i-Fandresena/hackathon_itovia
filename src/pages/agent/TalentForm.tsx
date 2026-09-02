@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Field, Input, Select } from '../../components/ui/Form'
-import { AVAILABILITY_LABELS, COMMON_SKILLS, GENDER_LABELS, PROVINCES } from '../../data/constants'
-import { apiCreateTalent, apiTalentDetail, apiUpdateTalent, type TalentInput } from '../../lib/api'
+import { AVAILABILITY_LABELS, COMMON_SKILLS, GENDER_LABELS, PROVINCES, SECTOR_LABELS, TRADES, TRADE_SECTOR } from '../../data/constants'
+import { apiCreateTalent, apiLeadDetail, apiTalentDetail, apiUpdateTalent, type TalentInput } from '../../lib/api'
 import type { Availability, Gender } from '../../types'
 
 const defaultForm: TalentInput = {
@@ -13,33 +13,61 @@ const defaultForm: TalentInput = {
   province: PROVINCES[0],
   city: PROVINCES[0],
   gender: 'femme',
+  trade: TRADES[0],
+  sector: TRADE_SECTOR[TRADES[0]],
   skills: [],
   availability: 'immediate',
 }
 
 export function TalentForm() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
+  const fromLead = searchParams.get('fromLead')
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const [form, setForm] = useState<TalentInput>(defaultForm)
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(isEdit)
+  const [loading, setLoading] = useState(isEdit || Boolean(fromLead))
 
   useEffect(() => {
-    if (!id) return
-    apiTalentDetail(id).then((t) => {
-      setForm({
-        fullName: t.fullName,
-        phone: t.phone,
-        province: t.province,
-        city: t.city,
-        gender: t.gender,
-        skills: t.skills,
-        availability: t.availability,
+    if (id) {
+      apiTalentDetail(id).then((t) => {
+        setForm({
+          fullName: t.fullName,
+          phone: t.phone,
+          province: t.province,
+          city: t.city,
+          gender: t.gender,
+          trade: t.trade || TRADES[0],
+          sector: t.sector,
+          skills: t.skills,
+          availability: t.availability,
+        })
+        setLoading(false)
       })
-      setLoading(false)
-    })
-  }, [id])
+      return
+    }
+    if (fromLead) {
+      apiLeadDetail(fromLead).then((lead) => {
+        setForm((f) => ({
+          ...f,
+          fullName: lead.fullName,
+          phone: lead.phone,
+          province: lead.province,
+          city: lead.city,
+          gender: lead.gender,
+          trade: lead.trade,
+          sector: lead.sector,
+          fromLeadId: lead.id,
+        }))
+        setLoading(false)
+      })
+    }
+  }, [id, fromLead])
+
+  const setTrade = (trade: string) => {
+    setForm((f) => ({ ...f, trade, sector: TRADE_SECTOR[trade as (typeof TRADES)[number]] ?? f.sector }))
+  }
 
   const toggleSkill = (skill: string) => {
     setForm((f) => ({
@@ -99,6 +127,18 @@ export function TalentForm() {
             </Field>
             <Field label="Ville / quartier">
               <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+            </Field>
+            <Field
+              label="Métier"
+              hint={`Détermine la grille de vérification standardisée à suivre. Secteur : ${SECTOR_LABELS[form.sector]}.`}
+            >
+              <Select value={form.trade} onChange={(e) => setTrade(e.target.value)}>
+                {TRADES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field label="Compétences déclarées">
               <div className="skill-chips">

@@ -1,10 +1,25 @@
 import 'dotenv/config'
 import bcrypt from 'bcryptjs'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, type Sector } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
 const DEMO_PASSWORD = 'demo123'
+
+/** Catégorie d'offre (métiers de bureau, `src/data/constants.ts` CATEGORIES)
+ *  → secteur transversal le plus proche, pour peupler le nouveau champ
+ *  `Opportunity.sector` sans dupliquer la saisie du jeu de démo. */
+const CATEGORY_SECTOR: Record<string, Sector> = {
+  Administration: 'services_commerce',
+  Marketing: 'digital',
+  'IT / Digital': 'digital',
+  Ventes: 'services_commerce',
+  Design: 'digital',
+  Logistique: 'services_commerce',
+  'Community management': 'digital',
+  'Saisie de données': 'digital',
+  'Services freelance': 'digital',
+}
 
 /**
  * Jeu de démonstration réaliste (fictif) pour présentation : portail
@@ -20,7 +35,9 @@ interface CompanySeed {
   phone: string
   province: string
   city: string
-  sector: string
+  /** Libellé métier affiché (conservé pour la couleur du jeu de démo). */
+  sectorLabel: string
+  sector: Sector
 }
 
 const COMPANIES: CompanySeed[] = [
@@ -31,7 +48,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 32 98 765 43',
     province: 'Antananarivo',
     city: 'Antananarivo',
-    sector: 'IT / Digital',
+    sectorLabel: 'IT / Digital',
+    sector: 'digital',
   },
   {
     key: 'port-toamasina',
@@ -40,7 +58,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 33 11 222 33',
     province: 'Toamasina',
     city: 'Toamasina',
-    sector: 'Logistique / Portuaire',
+    sectorLabel: 'Logistique / Portuaire',
+    sector: 'services_commerce',
   },
   {
     key: 'agence-fianar',
@@ -49,7 +68,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 34 22 333 44',
     province: 'Fianarantsoa',
     city: 'Fianarantsoa',
-    sector: 'Design / Communication',
+    sectorLabel: 'Design / Communication',
+    sector: 'digital',
   },
   {
     key: 'mahajanga-commerce',
@@ -58,7 +78,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 32 33 444 55',
     province: 'Mahajanga',
     city: 'Mahajanga',
-    sector: 'Commerce / Distribution',
+    sectorLabel: 'Commerce / Distribution',
+    sector: 'services_commerce',
   },
   {
     key: 'ong-education-sud',
@@ -67,7 +88,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 33 44 555 66',
     province: 'Toliara',
     city: 'Toliara',
-    sector: 'Éducation / ONG',
+    sectorLabel: 'Éducation / ONG',
+    sector: 'autre',
   },
   {
     key: 'dataentry-mg',
@@ -76,7 +98,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 34 55 666 77',
     province: 'Antananarivo',
     city: 'Remote',
-    sector: 'Services administratifs',
+    sectorLabel: 'Services administratifs',
+    sector: 'services_commerce',
   },
   {
     key: 'tourisme-nord',
@@ -85,7 +108,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 32 66 777 88',
     province: 'Antsiranana',
     city: 'Antsiranana',
-    sector: 'Tourisme',
+    sectorLabel: 'Tourisme',
+    sector: 'services_commerce',
   },
   {
     key: 'livraison-tana',
@@ -94,7 +118,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 33 77 888 99',
     province: 'Antananarivo',
     city: 'Antananarivo',
-    sector: 'Logistique / Livraison',
+    sectorLabel: 'Logistique / Livraison',
+    sector: 'services_commerce',
   },
   {
     key: 'freelance-hub',
@@ -103,7 +128,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 34 88 999 00',
     province: 'Toamasina',
     city: 'Remote',
-    sector: 'Plateforme freelance',
+    sectorLabel: 'Plateforme freelance',
+    sector: 'digital',
   },
   {
     key: 'assoc-jeunes-fianar',
@@ -112,7 +138,8 @@ const COMPANIES: CompanySeed[] = [
     phone: '+261 32 99 000 11',
     province: 'Fianarantsoa',
     city: 'Fianarantsoa',
-    sector: 'Associatif / Jeunesse',
+    sectorLabel: 'Associatif / Jeunesse',
+    sector: 'autre',
   },
 ]
 
@@ -394,37 +421,43 @@ const TALENTS = [
   {
     key: 'talent-1', agentKey: 'agent-1', fullName: 'Vololona Randria',
     phone: '+261 34 40 111 22', province: 'Antananarivo', city: 'Antananarivo',
-    gender: 'femme' as const, trade: 'Couture', skills: ['Couture', 'Broderie', 'Retouche'],
+    gender: 'femme' as const, trade: 'Couturière', sector: 'textile_artisanat' as const,
+    skills: ['Couture', 'Broderie', 'Retouche'],
     availability: 'immediate' as const, status: 'place' as const,
   },
   {
     key: 'talent-2', agentKey: 'agent-1', fullName: 'Herimanana Rakotoson',
     phone: '+261 33 41 222 33', province: 'Antananarivo', city: 'Antananarivo',
-    gender: 'homme' as const, trade: 'Électricité bâtiment', skills: ['Installation électrique', 'Dépannage'],
+    gender: 'homme' as const, trade: 'Électricien', sector: 'btp' as const,
+    skills: ['Installation électrique', 'Dépannage'],
     availability: 'flexible' as const, status: 'recommande' as const,
   },
   {
     key: 'talent-3', agentKey: 'agent-1', fullName: 'Sahondra Rabemananjara',
     phone: '+261 32 42 333 44', province: 'Antananarivo', city: 'Antananarivo',
-    gender: 'femme' as const, trade: 'Cuisine / restauration', skills: ['Cuisine malgache', 'Hygiène alimentaire'],
+    gender: 'femme' as const, trade: 'Cuisine / restauration', sector: 'agroalimentaire' as const,
+    skills: ['Cuisine malgache', 'Hygiène alimentaire'],
     availability: 'immediate' as const, status: 'verifie' as const,
   },
   {
     key: 'talent-4', agentKey: 'agent-2', fullName: 'Fenosoa Andriamihaja',
     phone: '+261 34 43 444 55', province: 'Antananarivo', city: 'Antananarivo',
-    gender: 'femme' as const, trade: 'Vente / commerce', skills: ['Vente terrain', 'Caisse', 'Relation client'],
+    gender: 'femme' as const, trade: 'Vente / commerce', sector: 'services_commerce' as const,
+    skills: ['Vente terrain', 'Caisse', 'Relation client'],
     availability: 'immediate' as const, status: 'recommande' as const,
   },
   {
     key: 'talent-5', agentKey: 'agent-2', fullName: 'Rado Ramanantsoa',
     phone: '+261 33 44 555 66', province: 'Antananarivo', city: 'Antananarivo',
-    gender: 'homme' as const, trade: 'Conduite / livraison', skills: ['Permis B', 'Livraison', 'Ponctualité'],
+    gender: 'homme' as const, trade: 'Conduite / livraison', sector: 'services_commerce' as const,
+    skills: ['Permis B', 'Livraison', 'Ponctualité'],
     availability: 'immediate' as const, status: 'verifie' as const,
   },
   {
     key: 'talent-6', agentKey: 'agent-2', fullName: 'Onja Rasoanirina',
     phone: '+261 32 45 666 77', province: 'Antananarivo', city: 'Antananarivo',
-    gender: 'femme' as const, trade: 'Ménage / entretien', skills: ['Nettoyage', 'Repassage', 'Organisation'],
+    gender: 'femme' as const, trade: 'Ménage / entretien', sector: 'services_commerce' as const,
+    skills: ['Nettoyage', 'Repassage', 'Organisation'],
     availability: 'm1' as const, status: 'en_attente' as const,
   },
 ] as const
@@ -664,6 +697,7 @@ async function main() {
         companyName: company.companyName,
         title: o.title,
         category: o.category,
+        sector: CATEGORY_SECTOR[o.category] ?? 'autre',
         description: o.description,
         province: o.province,
         city: o.city,
@@ -800,6 +834,8 @@ async function main() {
         province: t.province,
         city: t.city,
         gender: t.gender,
+        trade: t.trade,
+        sector: t.sector,
         skills: [...t.skills],
         availability: t.availability,
         status: t.status,

@@ -29,6 +29,7 @@ import { RecruiterPlacements } from './pages/recruiter/RecruiterPlacements'
 import { AgentDashboard } from './pages/agent/AgentDashboard'
 import { TalentForm } from './pages/agent/TalentForm'
 import { TalentDetail } from './pages/agent/TalentDetail'
+import { Leads } from './pages/agent/Leads'
 
 export default function App() {
   return (
@@ -232,6 +233,14 @@ export default function App() {
               element={
                 <ProtectedRoute role="agent">
                   <AgentDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="agent/leads"
+              element={
+                <ProtectedRoute role="agent">
+                  <Leads />
                 </ProtectedRoute>
               }
             />

@@ -9,6 +9,8 @@ export const genders = ['femme', 'homme', 'autre'] as const
 export const talentStatuses = ['en_attente', 'verifie', 'recommande', 'place'] as const
 export const applicationStatuses = ['envoyee', 'vue', 'contactee', 'refusee'] as const
 export const placementStages = ['etape1_due', 'etape1_payee', 'etape2_due', 'etape2_payee', 'annule'] as const
+export const sectors = ['btp', 'textile_artisanat', 'digital', 'agroalimentaire', 'services_commerce', 'autre'] as const
+export const leadStatuses = ['nouveau', 'contacte', 'converti', 'ignore'] as const
 
 export const candidateProfileSchema = z.object({
   fullName: z.string().min(2),
@@ -21,6 +23,7 @@ export const candidateProfileSchema = z.object({
   experienceLevel: z.enum(experienceLevels),
   desiredOpportunityTypes: z.array(z.enum(opportunityTypes)).default([]),
   availability: z.enum(availabilities),
+  sector: z.enum(sectors).optional(),
 })
 
 export const recruiterProfileSchema = z.object({
@@ -28,7 +31,7 @@ export const recruiterProfileSchema = z.object({
   phone: z.string().min(6),
   province: z.string().min(2),
   city: z.string().min(2),
-  sector: z.string().min(2),
+  sector: z.enum(sectors),
 })
 
 export const individualProfileSchema = z.object({
@@ -55,6 +58,7 @@ export const loginSchema = z.object({
 export const opportunityInputSchema = z.object({
   title: z.string().min(3, 'Le titre doit contenir au moins 3 caractères.'),
   category: z.string().min(2, 'La catégorie est requise.'),
+  sector: z.enum(sectors, { errorMap: () => ({ message: 'Secteur invalide.' }) }),
   description: z.string().min(10, 'La description doit contenir au moins 10 caractères.'),
   province: z.string().min(2, 'La province est requise.'),
   city: z.string().min(2, 'La ville est requise.'),
@@ -118,8 +122,26 @@ export const talentProfileInputSchema = z.object({
   province: z.string().min(2),
   city: z.string().min(2),
   gender: z.enum(genders),
+  trade: z.string().min(2),
+  sector: z.enum(sectors),
   skills: z.array(z.string().min(1)).default([]),
   availability: z.enum(availabilities),
+  fromLeadId: z.string().uuid().optional(),
+})
+
+export const talentLeadInputSchema = z.object({
+  fullName: z.string().min(2),
+  phone: z.string().min(6),
+  province: z.string().min(2),
+  city: z.string().min(2),
+  gender: z.enum(genders),
+  trade: z.string().min(2),
+  sector: z.enum(sectors),
+  message: z.string().max(1000).optional(),
+})
+
+export const talentLeadStatusSchema = z.object({
+  status: z.enum(leadStatuses),
 })
 
 export const talentVerificationInputSchema = z.object({

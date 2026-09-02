@@ -18,6 +18,7 @@ export function CandidateOpportunities() {
     search: '',
     province: '',
     category: '',
+    sector: '',
   })
 
   const profile = currentUser?.candidateProfile

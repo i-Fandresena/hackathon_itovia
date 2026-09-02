@@ -4,18 +4,22 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Field, Input, Select, Textarea } from '../../components/ui/Form'
 import {
+  ACTIVE_SECTORS,
   CATEGORIES,
   COMMON_SKILLS,
   EXPERIENCE_LABELS,
   OPPORTUNITY_TYPE_LABELS,
   PROVINCES,
+  SECTOR_LABELS,
+  SECTORS,
 } from '../../data/constants'
 import { useApp } from '../../context/AppContext'
-import type { ExperienceLevel, OpportunityType } from '../../types'
+import type { ExperienceLevel, OpportunityType, Sector } from '../../types'
 
 const defaultForm: {
   title: string
   category: string
+  sector: Sector
   description: string
   province: string
   city: string
@@ -26,6 +30,7 @@ const defaultForm: {
 } = {
   title: '',
   category: CATEGORIES[0],
+  sector: ACTIVE_SECTORS[0],
   description: '',
   province: PROVINCES[0],
   city: PROVINCES[0],
@@ -50,6 +55,7 @@ export function RecruiterOpportunityForm() {
       setForm({
         title: existing.title,
         category: existing.category,
+        sector: existing.sector,
         description: existing.description,
         province: existing.province,
         city: existing.city,
@@ -105,6 +111,18 @@ export function RecruiterOpportunityForm() {
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {c}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Secteur" hint="Sert de filtre transversal pour les candidats — pas une section séparée.">
+              <Select
+                value={form.sector}
+                onChange={(e) => setForm({ ...form, sector: e.target.value as Sector })}
+              >
+                {SECTORS.map((s) => (
+                  <option key={s} value={s}>
+                    {SECTOR_LABELS[s]}
                   </option>
                 ))}
               </Select>

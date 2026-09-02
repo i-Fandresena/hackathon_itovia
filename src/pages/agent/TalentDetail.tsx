@@ -4,9 +4,10 @@ import { ArrowLeft, CheckCircle2, Send } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
-import { Field, Input, Select, Textarea } from '../../components/ui/Form'
+import { Field, Select, Textarea } from '../../components/ui/Form'
 import { Loading } from '../../components/ui/Loading'
 import { apiListOpportunities, apiProposeTalent, apiTalentDetail, apiVerifyTalent, type TalentDetail as TalentDetailType } from '../../lib/api'
+import { VERIFICATION_GRIDS } from '../../data/verificationGrids'
 import { formatDate } from '../../lib/format'
 import type { Opportunity, TalentStatus } from '../../types'
 
@@ -22,7 +23,6 @@ export function TalentDetail() {
   const navigate = useNavigate()
   const [talent, setTalent] = useState<TalentDetailType | null>(null)
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
-  const [trade, setTrade] = useState('')
   const [checklist, setChecklist] = useState<Record<string, boolean>>({})
   const [note, setNote] = useState('')
   const [selectedOpportunity, setSelectedOpportunity] = useState('')
@@ -31,7 +31,8 @@ export function TalentDetail() {
   const load = () => {
     apiTalentDetail(id).then((t) => {
       setTalent(t)
-      setChecklist(Object.fromEntries(t.skills.map((s) => [s, true])))
+      const grid = VERIFICATION_GRIDS[t.trade] ?? VERIFICATION_GRIDS.default
+      setChecklist(Object.fromEntries(grid.map((item) => [item, false])))
     })
   }
 
@@ -52,10 +53,8 @@ export function TalentDetail() {
 
   const handleVerify = async (e: FormEvent) => {
     e.preventDefault()
-    if (!trade.trim()) return
-    await apiVerifyTalent(id, { trade: trade.trim(), checklist, note: note.trim() || undefined })
+    await apiVerifyTalent(id, { trade: talent.trade, checklist, note: note.trim() || undefined })
     setFeedback('Vérification enregistrée.')
-    setTrade('')
     setNote('')
     load()
   }
@@ -104,22 +103,21 @@ export function TalentDetail() {
         <Card style={{ marginBottom: '1.25rem' }}>
           <h2 style={{ fontSize: '1.05rem', marginBottom: '0.5rem' }}>Vérifier les compétences</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)', marginBottom: '0.75rem' }}>
-            Grille standardisée : cochez chaque compétence réellement observée sur le terrain.
+            Grille standardisée pour le métier <strong>{talent.trade}</strong> : cochez chaque
+            point réellement observé sur le terrain (§7.3 règle 15 — un référentiel commun, pas
+            un champ libre).
           </p>
           <form onSubmit={handleVerify}>
-            <Field label="Métier">
-              <Input value={trade} onChange={(e) => setTrade(e.target.value)} placeholder="Ex. Couture, Électricité bâtiment…" required />
-            </Field>
             <Field label="Grille de compétences">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {talent.skills.map((skill) => (
-                  <label key={skill} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                {Object.keys(checklist).map((item) => (
+                  <label key={item} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
                     <input
                       type="checkbox"
-                      checked={checklist[skill] ?? false}
-                      onChange={(e) => setChecklist((c) => ({ ...c, [skill]: e.target.checked }))}
+                      checked={checklist[item] ?? false}
+                      onChange={(e) => setChecklist((c) => ({ ...c, [item]: e.target.checked }))}
                     />
-                    {skill}
+                    {item}
                   </label>
                 ))}
               </div>

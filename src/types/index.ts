@@ -40,6 +40,23 @@ export type OpportunityType =
 
 export type Availability = 'immediate' | 'm1' | 'm3' | 'flexible'
 
+/** Taxonomie transversale par secteur d'activité — un filtre partagé par
+ *  candidats, entreprises, talents et offres, jamais une section de
+ *  navigation séparée tant que le pilote n'a pas prouvé une densité
+ *  suffisante par secteur. */
+export type Sector =
+  | 'btp'
+  | 'textile_artisanat'
+  | 'digital'
+  | 'agroalimentaire'
+  | 'services_commerce'
+  | 'autre'
+
+/** Pipeline de la demande de contact "non-diplômé" à l'inscription — ne
+ *  crée jamais de compte ni de TalentProfile directement (§7.3.14) : un
+ *  agent reprend la demande et crée lui-même le profil. */
+export type LeadStatus = 'nouveau' | 'contacte' | 'converti' | 'ignore'
+
 export interface CandidateProfile {
   fullName: string
   email: string
@@ -54,6 +71,8 @@ export interface CandidateProfile {
   availability: Availability
   cvUrl?: string
   cvSkillsSuggested?: string[]
+  /** Secteur d'intérêt déclaré — tag de filtrage, jamais une contrainte de matching. */
+  sector?: Sector
 }
 
 export interface RecruiterProfile {
@@ -62,7 +81,7 @@ export interface RecruiterProfile {
   phone: string
   province: string
   city: string
-  sector: string
+  sector: Sector
   tier?: AccountTier
 }
 
@@ -106,11 +125,31 @@ export interface TalentProfile {
   province: string
   city: string
   gender: Gender
+  /** Métier déclaré à la création — pilote la grille de vérification
+   *  standardisée (§7.3.15), voir data/verificationGrids.ts. */
+  trade: string
+  sector: Sector
   skills: string[]
   availability: Availability
   status: TalentStatus
   createdAt: string
   updatedAt: string
+}
+
+/** Demande de contact "non-diplômé" déposée en self-service à
+ *  l'inscription (voir TalentProfile — ne crée jamais de compte). */
+export interface TalentLead {
+  id: string
+  fullName: string
+  phone: string
+  province: string
+  city: string
+  gender: Gender
+  trade: string
+  sector: Sector
+  message?: string
+  status: LeadStatus
+  createdAt: string
 }
 
 export interface TalentVerification {
@@ -149,6 +188,7 @@ export interface Opportunity {
   companyName: string
   title: string
   category: string
+  sector: Sector
   description: string
   province: string
   city: string

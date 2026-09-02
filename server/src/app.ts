@@ -17,6 +17,7 @@ import billingRoutes from './routes/billing.routes.js'
 import reportRoutes from './routes/reports.routes.js'
 import agentRoutes from './routes/agent.routes.js'
 import placementRoutes from './routes/placements.routes.js'
+import publicRoutes from './routes/public.routes.js'
 
 export function createApp() {
   const app = express()
@@ -50,6 +51,7 @@ export function createApp() {
   app.use('/api/reports', reportRoutes)
   app.use('/api/agent', agentRoutes)
   app.use('/api/placements', placementRoutes)
+  app.use('/api/talent-leads', publicRoutes)
 
   app.use(notFound)
   app.use(errorHandler)

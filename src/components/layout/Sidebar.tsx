@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   CreditCard,
   FilePlus2,
+  Inbox,
   LayoutDashboard,
   LogOut,
   MessageCircle,
@@ -114,6 +115,7 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
     ],
     agent: [
       { to: '/agent', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
+      { to: '/agent/leads', label: 'Demandes de contact', icon: Inbox },
       { to: '/agent/talents/nouveau', label: 'Nouveau talent', icon: ClipboardCheck },
       { to: '/messages', label: 'Messages', icon: MessageCircle },
     ],
