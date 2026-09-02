@@ -1,12 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react'
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Input } from '../../components/ui/Form'
 import { Loading } from '../../components/ui/Loading'
 import { VerificationBadge } from '../../components/ui/VerificationBadge'
-import { apiCreatePlacement, apiShortlist, apiStartConversation, type ShortlistMatched, type ShortlistProposed } from '../../lib/api'
+import { apiCreatePlacement, apiExpressInterest, apiShortlist, type ShortlistMatched, type ShortlistProposed } from '../../lib/api'
+import type { MatchSuggestionStatus } from '../../types'
+
+const SUGGESTION_STATUS_LABELS: Record<MatchSuggestionStatus, string> = {
+  proposee_candidat: 'Proposé au candidat',
+  interet_candidat: 'Candidat intéressé',
+  proposee_recruteur: 'Proposé par OffRec',
+  interet_recruteur: 'Intérêt transmis à OffRec',
+  mise_en_relation: 'Mis en relation',
+  ecartee: 'Écarté',
+}
 
 /**
  * Combine les candidats diplômés matchés par IA et les talents non-diplômés
@@ -15,14 +26,15 @@ import { apiCreatePlacement, apiShortlist, apiStartConversation, type ShortlistM
  */
 export function RecruiterShortlist() {
   const { id = '' } = useParams()
-  const navigate = useNavigate()
   const [data, setData] = useState<{ matched: ShortlistMatched[]; proposed: ShortlistProposed[] } | null>(null)
   const [salary, setSalary] = useState<Record<string, string>>({})
   const [feedback, setFeedback] = useState('')
 
-  useEffect(() => {
+  const load = () => {
     apiShortlist(id).then(setData)
-  }, [id])
+  }
+
+  useEffect(load, [id])
 
   if (!data) {
     return (
@@ -34,13 +46,10 @@ export function RecruiterShortlist() {
     )
   }
 
-  const handleContact = async (candidateId: string) => {
-    const { conversationId } = await apiStartConversation(
-      candidateId,
-      'Bonjour, votre profil correspond à l’une de nos offres — seriez-vous disponible pour échanger ?',
-      id,
-    )
-    navigate(`/messages?c=${conversationId}`)
+  const handleExpressInterest = async (suggestionId: string) => {
+    await apiExpressInterest(suggestionId)
+    setFeedback('Votre intérêt a été transmis à OffRec.')
+    load()
   }
 
   const handlePlaceCandidate = async (candidateId: string) => {
@@ -70,7 +79,7 @@ export function RecruiterShortlist() {
         </Link>
         <header className="page-header">
           <h1>Shortlist</h1>
-          <p>Profils vérifiés humainement par un agent et profils matchés par IA — jamais confondus.</p>
+          <p>Profils vérifiés humainement par un agent et profils proposés par OffRec — jamais de contact direct, jamais confondus.</p>
         </header>
 
         {feedback && <p className="save-ok" style={{ marginBottom: '1rem' }}>{feedback}</p>}
@@ -116,10 +125,10 @@ export function RecruiterShortlist() {
 
         <h2 style={{ fontSize: '1.05rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           <Sparkles size={18} />
-          Matchés par IA ({data.matched.length})
+          Proposés par OffRec ({data.matched.length})
         </h2>
         {data.matched.length === 0 ? (
-          <p style={{ color: 'var(--color-ink-muted)' }}>Aucun candidat diplômé disponible pour l’instant.</p>
+          <p style={{ color: 'var(--color-ink-muted)' }}>Aucun candidat diplômé proposé pour l’instant.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {data.matched.map((m) => (
@@ -131,6 +140,7 @@ export function RecruiterShortlist() {
                     <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)' }}>
                       {m.match.reasons.slice(0, 2).join(' · ')}
                     </p>
+                    <Badge variant="muted">{SUGGESTION_STATUS_LABELS[m.status]}</Badge>
                   </div>
                   <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                     <div style={{ width: 130 }}>
@@ -141,9 +151,11 @@ export function RecruiterShortlist() {
                         onChange={(e) => setSalary((s) => ({ ...s, [m.candidateId]: e.target.value }))}
                       />
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => handleContact(m.candidateId)}>
-                      Contacter
-                    </Button>
+                    {m.status === 'proposee_recruteur' && (
+                      <Button variant="outline" size="sm" onClick={() => handleExpressInterest(m.suggestionId)}>
+                        Ce profil m’intéresse
+                      </Button>
+                    )}
                     <Button size="sm" onClick={() => handlePlaceCandidate(m.candidateId)}>
                       Déclarer un placement
                     </Button>

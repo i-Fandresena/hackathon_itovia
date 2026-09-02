@@ -10,22 +10,22 @@ import {
 import {
   ApiError,
   apiAddBookmark,
-  apiApplyToOpportunity,
   apiConfirmRecommendation,
   apiCreateOpportunity,
   apiCreateProvider,
   apiCreateRecommendation,
   apiDeleteOpportunity,
   apiDirectoryRaw,
+  apiExpressInterest,
   apiListOpportunities,
   apiLogin,
   apiLogout,
   apiMarkNotificationRead,
   apiMe,
-  apiMyApplications,
   apiMyBookmarks,
   apiMyNotifications,
-  apiReceivedApplications,
+  apiMySuggestions,
+  apiReceivedSuggestions,
   apiRegister,
   apiRemoveBookmark,
   apiUpdateCandidateProfile,
@@ -33,10 +33,11 @@ import {
   type ApiUser,
   type CreateProviderPayload,
   type CreateRecommendationPayload,
+  type MatchSuggestionWithOpportunity,
+  type ReceivedSuggestion,
 } from '../lib/api'
 import { canRecommend } from '../lib/trust'
 import type {
-  Application,
   CandidateProfile,
   IndividualProfile,
   Member,
@@ -80,7 +81,10 @@ interface Result {
 interface AppContextValue {
   currentUser: User | null
   opportunities: Opportunity[]
-  applications: Application[]
+  /** Fil du candidat : uniquement ce qu'OffRec a choisi de lui proposer. */
+  mySuggestions: MatchSuggestionWithOpportunity[]
+  /** Côté recruteur : candidats transmis par OffRec sur ses offres. */
+  receivedSuggestions: ReceivedSuggestion[]
   bookmarks: string[]
   notifications: Notification[]
   members: Member[]
@@ -103,10 +107,10 @@ interface AppContextValue {
   deleteOpportunity: (id: string) => Promise<Result>
   toggleBookmark: (opportunityId: string) => Promise<void>
   isBookmarked: (opportunityId: string) => boolean
-  applyToOpportunity: (opportunityId: string, message?: string) => Promise<Result>
-  hasApplied: (opportunityId: string) => boolean
-  getApplicationsForOpportunity: (opportunityId: string) => Application[]
-  getApplicationsForRecruiter: (recruiterId: string) => Application[]
+  /** Le candidat/recruteur ne fait jamais que signaler un intérêt — jamais
+   *  de contact direct, c'est l'admin qui fait avancer la suite. */
+  expressInterest: (suggestionId: string) => Promise<Result>
+  getSuggestionForOpportunity: (opportunityId: string) => MatchSuggestionWithOpportunity | undefined
   markNotificationRead: (id: string) => Promise<void>
   unreadCount: number
 
@@ -137,7 +141,8 @@ function errorMessage(err: unknown, fallback: string): string {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null)
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
-  const [applications, setApplications] = useState<Application[]>([])
+  const [mySuggestions, setMySuggestions] = useState<MatchSuggestionWithOpportunity[]>([])
+  const [receivedSuggestions, setReceivedSuggestions] = useState<ReceivedSuggestion[]>([])
   const [bookmarks, setBookmarks] = useState<string[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [members, setMembers] = useState<Member[]>([])
@@ -154,42 +159,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadRoleScopedData = useCallback(async (user: ApiUser | null) => {
     if (!user) {
-      setApplications([])
+      setMySuggestions([])
+      setReceivedSuggestions([])
       setBookmarks([])
       setNotifications([])
       return
     }
     if (user.role === 'candidate') {
-      const [apps, marks, notifs] = await Promise.all([
-        apiMyApplications(),
+      const [suggestions, marks, notifs] = await Promise.all([
+        apiMySuggestions(),
         apiMyBookmarks(),
         apiMyNotifications(),
       ])
-      const profile = user.candidateProfile
-      setApplications(
-        apps.map((a) => ({
-          id: a.id,
-          opportunityId: a.opportunityId,
-          candidateId: a.candidateId,
-          candidateName: profile?.fullName ?? '',
-          candidateEmail: profile?.email ?? user.email,
-          candidatePhone: profile?.phone ?? '',
-          candidateProvince: profile?.province ?? '',
-          message: a.message,
-          status: a.status,
-          createdAt: a.createdAt,
-        })),
-      )
+      setMySuggestions(suggestions)
+      setReceivedSuggestions([])
       setBookmarks(marks)
       setNotifications(notifs)
     } else if (user.role === 'recruiter') {
-      const [apps, notifs] = await Promise.all([apiReceivedApplications(), apiMyNotifications()])
-      setApplications(apps)
+      const [suggestions, notifs] = await Promise.all([apiReceivedSuggestions(), apiMyNotifications()])
+      setMySuggestions([])
+      setReceivedSuggestions(suggestions)
       setBookmarks([])
       setNotifications(notifs)
     } else {
       const notifs = await apiMyNotifications()
-      setApplications([])
+      setMySuggestions([])
+      setReceivedSuggestions([])
       setBookmarks([])
       setNotifications(notifs)
     }
@@ -237,7 +232,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // La déconnexion locale doit réussir même si l'appel réseau échoue.
     }
     setCurrentUser(null)
-    setApplications([])
+    setMySuggestions([])
+    setReceivedSuggestions([])
     setBookmarks([])
     setNotifications([])
   }, [])
@@ -337,10 +333,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [bookmarks],
   )
 
-  const applyToOpportunity = useCallback(
-    async (opportunityId: string, message?: string) => {
+  const expressInterest = useCallback(
+    async (suggestionId: string) => {
       try {
-        await apiApplyToOpportunity(opportunityId, message)
+        await apiExpressInterest(suggestionId)
         await loadRoleScopedData(currentUser)
         return { ok: true }
       } catch (err) {
@@ -350,29 +346,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [currentUser, loadRoleScopedData],
   )
 
-  const hasApplied = useCallback(
-    (opportunityId: string) => {
-      if (!currentUser) return false
-      return applications.some(
-        (a) => a.opportunityId === opportunityId && a.candidateId === currentUser.id,
-      )
-    },
-    [applications, currentUser],
-  )
-
-  const getApplicationsForOpportunity = useCallback(
-    (opportunityId: string) => applications.filter((a) => a.opportunityId === opportunityId),
-    [applications],
-  )
-
-  const getApplicationsForRecruiter = useCallback(
-    (recruiterId: string) => {
-      const oppIds = new Set(
-        opportunities.filter((o) => o.recruiterId === recruiterId).map((o) => o.id),
-      )
-      return applications.filter((a) => oppIds.has(a.opportunityId))
-    },
-    [applications, opportunities],
+  const getSuggestionForOpportunity = useCallback(
+    (opportunityId: string) => mySuggestions.find((s) => s.opportunityId === opportunityId),
+    [mySuggestions],
   )
 
   const markNotificationRead = useCallback(async (id: string) => {
@@ -490,7 +466,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: AppContextValue = {
     currentUser,
     opportunities,
-    applications,
+    mySuggestions,
+    receivedSuggestions,
     bookmarks,
     notifications,
     members,
@@ -506,10 +483,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     deleteOpportunity,
     toggleBookmark,
     isBookmarked,
-    applyToOpportunity,
-    hasApplied,
-    getApplicationsForOpportunity,
-    getApplicationsForRecruiter,
+    expressInterest,
+    getSuggestionForOpportunity,
     markNotificationRead,
     unreadCount,
     currentMemberId,

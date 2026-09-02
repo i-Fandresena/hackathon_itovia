@@ -1,0 +1,106 @@
+import { Router } from 'express'
+import { prisma } from '../lib/prisma.js'
+import { requireRole } from '../middleware/rbac.js'
+import { requireAuth } from '../middleware/auth.js'
+
+const router = Router()
+
+router.use(requireAuth)
+
+/**
+ * Fil du candidat : uniquement les offres qu'OffRec a choisi de lui
+ * proposer — jamais le catalogue complet (décision produit 2026-09-02).
+ */
+router.get('/mine', requireRole('candidate'), async (req, res, next) => {
+  try {
+    const suggestions = await prisma.matchSuggestion.findMany({
+      where: {
+        candidateId: req.session!.sub,
+        status: { in: ['proposee_candidat', 'interet_candidat', 'proposee_recruteur', 'interet_recruteur', 'mise_en_relation'] },
+      },
+      include: { opportunity: true },
+      orderBy: { updatedAt: 'desc' },
+    })
+    res.json({ suggestions })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Suggestions transmises par l'admin pour les offres de ce recruteur. */
+router.get('/received', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const suggestions = await prisma.matchSuggestion.findMany({
+      where: {
+        status: { in: ['proposee_recruteur', 'interet_recruteur', 'mise_en_relation'] },
+        opportunity: { recruiterId: req.session!.sub },
+      },
+      include: {
+        opportunity: { select: { id: true, title: true } },
+        candidate: { select: { id: true, email: true, candidateProfile: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+    res.json({ suggestions })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Exprimer un intérêt — jamais un contact direct : ça notifie l'admin,
+ * qui décide seul de la suite (§7.3, même esprit que le volet non-diplômé).
+ */
+router.post('/:id/interest', async (req, res, next) => {
+  try {
+    const role = req.session!.role
+    if (role !== 'candidate' && role !== 'recruiter') {
+      res.status(403).json({ error: 'Accès refusé pour ce rôle.' })
+      return
+    }
+    const suggestion = await prisma.matchSuggestion.findUnique({
+      where: { id: req.params.id },
+      include: { opportunity: true },
+    })
+    if (!suggestion) {
+      res.status(404).json({ error: 'Suggestion introuvable.' })
+      return
+    }
+
+    if (role === 'candidate') {
+      if (suggestion.candidateId !== req.session!.sub) {
+        res.status(404).json({ error: 'Suggestion introuvable.' })
+        return
+      }
+      if (suggestion.status !== 'proposee_candidat') {
+        res.status(400).json({ error: 'Cette suggestion ne peut plus être marquée intéressée.' })
+        return
+      }
+      const updated = await prisma.matchSuggestion.update({
+        where: { id: suggestion.id },
+        data: { status: 'interet_candidat' },
+      })
+      res.json({ suggestion: updated })
+      return
+    }
+
+    // role === 'recruiter'
+    if (suggestion.opportunity.recruiterId !== req.session!.sub) {
+      res.status(404).json({ error: 'Suggestion introuvable.' })
+      return
+    }
+    if (suggestion.status !== 'proposee_recruteur') {
+      res.status(400).json({ error: 'Cette suggestion ne peut plus être marquée intéressée.' })
+      return
+    }
+    const updated = await prisma.matchSuggestion.update({
+      where: { id: suggestion.id },
+      data: { status: 'interet_recruteur' },
+    })
+    res.json({ suggestion: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
+export default router

@@ -120,10 +120,11 @@ router.delete('/:id', requireRole('recruiter'), async (req, res, next) => {
 })
 
 /**
- * Shortlist entreprise : combine les candidats diplômés matchés par IA
- * (moteur `scoreOpportunity`, réutilisé tel quel) et les talents non-
- * diplômés proposés par un agent pour cette offre. Le badge distinctif
- * (§7.3 règle 17) part de la source des données, jamais fusionné.
+ * Shortlist entreprise : combine les candidats diplômés proposés par un
+ * admin (`MatchSuggestion`, statut `proposee_recruteur` et au-delà — plus
+ * de classement IA en direct, voir décision produit 2026-09-02) et les
+ * talents non-diplômés proposés par un agent pour cette offre. Le badge
+ * distinctif (§7.3 règle 17) part de la source des données, jamais fusionné.
  */
 router.get('/:id/shortlist', requireRole('recruiter'), async (req, res, next) => {
   try {
@@ -132,21 +133,26 @@ router.get('/:id/shortlist', requireRole('recruiter'), async (req, res, next) =>
       res.status(404).json({ error: 'Offre introuvable.' })
       return
     }
-    const domainOpportunity = toDomainOpportunity(opportunity)
 
-    const candidateProfiles = await prisma.candidateProfile.findMany({
-      include: { user: { select: { id: true, email: true } } },
+    const suggestions = await prisma.matchSuggestion.findMany({
+      where: {
+        opportunityId: opportunity.id,
+        status: { in: ['proposee_recruteur', 'interet_recruteur', 'mise_en_relation'] },
+      },
+      include: { candidate: { include: { candidateProfile: true } } },
+      orderBy: { score: 'desc' },
     })
-    const matched = candidateProfiles
-      .map((p) => ({
+    const matched = suggestions
+      .filter((s) => s.candidate.candidateProfile)
+      .map((s) => ({
         source: 'matche_ia' as const,
-        candidateId: p.userId,
-        fullName: p.fullName,
-        email: p.user.email,
-        match: scoreOpportunity(toDomainCandidateProfile(p, p.user.email), domainOpportunity),
+        suggestionId: s.id,
+        candidateId: s.candidateId,
+        fullName: s.candidate.candidateProfile!.fullName,
+        email: s.candidate.email,
+        status: s.status,
+        match: { score: s.score, reasons: s.reasons },
       }))
-      .sort((a, b) => b.match.score - a.match.score)
-      .slice(0, 7)
 
     const proposals = await prisma.talentOpportunityProposal.findMany({
       where: { opportunityId: opportunity.id },
@@ -163,37 +169,6 @@ router.get('/:id/shortlist', requireRole('recruiter'), async (req, res, next) =>
 
     res.json({ matched, proposed: proposed.slice(0, 10) })
   } catch (err) {
-    next(err)
-  }
-})
-
-router.post('/:id/apply', requireRole('candidate'), async (req, res, next) => {
-  try {
-    const opportunity = await prisma.opportunity.findUnique({ where: { id: req.params.id } })
-    if (!opportunity) {
-      res.status(404).json({ error: 'Offre introuvable.' })
-      return
-    }
-    const message = typeof req.body?.message === 'string' ? req.body.message.slice(0, 2000) : undefined
-
-    const application = await prisma.application.create({
-      data: { opportunityId: opportunity.id, candidateId: req.session!.sub, message },
-    })
-
-    await prisma.notification.create({
-      data: {
-        userId: opportunity.recruiterId,
-        title: 'Nouvelle candidature',
-        message: `Une nouvelle candidature a été reçue pour "${opportunity.title}".`,
-      },
-    })
-
-    res.status(201).json({ application })
-  } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
-      res.status(409).json({ error: 'Vous avez déjà postulé à cette offre.' })
-      return
-    }
     next(err)
   }
 })

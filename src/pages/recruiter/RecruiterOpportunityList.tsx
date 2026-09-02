@@ -10,8 +10,7 @@ import { OPPORTUNITY_TYPE_LABELS } from '../../data/constants'
 
 export function RecruiterOpportunityList() {
   const navigate = useNavigate()
-  const { currentUser, opportunities, deleteOpportunity, getApplicationsForOpportunity } =
-    useApp()
+  const { currentUser, opportunities, deleteOpportunity, receivedSuggestions } = useApp()
   const myOpps = opportunities.filter((o) => o.recruiterId === currentUser?.id)
 
   const handleDelete = async (id: string, title: string) => {
@@ -53,7 +52,7 @@ export function RecruiterOpportunityList() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {myOpps.map((o) => {
-              const count = getApplicationsForOpportunity(o.id).length
+              const count = receivedSuggestions.filter((s) => s.opportunity.id === o.id).length
               return (
                 <Card key={o.id}>
                   <div
@@ -69,7 +68,7 @@ export function RecruiterOpportunityList() {
                         {o.title}
                       </h3>
                       <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                        {o.province} · {formatDate(o.deadline)} · {count} candidature(s)
+                        {o.province} · {formatDate(o.deadline)} · {count} candidat(s) proposé(s)
                       </p>
                     </div>
                     <Badge variant="muted">

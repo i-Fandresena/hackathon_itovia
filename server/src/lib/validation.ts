@@ -96,6 +96,24 @@ export const applicationInputSchema = z.object({
   message: z.string().max(2000).optional(),
 })
 
+export const matchSuggestionStatuses = [
+  'proposee_candidat',
+  'interet_candidat',
+  'proposee_recruteur',
+  'interet_recruteur',
+  'mise_en_relation',
+  'ecartee',
+] as const
+
+export const createMatchSuggestionSchema = z.object({
+  opportunityId: z.string().uuid(),
+  candidateId: z.string().uuid(),
+})
+
+export const matchSuggestionStatusSchema = z.object({
+  status: z.enum(matchSuggestionStatuses),
+})
+
 export const recommendationInputSchema = z.object({
   providerId: z.string().uuid(),
   rating: z.number().int().min(1).max(5),

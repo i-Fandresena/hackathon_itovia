@@ -9,11 +9,14 @@ import { OpportunityCard } from '../../components/opportunity/OpportunityCard'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Loading } from '../../components/ui/Loading'
 import { useApp } from '../../context/AppContext'
-import { rankOpportunities } from '../../lib/recommendation'
 
+/**
+ * Le fil du candidat, pas un catalogue : uniquement les offres qu'OffRec a
+ * choisi de lui proposer (décision produit 2026-09-02) — plus de parcours
+ * "toutes les offres, classées par un score calculé côté client".
+ */
 export function CandidateOpportunities() {
-  const { currentUser, opportunities, isBookmarked, toggleBookmark, hydrated } =
-    useApp()
+  const { mySuggestions, isBookmarked, toggleBookmark, hydrated } = useApp()
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     province: '',
@@ -21,13 +24,18 @@ export function CandidateOpportunities() {
     sector: '',
   })
 
-  const profile = currentUser?.candidateProfile
+  const active = useMemo(() => mySuggestions.filter((s) => s.status !== 'ecartee'), [mySuggestions])
 
   const list = useMemo(() => {
-    const filtered = filterOpportunities(opportunities, filters)
-    if (!profile) return filtered.map((o) => ({ opportunity: o, match: undefined }))
-    return rankOpportunities(profile, filtered)
-  }, [opportunities, filters, profile])
+    const filteredOpps = filterOpportunities(active.map((s) => s.opportunity), filters)
+    const keep = new Set(filteredOpps.map((o) => o.id))
+    return active
+      .filter((s) => keep.has(s.opportunityId))
+      .map((s) => ({
+        opportunity: s.opportunity,
+        match: { score: s.score, reasons: s.reasons },
+      }))
+  }, [active, filters])
 
   if (!hydrated) {
     return (
@@ -45,7 +53,8 @@ export function CandidateOpportunities() {
         <header className="page-header">
           <h1>Offres recommandées</h1>
           <p>
-            Classées par score de compatibilité avec votre profil.
+            Sélectionnées par OffRec pour votre profil — pas de candidature à
+            envoyer, dites simplement si une offre vous intéresse.
           </p>
         </header>
 
@@ -54,8 +63,8 @@ export function CandidateOpportunities() {
         {list.length === 0 ? (
           <EmptyState
             icon={Compass}
-            title="Aucune offre trouvée"
-            description="Essayez d’élargir vos filtres ou de modifier votre profil."
+            title="Aucune offre pour l’instant"
+            description="OffRec vous proposera des offres dès qu’une correspondance pertinente sera identifiée avec votre profil."
           />
         ) : (
           <div className="opp-list">
@@ -64,7 +73,7 @@ export function CandidateOpportunities() {
                 key={opportunity.id}
                 opportunity={opportunity}
                 match={match}
-                showMatch={!!match}
+                showMatch
                 detailPath={`/candidat/offres/${opportunity.id}`}
                 bookmarked={isBookmarked(opportunity.id)}
                 onBookmark={() => toggleBookmark(opportunity.id)}

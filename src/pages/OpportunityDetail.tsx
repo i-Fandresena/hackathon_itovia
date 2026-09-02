@@ -1,10 +1,9 @@
-import { ArrowLeft, Bookmark, MapPin, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Bookmark, MapPin, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import { Field, Textarea } from '../components/ui/Form'
 import { MatchScore } from '../components/ui/MatchScore'
 import {
   EXPERIENCE_LABELS,
@@ -12,10 +11,8 @@ import {
   SECTOR_DETAIL_LABELS,
 } from '../data/constants'
 import { useApp } from '../context/AppContext'
-import { apiStartConversation } from '../lib/api'
 import { ReportButton } from '../components/ui/ReportButton'
 import { formatDate } from '../lib/format'
-import { scoreOpportunity } from '../lib/recommendation'
 
 interface OpportunityDetailProps {
   basePath: string
@@ -34,21 +31,13 @@ export function OpportunityDetail({
 }: OpportunityDetailProps) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const {
-    opportunities,
-    currentUser,
-    isBookmarked,
-    toggleBookmark,
-    applyToOpportunity,
-    hasApplied,
-  } = useApp()
-  const [message, setMessage] = useState('')
+  const { opportunities, currentUser, isBookmarked, toggleBookmark, getSuggestionForOpportunity, expressInterest } =
+    useApp()
   const [feedback, setFeedback] = useState('')
 
   const opportunity = opportunities.find((o) => o.id === id)
-  const profile = currentUser?.candidateProfile
-  const match =
-    profile && opportunity ? scoreOpportunity(profile, opportunity) : null
+  const suggestion = opportunity ? getSuggestionForOpportunity(opportunity.id) : undefined
+  const match = suggestion ? { score: suggestion.score, reasons: suggestion.reasons } : null
 
   if (!opportunity) {
     return (
@@ -61,22 +50,10 @@ export function OpportunityDetail({
     )
   }
 
-  const handleApply = async () => {
-    const result = await applyToOpportunity(opportunity.id, message)
-    if (result.ok) {
-      setFeedback('Votre intérêt a été envoyé au recruteur.')
-    } else {
-      setFeedback(result.error ?? 'Erreur')
-    }
-  }
-
-  const handleContact = async () => {
-    const { conversationId } = await apiStartConversation(
-      opportunity.recruiterId,
-      `Bonjour, je vous contacte au sujet de l’offre « ${opportunity.title} ».`,
-      opportunity.id,
-    )
-    navigate(`/messages?c=${conversationId}`)
+  const handleInterest = async () => {
+    if (!suggestion) return
+    const result = await expressInterest(suggestion.id)
+    setFeedback(result.ok ? 'Votre intérêt a été transmis à OffRec.' : result.error ?? 'Erreur')
   }
 
   return (
@@ -169,38 +146,29 @@ export function OpportunityDetail({
           )}
         </Card>
 
-        {canApply && currentUser?.role === 'candidate' && (
+        {canApply && currentUser?.role === 'candidate' && suggestion && (
           <Card>
-            <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>
-              Manifester mon intérêt
+            <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Sparkles size={18} />
+              Cette offre vous intéresse ?
             </h2>
-            {hasApplied(opportunity.id) ? (
+            {suggestion.status === 'proposee_candidat' ? (
               <>
-                <p style={{ color: 'var(--color-accent)', fontWeight: 600, marginBottom: '0.75rem' }}>
-                  Vous avez déjà postulé à cette offre.
+                <p style={{ color: 'var(--color-ink-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+                  Dites-le à OffRec : si l’entreprise est intéressée elle aussi, nous
+                  vous mettrons en relation directement — pas besoin de candidature ni
+                  de message à rédiger.
                 </p>
-                <Button variant="outline" size="sm" onClick={handleContact}>
-                  <MessageCircle size={16} />
-                  Contacter le recruteur
-                </Button>
+                <Button onClick={handleInterest}>Je suis intéressé·e</Button>
               </>
             ) : (
-              <>
-                <Field label="Message (optionnel)">
-                  <Textarea
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Présentez-vous en quelques lignes…"
-                  />
-                </Field>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <Button onClick={handleApply}>Envoyer ma candidature</Button>
-                  <Button variant="outline" onClick={handleContact}>
-                    <MessageCircle size={16} />
-                    Contacter le recruteur
-                  </Button>
-                </div>
-              </>
+              <p style={{ color: 'var(--color-accent)', fontWeight: 600 }}>
+                {suggestion.status === 'interet_candidat' && 'Votre intérêt a été transmis à OffRec.'}
+                {suggestion.status === 'proposee_recruteur' && 'OffRec a transmis votre profil à l’entreprise.'}
+                {suggestion.status === 'interet_recruteur' && "L'entreprise est intéressée — OffRec finalise la mise en relation."}
+                {suggestion.status === 'mise_en_relation' && 'Vous êtes mis en relation — retrouvez la conversation dans Messages.'}
+                {suggestion.status === 'ecartee' && 'Cette suggestion a été écartée.'}
+              </p>
             )}
             {feedback && (
               <p style={{ marginTop: '0.75rem', fontSize: '0.9rem' }}>{feedback}</p>
@@ -210,7 +178,7 @@ export function OpportunityDetail({
 
         {!canApply && (
           <Link to="/inscription">
-            <Button>Créer un compte pour postuler</Button>
+            <Button>Créer un compte pour être recommandé·e</Button>
           </Link>
         )}
       </div>

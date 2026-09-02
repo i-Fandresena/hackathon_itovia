@@ -5,10 +5,9 @@ import { OpportunityCard } from '../../components/opportunity/OpportunityCard'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { useApp } from '../../context/AppContext'
-import { rankOpportunities } from '../../lib/recommendation'
 
 export function CandidateDashboard() {
-  const { currentUser, opportunities, isBookmarked, toggleBookmark } = useApp()
+  const { currentUser, mySuggestions, isBookmarked, toggleBookmark } = useApp()
   const profile = currentUser?.candidateProfile
 
   if (!profile) {
@@ -29,8 +28,13 @@ export function CandidateDashboard() {
     )
   }
 
-  const ranked = rankOpportunities(profile, opportunities).slice(0, 3)
-  const bookmarks = opportunities.filter((o) => isBookmarked(o.id)).length
+  const active = mySuggestions.filter((s) => s.status !== 'ecartee')
+  const ranked = active
+    .slice()
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((s) => ({ opportunity: s.opportunity, match: { score: s.score, reasons: s.reasons } }))
+  const bookmarks = active.filter((s) => isBookmarked(s.opportunityId)).length
 
   return (
     <div className="page">
@@ -54,8 +58,8 @@ export function CandidateDashboard() {
           </FadeUp>
           <FadeUp eager index={1}>
             <Card className="stat-card">
-              <strong>{opportunities.length}</strong>
-              <span>Offres disponibles</span>
+              <strong>{active.length}</strong>
+              <span>Suggestions actives</span>
             </Card>
           </FadeUp>
           <FadeUp eager index={2}>

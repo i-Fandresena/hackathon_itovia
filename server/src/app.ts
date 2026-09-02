@@ -20,6 +20,8 @@ import placementRoutes from './routes/placements.routes.js'
 import publicRoutes from './routes/public.routes.js'
 import verificationRoutes from './routes/verification.routes.js'
 import talentAccountRoutes from './routes/talent-account.routes.js'
+import adminMatchingRoutes from './routes/admin-matching.routes.js'
+import matchSuggestionsRoutes from './routes/match-suggestions.routes.js'
 
 export function createApp() {
   const app = express()
@@ -56,6 +58,8 @@ export function createApp() {
   app.use('/api/talent-leads', publicRoutes)
   app.use('/api/verification', verificationRoutes)
   app.use('/api/talent-account', talentAccountRoutes)
+  app.use('/api/admin/matching', adminMatchingRoutes)
+  app.use('/api/match-suggestions', matchSuggestionsRoutes)
 
   app.use(notFound)
   app.use(errorHandler)

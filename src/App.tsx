@@ -25,6 +25,7 @@ import { IndividualDashboard } from './pages/individual/IndividualDashboard'
 import { AdminDashboard } from './pages/admin/AdminDashboard'
 import { AdminModeration } from './pages/admin/AdminModeration'
 import { AdminAgents } from './pages/admin/AdminAgents'
+import { AdminMatching } from './pages/admin/AdminMatching'
 import { Messages } from './pages/messages/Messages'
 import { RecruiterBilling } from './pages/recruiter/RecruiterBilling'
 import { RecruiterShortlist } from './pages/recruiter/RecruiterShortlist'
@@ -224,6 +225,14 @@ export default function App() {
               element={
                 <ProtectedRoute role="admin">
                   <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/mise-en-relation"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminMatching />
                 </ProtectedRoute>
               }
             />

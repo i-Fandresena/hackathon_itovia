@@ -711,29 +711,36 @@ async function main() {
     opportunityIdByKey.set(o.key, opportunity.id)
   }
 
-  console.log('Des candidatures de démonstration…')
-  await prisma.application.create({
+  // OffRec est l'intermédiaire (décision produit 2026-09-02) : plus de
+  // candidature directe — le récit de démo montre le pipeline à trois
+  // stades différents pour que candidat@demo.mg et recruteur@demo.mg
+  // racontent tous les deux une histoire cohérente dès la connexion.
+  console.log('Suggestions de mise en relation de démonstration…')
+  await prisma.matchSuggestion.create({
     data: {
       opportunityId: opportunityIdByKey.get('opp-1')!,
       candidateId: userIdByKey.get('candidat-1')!,
-      message: 'Très motivée par le marketing local.',
-      status: 'contactee',
+      score: 92,
+      reasons: ['Compétences réseaux sociaux/Canva alignées', 'Basée à Antananarivo, disponible immédiatement'],
+      status: 'mise_en_relation',
     },
   })
-  await prisma.application.create({
+  await prisma.matchSuggestion.create({
     data: {
       opportunityId: opportunityIdByKey.get('opp-2')!,
       candidateId: userIdByKey.get('candidat-2')!,
-      message: 'Trois ans d’expérience React, disponible immédiatement.',
-      status: 'vue',
+      score: 88,
+      reasons: ['Trois ans d’expérience React', 'Disponibilité immédiate'],
+      status: 'interet_candidat',
     },
   })
-  await prisma.application.create({
+  await prisma.matchSuggestion.create({
     data: {
       opportunityId: opportunityIdByKey.get('opp-5')!,
       candidateId: userIdByKey.get('candidat-3')!,
-      message: 'Expérience en vente terrain à Toamasina, mobile sur Mahajanga.',
-      status: 'envoyee',
+      score: 74,
+      reasons: ['Expérience vente terrain à Toamasina', 'Mobile sur la région de Mahajanga'],
+      status: 'proposee_candidat',
     },
   })
 

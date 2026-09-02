@@ -9,10 +9,9 @@ import { formatDate } from '../../lib/format'
 import { OPPORTUNITY_TYPE_LABELS } from '../../data/constants'
 
 export function RecruiterDashboard() {
-  const { currentUser, opportunities, getApplicationsForRecruiter, notifications } = useApp()
+  const { currentUser, opportunities, receivedSuggestions, notifications } = useApp()
   const recruiterId = currentUser?.id ?? ''
   const myOpps = opportunities.filter((o) => o.recruiterId === recruiterId)
-  const apps = getApplicationsForRecruiter(recruiterId)
   const unread = notifications.filter((n) => !n.read).length
 
   return (
@@ -24,7 +23,7 @@ export function RecruiterDashboard() {
             <h1>
               {currentUser?.recruiterProfile?.companyName ?? 'Espace recruteur'}
             </h1>
-            <p>Gérez vos offres et suivez les candidatures reçues.</p>
+            <p>Gérez vos offres et les candidats proposés par OffRec.</p>
           </header>
         </FadeUp>
 
@@ -37,8 +36,8 @@ export function RecruiterDashboard() {
           </FadeUp>
           <FadeUp eager index={1}>
             <Card className="stat-card">
-              <strong>{apps.length}</strong>
-              <span>Candidatures reçues</span>
+              <strong>{receivedSuggestions.length}</strong>
+              <span>Candidats proposés</span>
             </Card>
           </FadeUp>
           <FadeUp eager index={2}>
@@ -59,7 +58,7 @@ export function RecruiterDashboard() {
           <Link to="/recruteur/candidatures">
             <Button variant="outline">
               <Users size={18} />
-              Voir les candidatures
+              Voir les candidats proposés
             </Button>
           </Link>
         </div>

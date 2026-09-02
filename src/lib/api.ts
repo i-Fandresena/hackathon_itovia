@@ -1,11 +1,11 @@
 import type {
   AgentProfile,
-  Application,
-  ApplicationStatus,
   CandidateProfile,
   IndividualProfile,
   Notification,
   Member,
+  MatchSuggestion,
+  MatchSuggestionStatus,
   Opportunity,
   Placement,
   PlacementStage,
@@ -188,13 +188,6 @@ export function apiDeleteOpportunity(id: string) {
   return request<void>(`/opportunities/${id}`, { method: 'DELETE' })
 }
 
-export function apiApplyToOpportunity(id: string, message?: string) {
-  return request<{ application: Application }>(`/opportunities/${id}/apply`, {
-    method: 'POST',
-    body: JSON.stringify({ message }),
-  })
-}
-
 export function apiAddBookmark(opportunityId: string) {
   return request<void>(`/opportunities/${opportunityId}/bookmark`, { method: 'POST' })
 }
@@ -210,40 +203,13 @@ export async function apiMyBookmarks(): Promise<string[]> {
   return bookmarks.map((b) => b.opportunityId)
 }
 
-export interface MyApplicationRaw {
-  id: string
-  opportunityId: string
-  candidateId: string
-  message?: string
-  status: ApplicationStatus
-  createdAt: string
-  opportunity: Opportunity
-}
-
-export function apiMyApplications() {
-  return request<{ applications: MyApplicationRaw[] }>('/applications/mine').then(
-    (r) => r.applications,
-  )
-}
-
-export function apiReceivedApplications() {
-  return request<{ applications: Application[] }>('/applications/received').then(
-    (r) => r.applications,
-  )
-}
-
-export function apiUpdateApplicationStatus(id: string, status: ApplicationStatus) {
-  return request<{ application: Application }>(`/applications/${id}/status`, {
-    method: 'PUT',
-    body: JSON.stringify({ status }),
-  }).then((r) => r.application)
-}
-
 export interface ShortlistMatched {
   source: 'matche_ia'
+  suggestionId: string
   candidateId: string
   fullName: string
   email: string
+  status: MatchSuggestionStatus
   match: { score: number; reasons: string[] }
 }
 
@@ -259,6 +225,88 @@ export function apiShortlist(opportunityId: string) {
   return request<{ matched: ShortlistMatched[]; proposed: ShortlistProposed[] }>(
     `/opportunities/${opportunityId}/shortlist`,
   )
+}
+
+/* ------------------------------------------------------------------ */
+/* Mise en relation — OffRec intermédiaire (décision produit 2026-09-02) */
+/* ------------------------------------------------------------------ */
+
+export interface MatchSuggestionWithOpportunity extends MatchSuggestion {
+  opportunity: Opportunity
+}
+
+/** Fil du candidat — uniquement ce qu'OffRec a choisi de lui proposer,
+ *  jamais le catalogue complet. */
+export function apiMySuggestions() {
+  return request<{ suggestions: MatchSuggestionWithOpportunity[] }>('/match-suggestions/mine').then(
+    (r) => r.suggestions,
+  )
+}
+
+export interface ReceivedSuggestion {
+  id: string
+  status: MatchSuggestionStatus
+  score: number
+  reasons: string[]
+  opportunity: { id: string; title: string }
+  candidate: { id: string; email: string; candidateProfile: CandidateProfile | null }
+}
+
+export function apiReceivedSuggestions() {
+  return request<{ suggestions: ReceivedSuggestion[] }>('/match-suggestions/received').then(
+    (r) => r.suggestions,
+  )
+}
+
+/** Exprimer un intérêt — jamais un contact direct, ça notifie l'admin. */
+export function apiExpressInterest(suggestionId: string) {
+  return request<{ suggestion: MatchSuggestion }>(`/match-suggestions/${suggestionId}/interest`, {
+    method: 'POST',
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/* Mise en relation — pilotage admin                                   */
+/* ------------------------------------------------------------------ */
+
+export interface CandidatePoolEntry {
+  candidateId: string
+  fullName: string
+  email: string
+  alreadySuggested: boolean
+  match: { score: number; reasons: string[] }
+}
+
+export function apiAdminCandidatePool(opportunityId: string) {
+  return request<{ pool: CandidatePoolEntry[] }>(
+    `/admin/matching/opportunities/${opportunityId}/candidate-pool`,
+  ).then((r) => r.pool)
+}
+
+export function apiAdminCreateSuggestion(opportunityId: string, candidateId: string) {
+  return request<{ suggestion: MatchSuggestion }>('/admin/matching/match-suggestions', {
+    method: 'POST',
+    body: JSON.stringify({ opportunityId, candidateId }),
+  })
+}
+
+export interface AdminMatchSuggestion extends MatchSuggestion {
+  opportunity: { id: string; title: string; companyName: string }
+  candidate: { id: string; email: string; candidateProfile: { fullName: string } | null }
+}
+
+export function apiAdminMatchSuggestions(status?: MatchSuggestionStatus) {
+  const qs = status ? `?status=${status}` : ''
+  return request<{ suggestions: AdminMatchSuggestion[] }>(`/admin/matching/match-suggestions${qs}`).then(
+    (r) => r.suggestions,
+  )
+}
+
+export function apiAdminUpdateSuggestionStatus(id: string, status: MatchSuggestionStatus) {
+  return request<{ suggestion: MatchSuggestion }>(`/admin/matching/match-suggestions/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  })
 }
 
 /* ------------------------------------------------------------------ */

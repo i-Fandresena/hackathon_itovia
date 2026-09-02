@@ -111,6 +111,25 @@ router.post('/conversations', requireAuth, async (req, res, next) => {
       return
     }
 
+    // OffRec est l'intermédiaire (décision produit 2026-09-02) : un candidat
+    // et un recruteur ne peuvent pas s'écrire tant qu'un admin n'a pas
+    // débloqué la mise en relation (l'admin, lui, peut toujours écrire).
+    const myRole = req.session!.role
+    const isCandidateRecruiterPair =
+      (myRole === 'candidate' && target.role === 'recruiter') ||
+      (myRole === 'recruiter' && target.role === 'candidate')
+    if (isCandidateRecruiterPair) {
+      const candidateId = myRole === 'candidate' ? me : target.id
+      const recruiterId = myRole === 'recruiter' ? me : target.id
+      const unlocked = await prisma.matchSuggestion.findFirst({
+        where: { candidateId, status: 'mise_en_relation', opportunity: { recruiterId } },
+      })
+      if (!unlocked) {
+        res.status(403).json({ error: 'OffRec doit valider la mise en relation avant tout contact direct.' })
+        return
+      }
+    }
+
     const [participantAId, participantBId] = [me, body.toUserId].sort()
     const conversation =
       (await prisma.conversation.findFirst({

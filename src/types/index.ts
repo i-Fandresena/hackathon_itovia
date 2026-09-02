@@ -231,6 +231,28 @@ export interface Application {
   createdAt: string
 }
 
+/** OffRec est l'intermédiaire (décision produit 2026-09-02) : ni le
+ *  candidat ni le recruteur n'agissent en direct l'un sur l'autre, tout
+ *  passe par une décision admin. Jamais de saut d'étape. */
+export type MatchSuggestionStatus =
+  | 'proposee_candidat'
+  | 'interet_candidat'
+  | 'proposee_recruteur'
+  | 'interet_recruteur'
+  | 'mise_en_relation'
+  | 'ecartee'
+
+export interface MatchSuggestion {
+  id: string
+  opportunityId: string
+  candidateId: string
+  score: number
+  reasons: string[]
+  status: MatchSuggestionStatus
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Notification {
   id: string
   userId: string

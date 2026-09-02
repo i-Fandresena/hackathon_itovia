@@ -177,6 +177,7 @@ model User {
 
   opportunities Opportunity[]  @relation("RecruiterOpportunities")
   applications  Application[]
+  matchSuggestions MatchSuggestion[]
   bookmarks     Bookmark[]
   notifications Notification[]
   auditLogs     AuditLog[]
@@ -274,9 +275,44 @@ model Opportunity {
   bookmarks    Bookmark[]
   talentProposals TalentOpportunityProposal[]
   placements      Placement[]
+  matchSuggestions MatchSuggestion[]
 
   @@index([province])
   @@index([opportunityType])
+}
+
+/// Statut de mise en relation piloté par l'admin (diplômés) — jamais un
+/// saut d'étape : candidat et recruteur ne font qu'exprimer un intérêt,
+/// c'est toujours l'admin qui fait avancer vers `mise_en_relation`.
+enum MatchSuggestionStatus {
+  proposee_candidat
+  interet_candidat
+  proposee_recruteur
+  interet_recruteur
+  mise_en_relation
+  ecartee
+}
+
+/// OffRec comme intermédiaire (décision produit 2026-09-02) : ni le
+/// candidat ni le recruteur ne se contactent en direct — cette table est
+/// le pendant, pour les diplômés, de TalentOpportunityProposal (non-
+/// diplômés, inchangé). Créée uniquement par un admin, jamais par un
+/// candidat ou un recruteur (cohérent avec §7.3.14 côté non-diplômés).
+model MatchSuggestion {
+  id            String                @id @default(uuid())
+  opportunityId String
+  opportunity   Opportunity           @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  candidateId   String
+  candidate     User                  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  score         Int
+  reasons       String[]
+  status        MatchSuggestionStatus @default(proposee_candidat)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([opportunityId, candidateId])
+  @@index([status])
+  @@index([candidateId])
 }
 
 model Application {
