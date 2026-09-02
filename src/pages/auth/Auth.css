@@ -56,12 +56,13 @@
 }
 
 .split-brand-name {
-  font-size: 2rem;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: 3rem;
+  font-weight: 400;
   color: #ffffff;
-  letter-spacing: -0.04em;
+  letter-spacing: 0.01em;
   margin: 0 0 1rem 0;
-  line-height: 1.1;
+  line-height: 1;
 }
 
 .split-brand-tagline {
@@ -102,18 +103,26 @@
   flex-shrink: 0;
 }
 
-/* ── Panneau droit blanc ── */
+/* ── Panneau droit ── */
 .split-right-panel {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 3rem 2rem;
-  background: #ffffff;
+  /* Légèrement réchauffé plutôt que blanc pur — moins clinique, même
+     principe que le fond crème de la référence, sans toucher au bleu
+     de marque. */
+  background: #fbfaf8;
 }
 
 .split-form-wrapper {
   width: 100%;
   max-width: 380px;
+  padding: 2.25rem;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .split-form-header {
@@ -121,10 +130,12 @@
 }
 
 .split-form-title {
-  font-size: 1.85rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 400;
   color: #0f172a;
-  letter-spacing: -0.04em;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
   margin: 0 0 0.4rem 0;
 }
 
@@ -308,7 +319,7 @@
   }
 
   .split-brand-name {
-    font-size: 1.6rem;
+    font-size: 2.1rem;
   }
 
   .split-brand-tagline,
@@ -318,6 +329,14 @@
 
   .split-right-panel {
     padding: 2rem 1.5rem 2.5rem;
+  }
+
+  .split-form-wrapper {
+    padding: 1.5rem;
+  }
+
+  .split-form-title {
+    font-size: 1.85rem;
   }
 }
 
@@ -349,7 +368,6 @@
 
 .signup-form-wrapper {
   max-width: 420px;
-  padding: 1rem 0;
 }
 
 /* Sélecteur de rôle pill style */

@@ -5,8 +5,6 @@ import dashboardPreview from '../assets/dashboard-preview.png'
 import { FadeUp, Stagger } from '../components/motion/Motion'
 import { OpportunityCard } from '../components/opportunity/OpportunityCard'
 import { Button } from '../components/ui/Button'
-import { Card } from '../components/ui/Card'
-import { STATS } from '../data/constants'
 import { useApp } from '../context/AppContext'
 import { homePathForRole } from '../lib/roles'
 import './Landing.css'
@@ -52,11 +50,16 @@ const COMMITMENTS = [
   'Les fiches trop peu documentées sont signalées',
 ]
 
-const STAT_ITEMS = [
-  { v: `${STATS.opportunities}+`, l: 'Offres actives' },
-  { v: `${STATS.candidates}+`, l: 'Candidats inscrits' },
-  { v: `${STATS.recruiters}+`, l: 'Recruteurs locaux' },
-  { v: String(STATS.provinces), l: 'Provinces couvertes' },
+/**
+ * Le problème adressé, pas une traction produit — voir
+ * `update/fiche-technique-offrec.md` §2 pour les sources détaillées.
+ * Chiffres marché sourcés, pas des statistiques d'usage de la plateforme.
+ */
+const IMPACT_STATS = [
+  { v: '95%', l: 'de l’emploi est informel à Madagascar' },
+  { v: '43%', l: 'des jeunes ne sont ni en emploi, ni en formation, ni en études' },
+  { v: '500 000', l: 'jeunes arrivent chaque année sur le marché du travail' },
+  { v: '20%', l: 'de pénétration internet, contre 66% de couverture mobile' },
 ]
 
 export function Landing() {
@@ -133,15 +136,20 @@ export function Landing() {
       </section>
 
       <section className="stats-section">
-        <div className="container stats-grid">
-          {STAT_ITEMS.map((s, i) => (
-            <FadeUp key={s.l} index={i}>
-              <Card className="stat-card">
-                <strong>{s.v}</strong>
-                <span>{s.l}</span>
-              </Card>
-            </FadeUp>
-          ))}
+        <div className="container">
+          <div className="stats-grid">
+            {IMPACT_STATS.map((s, i) => (
+              <FadeUp key={s.l} index={i}>
+                <div className="impact-stat">
+                  <strong>{s.v}</strong>
+                  <span>{s.l}</span>
+                </div>
+              </FadeUp>
+            ))}
+          </div>
+          <p className="stats-source">
+            Sources : Observatoire de la Jeunesse Madagascar, Afrobarometer — voir la fiche technique du projet.
+          </p>
         </div>
       </section>
 

@@ -129,14 +129,15 @@
   margin-bottom: 0.9rem;
 }
 
-/* Taille calée pour que « Chaque expérience vécue. » tienne sur une ligne
-   dans la colonne de gauche : c'est la coupure entre les deux phrases qui
-   porte le rythme du titre. */
+/* Bebas Neue étant condensé, la coupure entre les deux phrases tient
+   toujours sur une ligne dans la colonne de gauche — même à une taille
+   plus impactante qu'avec la police de corps. */
 .hero h1 {
-  font-size: clamp(2rem, 4.2vw, 3rem);
-  font-weight: 700;
-  letter-spacing: -0.045em;
-  line-height: 1.08;
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 5.4vw, 4rem);
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  line-height: 1.03;
   color: #fff;
   text-wrap: pretty;
 }
@@ -343,8 +344,46 @@
   }
 }
 
-.stats-grid .card {
+.impact-stat {
   padding: 1.35rem 1.25rem;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.impact-stat strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  line-height: 1;
+  color: var(--color-accent-hover);
+  margin-bottom: 0.4rem;
+}
+
+.impact-stat span {
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.stats-source {
+  margin-top: 0.85rem;
+  font-size: 0.75rem;
+  color: var(--color-ink-faint);
+}
+
+/* Titres de section : même famille d'impact que le hero, gardée hors du
+   composant partagé `.section-title` pour ne pas affecter les tableaux
+   de bord authentifiés qui réutilisent cette classe. */
+.landing .section-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  font-weight: 400;
+  letter-spacing: 0.005em;
 }
 
 .section {
@@ -611,10 +650,11 @@
 .cta-display {
   display: flex;
   flex-direction: column;
-  font-size: clamp(2.75rem, 9vw, 6.5rem);
-  font-weight: 700;
-  letter-spacing: -0.055em;
-  line-height: 0.95;
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 10vw, 7rem);
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  line-height: 0.92;
   margin-bottom: 1.5rem;
   background: linear-gradient(180deg, #9cc6f8 0%, #4b93f0 62%, #2f7ae8 100%);
   -webkit-background-clip: text;

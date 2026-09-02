@@ -13,6 +13,10 @@
  */
 :root {
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  /* Titres à fort impact uniquement (h1 hero/auth, chiffres de stats) —
+     jamais le corps de texte, condensé/majuscule pénalise la lisibilité
+     en continu. */
+  --font-display: 'Bebas Neue', var(--font-sans);
 
   --color-ink: #0c0e12;
   --color-ink-secondary: #3d4451;
