@@ -177,9 +177,10 @@ textarea {
 
 /* La barre d'onglets (TabBar) remplace le hamburger du Header public sous
    899px : elle est fixe en bas, le contenu (et le pied de page) ne doit
-   jamais passer dessous. */
+   jamais passer dessous. Absente sur la landing (`--no-tabbar`, voir
+   Header.tsx) : pas de padding réservé à y compenser. */
 @media (max-width: 899px) {
-  .public-main {
+  .public-main:not(.public-main--no-tabbar) {
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 }

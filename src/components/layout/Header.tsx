@@ -15,7 +15,9 @@ interface HeaderProps {
  * connecté, `Layout.tsx` bascule entièrement sur `AppShell`). Sous 900px,
  * la nav horizontale est remplacée par la barre d'onglets en bas de
  * l'écran (`TabBar`) : les 5 liens publics tiennent tous, pas d'onglet
- * « Menu » nécessaire ici.
+ * « Menu » nécessaire ici. Exception : la landing (`floating`) n'affiche
+ * jamais cette barre — une page d'accueil ne doit pas donner l'impression
+ * d'être déjà dans l'espace applicatif connecté.
  */
 export function Header({ floating }: HeaderProps = {}) {
   const navLinks = [
@@ -50,7 +52,7 @@ export function Header({ floating }: HeaderProps = {}) {
         </nav>
       </div>
 
-      <TabBar items={tabItems} />
+      {!floating && <TabBar items={tabItems} />}
     </header>
   )
 }

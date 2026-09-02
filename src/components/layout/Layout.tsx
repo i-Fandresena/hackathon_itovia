@@ -16,10 +16,12 @@ export function Layout() {
 
   if (currentUser) return <AppShell />
 
+  const isLanding = pathname === '/'
+
   return (
     <>
-      <Header floating={pathname === '/'} />
-      <main className="public-main">
+      <Header floating={isLanding} />
+      <main className={`public-main ${isLanding ? 'public-main--no-tabbar' : ''}`.trim()}>
         <PageMotion>
           <Outlet />
         </PageMotion>
