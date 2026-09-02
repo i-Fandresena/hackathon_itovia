@@ -16,6 +16,7 @@ import {
   apiCreateRecommendation,
   apiDeleteOpportunity,
   apiDirectoryRaw,
+  apiDeclineSuggestion,
   apiExpressInterest,
   apiListOpportunities,
   apiLogin,
@@ -110,6 +111,7 @@ interface AppContextValue {
   /** Le candidat/recruteur ne fait jamais que signaler un intérêt — jamais
    *  de contact direct, c'est l'admin qui fait avancer la suite. */
   expressInterest: (suggestionId: string) => Promise<Result>
+  declineSuggestion: (suggestionId: string) => Promise<Result>
   getSuggestionForOpportunity: (opportunityId: string) => MatchSuggestionWithOpportunity | undefined
   markNotificationRead: (id: string) => Promise<void>
   unreadCount: number
@@ -346,6 +348,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [currentUser, loadRoleScopedData],
   )
 
+  /** Désélectionne le profil (sort de la liste) — décision journalisée
+   *  pour le suivi admin. */
+  const declineSuggestion = useCallback(
+    async (suggestionId: string) => {
+      try {
+        await apiDeclineSuggestion(suggestionId)
+        await loadRoleScopedData(currentUser)
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: errorMessage(err, 'Envoi impossible.') }
+      }
+    },
+    [currentUser, loadRoleScopedData],
+  )
+
   const getSuggestionForOpportunity = useCallback(
     (opportunityId: string) => mySuggestions.find((s) => s.opportunityId === opportunityId),
     [mySuggestions],
@@ -484,6 +501,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleBookmark,
     isBookmarked,
     expressInterest,
+    declineSuggestion,
     getSuggestionForOpportunity,
     markNotificationRead,
     unreadCount,

@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Input } from '../../components/ui/Form'
 import { Loading } from '../../components/ui/Loading'
 import { VerificationBadge } from '../../components/ui/VerificationBadge'
-import { apiCreatePlacement, apiExpressInterest, apiShortlist, type ShortlistMatched, type ShortlistProposed } from '../../lib/api'
+import { apiCreatePlacement, apiDeclineSuggestion, apiExpressInterest, apiShortlist, type ShortlistMatched, type ShortlistProposed } from '../../lib/api'
 import type { MatchSuggestionStatus } from '../../types'
 
 const SUGGESTION_STATUS_LABELS: Record<MatchSuggestionStatus, string> = {
@@ -49,6 +49,12 @@ export function RecruiterShortlist() {
   const handleExpressInterest = async (suggestionId: string) => {
     await apiExpressInterest(suggestionId)
     setFeedback('Votre intérêt a été transmis à OffRec.')
+    load()
+  }
+
+  const handleDecline = async (suggestionId: string) => {
+    await apiDeclineSuggestion(suggestionId)
+    setFeedback('Profil écarté.')
     load()
   }
 
@@ -154,6 +160,12 @@ export function RecruiterShortlist() {
                     {m.status === 'proposee_recruteur' && (
                       <Button variant="outline" size="sm" onClick={() => handleExpressInterest(m.suggestionId)}>
                         Ce profil m’intéresse
+                      </Button>
+                    )}
+                    {(m.status === 'proposee_recruteur' || m.status === 'interet_recruteur') && (
+                      <Button variant="outline" size="sm" onClick={() => handleDecline(m.suggestionId)}>
+                        <X size={14} />
+                        Écarter
                       </Button>
                     )}
                     <Button size="sm" onClick={() => handlePlaceCandidate(m.candidateId)}>

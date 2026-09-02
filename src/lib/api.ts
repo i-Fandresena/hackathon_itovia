@@ -265,6 +265,14 @@ export function apiExpressInterest(suggestionId: string) {
   })
 }
 
+/** Décliner — désélectionne le profil (sort de la liste), décision
+ *  journalisée pour le suivi admin. */
+export function apiDeclineSuggestion(suggestionId: string) {
+  return request<{ suggestion: MatchSuggestion }>(`/match-suggestions/${suggestionId}/decline`, {
+    method: 'POST',
+  })
+}
+
 /* ------------------------------------------------------------------ */
 /* Mise en relation — pilotage admin                                   */
 /* ------------------------------------------------------------------ */
@@ -662,8 +670,11 @@ export interface AdminStats {
     action: string
     userEmail: string | null
     userRole: string | null
+    metadata: Record<string, unknown> | null
     createdAt: string
   }[]
+  /** Connexions/déconnexions des 7 derniers jours — résumées, pas listées. */
+  recentLoginCount: number
 }
 
 export function apiAdminStats() {

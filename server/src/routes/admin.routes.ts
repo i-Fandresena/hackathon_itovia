@@ -40,12 +40,20 @@ router.get('/stats', async (_req, res, next) => {
       prisma.recommendation.count(),
       prisma.member.count(),
       prisma.report.count({ where: { status: 'open' } }),
+      // Connexions/déconnexions exclues : elles noieraient les décisions
+      // réelles (intérêt/déclin) dans la liste — comptées à part, affichées
+      // de façon minimale (voir `recentLoginCount`).
       prisma.auditLog.findMany({
+        where: { action: { notIn: ['login', 'logout'] } },
         orderBy: { createdAt: 'desc' },
         take: 15,
         include: { user: { select: { email: true, role: true } } },
       }),
     ])
+
+    const recentLoginCount = await prisma.auditLog.count({
+      where: { action: { in: ['login', 'logout'] }, createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+    })
 
     const [payingSubscriptions, revenueAgg] = await Promise.all([
       prisma.subscription.count({ where: { planCode: { not: 'FREE' } } }),
@@ -110,8 +118,12 @@ router.get('/stats', async (_req, res, next) => {
         action: log.action,
         userEmail: log.user?.email ?? null,
         userRole: log.user?.role ?? null,
+        metadata: log.metadata ?? null,
         createdAt: log.createdAt.toISOString(),
       })),
+      // Connexions/déconnexions des 7 derniers jours — affichées en résumé,
+      // pas en liste, pour ne pas noyer les décisions réelles ci-dessus.
+      recentLoginCount,
     })
   } catch (err) {
     next(err)

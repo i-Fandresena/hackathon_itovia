@@ -27,7 +27,11 @@ router.get('/mine', requireRole('candidate'), async (req, res, next) => {
   }
 })
 
-/** Suggestions transmises par l'admin pour les offres de ce recruteur. */
+/**
+ * Suggestions transmises par l'admin pour les offres de ce recruteur —
+ * un profil décliné (`ecartee`) sort de cette liste : c'est ce qui le
+ * "désélectionne" côté recruteur, plus besoin d'y revenir dessus.
+ */
 router.get('/received', requireRole('recruiter'), async (req, res, next) => {
   try {
     const suggestions = await prisma.matchSuggestion.findMany({
@@ -50,6 +54,8 @@ router.get('/received', requireRole('recruiter'), async (req, res, next) => {
 /**
  * Exprimer un intérêt — jamais un contact direct : ça notifie l'admin,
  * qui décide seul de la suite (§7.3, même esprit que le volet non-diplômé).
+ * Journalisé (AuditLog) pour le suivi des décisions prises par les
+ * entreprises, visible depuis l'activité récente du tableau de bord admin.
  */
 router.post('/:id/interest', async (req, res, next) => {
   try {
@@ -80,6 +86,13 @@ router.post('/:id/interest', async (req, res, next) => {
         where: { id: suggestion.id },
         data: { status: 'interet_candidat' },
       })
+      await prisma.auditLog.create({
+        data: {
+          userId: req.session!.sub,
+          action: 'candidate_interested',
+          metadata: { opportunityTitle: suggestion.opportunity.title, suggestionId: suggestion.id },
+        },
+      })
       res.json({ suggestion: updated })
       return
     }
@@ -96,6 +109,89 @@ router.post('/:id/interest', async (req, res, next) => {
     const updated = await prisma.matchSuggestion.update({
       where: { id: suggestion.id },
       data: { status: 'interet_recruteur' },
+    })
+    await prisma.auditLog.create({
+      data: {
+        userId: req.session!.sub,
+        action: 'recruiter_interested',
+        metadata: { opportunityTitle: suggestion.opportunity.title, suggestionId: suggestion.id },
+      },
+    })
+    res.json({ suggestion: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Décliner un profil proposé — le désélectionne (il sort de `/received`/
+ * `/mine`) et journalise la décision pour l'admin, symétrique de
+ * `/interest`. Le candidat/recruteur ne fait que décider, jamais
+ * l'admin qui seul fait ensuite avancer le dossier.
+ */
+router.post('/:id/decline', async (req, res, next) => {
+  try {
+    const role = req.session!.role
+    if (role !== 'candidate' && role !== 'recruiter') {
+      res.status(403).json({ error: 'Accès refusé pour ce rôle.' })
+      return
+    }
+    const suggestion = await prisma.matchSuggestion.findUnique({
+      where: { id: req.params.id },
+      include: { opportunity: true, candidate: { select: { candidateProfile: { select: { fullName: true } } } } },
+    })
+    if (!suggestion) {
+      res.status(404).json({ error: 'Suggestion introuvable.' })
+      return
+    }
+
+    if (role === 'candidate') {
+      if (suggestion.candidateId !== req.session!.sub) {
+        res.status(404).json({ error: 'Suggestion introuvable.' })
+        return
+      }
+      if (suggestion.status !== 'proposee_candidat') {
+        res.status(400).json({ error: 'Cette suggestion ne peut plus être déclinée.' })
+        return
+      }
+      const updated = await prisma.matchSuggestion.update({
+        where: { id: suggestion.id },
+        data: { status: 'ecartee' },
+      })
+      await prisma.auditLog.create({
+        data: {
+          userId: req.session!.sub,
+          action: 'candidate_declined',
+          metadata: { opportunityTitle: suggestion.opportunity.title, suggestionId: suggestion.id },
+        },
+      })
+      res.json({ suggestion: updated })
+      return
+    }
+
+    // role === 'recruiter'
+    if (suggestion.opportunity.recruiterId !== req.session!.sub) {
+      res.status(404).json({ error: 'Suggestion introuvable.' })
+      return
+    }
+    if (!['proposee_recruteur', 'interet_recruteur'].includes(suggestion.status)) {
+      res.status(400).json({ error: 'Cette suggestion ne peut plus être déclinée.' })
+      return
+    }
+    const updated = await prisma.matchSuggestion.update({
+      where: { id: suggestion.id },
+      data: { status: 'ecartee' },
+    })
+    await prisma.auditLog.create({
+      data: {
+        userId: req.session!.sub,
+        action: 'recruiter_declined',
+        metadata: {
+          opportunityTitle: suggestion.opportunity.title,
+          candidateName: suggestion.candidate.candidateProfile?.fullName ?? null,
+          suggestionId: suggestion.id,
+        },
+      },
     })
     res.json({ suggestion: updated })
   } catch (err) {

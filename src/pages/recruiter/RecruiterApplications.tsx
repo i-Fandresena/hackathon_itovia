@@ -1,4 +1,4 @@
-import { Sparkles, Users } from 'lucide-react'
+import { Sparkles, Users, X } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -31,7 +31,7 @@ const STATUS_VARIANT: Record<MatchSuggestionStatus, 'muted' | 'primary' | 'succe
  * l'admin qui débloque ensuite le contact.
  */
 export function RecruiterApplications() {
-  const { receivedSuggestions, hydrated, expressInterest } = useApp()
+  const { receivedSuggestions, hydrated, expressInterest, declineSuggestion } = useApp()
 
   if (!hydrated) return null
 
@@ -65,11 +65,19 @@ export function RecruiterApplications() {
                   </div>
                   <Badge variant={STATUS_VARIANT[s.status]}>{STATUS_LABELS[s.status]}</Badge>
                 </div>
-                {s.status === 'proposee_recruteur' && (
-                  <Button size="sm" style={{ marginTop: '0.75rem' }} onClick={() => expressInterest(s.id)}>
-                    <Sparkles size={14} />
-                    Ce profil m’intéresse
-                  </Button>
+                {(s.status === 'proposee_recruteur' || s.status === 'interet_recruteur') && (
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                    {s.status === 'proposee_recruteur' && (
+                      <Button size="sm" onClick={() => expressInterest(s.id)}>
+                        <Sparkles size={14} />
+                        Ce profil m’intéresse
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => declineSuggestion(s.id)}>
+                      <X size={14} />
+                      Écarter
+                    </Button>
+                  </div>
                 )}
               </Card>
             ))}

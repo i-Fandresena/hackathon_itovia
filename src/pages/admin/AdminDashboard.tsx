@@ -1,12 +1,45 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, LogIn } from 'lucide-react'
 import { FadeUp } from '../../components/motion/Motion'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Loading } from '../../components/ui/Loading'
 import { apiAdminStats, type AdminStats } from '../../lib/api'
 import { formatDate } from '../../lib/format'
+
+type ActivityItem = AdminStats['recentActivity'][number]
+
+/**
+ * Libellés lisibles pour les décisions candidat/recruteur (intérêt/déclin) —
+ * c'est le "suivi des décisions prises par les entreprises" demandé, pas
+ * juste un code d'action brut.
+ */
+function describeActivity(a: ActivityItem): string {
+  const meta = (a.metadata ?? {}) as Record<string, unknown>
+  const opportunityTitle = typeof meta.opportunityTitle === 'string' ? meta.opportunityTitle : null
+  const candidateName = typeof meta.candidateName === 'string' ? meta.candidateName : null
+
+  switch (a.action) {
+    case 'candidate_interested':
+      return `Candidat intéressé — ${opportunityTitle ?? 'offre'}`
+    case 'candidate_declined':
+      return `Candidat a décliné — ${opportunityTitle ?? 'offre'}`
+    case 'recruiter_interested':
+      return `Recruteur intéressé — ${opportunityTitle ?? 'offre'}`
+    case 'recruiter_declined':
+      return candidateName
+        ? `Recruteur a écarté ${candidateName} — ${opportunityTitle ?? 'offre'}`
+        : `Recruteur a écarté un profil — ${opportunityTitle ?? 'offre'}`
+    case 'admin:create_agent':
+      return 'Création d’un compte agent'
+    default:
+      if (a.action.startsWith('moderation:')) {
+        return `Modération — ${a.action.replace('moderation:', '')}`
+      }
+      return a.action
+  }
+}
 
 /**
  * Tableau de bord admin. La modération détaillée vit sur sa propre page
@@ -151,9 +184,26 @@ export function AdminDashboard() {
         </FadeUp>
 
         <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Activité récente</h2>
+
+        {stats.recentLoginCount > 0 && (
+          <Card
+            style={{
+              marginBottom: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              color: 'var(--color-text-muted)',
+              fontSize: '0.85rem',
+            }}
+          >
+            <LogIn size={14} />
+            {stats.recentLoginCount} connexion{stats.recentLoginCount > 1 ? 's' : ''}/déconnexion{stats.recentLoginCount > 1 ? 's' : ''} ces 7 derniers jours
+          </Card>
+        )}
+
         {stats.recentActivity.length === 0 ? (
           <Card>
-            <p style={{ color: 'var(--color-text-muted)' }}>Aucune activité journalisée pour l’instant.</p>
+            <p style={{ color: 'var(--color-text-muted)' }}>Aucune décision journalisée pour l’instant.</p>
           </Card>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -161,7 +211,7 @@ export function AdminDashboard() {
               <Card key={a.id}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <span>
-                    <strong>{a.action}</strong>
+                    <strong>{describeActivity(a)}</strong>
                     {a.userEmail ? ` — ${a.userEmail} (${a.userRole})` : ''}
                   </span>
                   <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
