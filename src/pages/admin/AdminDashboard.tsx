@@ -22,9 +22,9 @@ function describeActivity(a: ActivityItem): string {
 
   switch (a.action) {
     case 'candidate_interested':
-      return `Candidat intéressé — ${opportunityTitle ?? 'offre'}`
+      return `Candidat a postulé — ${opportunityTitle ?? 'offre'}`
     case 'candidate_declined':
-      return `Candidat a décliné — ${opportunityTitle ?? 'offre'}`
+      return `Candidat a annulé sa candidature — ${opportunityTitle ?? 'offre'}`
     case 'recruiter_interested':
       return `Recruteur intéressé — ${opportunityTitle ?? 'offre'}`
     case 'recruiter_declined':

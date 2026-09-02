@@ -116,6 +116,7 @@ export default function App() {
                     backTo="/candidat/offres"
                     canApply
                     canBookmark
+                    hideCompany
                   />
                 </ProtectedRoute>
               }

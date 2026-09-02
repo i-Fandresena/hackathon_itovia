@@ -99,7 +99,9 @@ router.post('/match-suggestions', async (req, res, next) => {
       data: {
         userId: body.candidateId,
         title: 'Nouvelle offre recommandée',
-        message: `OffRec vous recommande « ${opportunity.title} » chez ${opportunity.companyName}.`,
+        // Jamais l'identité de l'entreprise avant une mise en relation
+        // confirmée (décision produit 2026-09-02).
+        message: `OffRec vous recommande « ${opportunity.title} ».`,
       },
     })
 

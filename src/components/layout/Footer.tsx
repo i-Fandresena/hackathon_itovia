@@ -18,9 +18,11 @@ export function Footer() {
           <Link to="/connexion">Connexion</Link>
         </div>
         <div>
-          <p className="footer-heading">Contact démo</p>
-          <p>contact@offrec.mg</p>
-          <p>Prototype hackathon 2026</p>
+          <p className="footer-heading">Contact</p>
+          <p>contact@qualitec.mg</p>
+          <p>+261 38 64 234 49</p>
+          <p>+261 36 324 83</p>
+          <p>+261 34 50 305 27</p>
         </div>
       </div>
       <div className="container footer-bottom">

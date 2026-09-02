@@ -53,8 +53,8 @@ export function CandidateOpportunities() {
         <header className="page-header">
           <h1>Offres recommandées</h1>
           <p>
-            Sélectionnées par OffRec pour votre profil — pas de candidature à
-            envoyer, dites simplement si une offre vous intéresse.
+            Sélectionnées par OffRec pour votre profil — postulez en un clic,
+            OffRec s’occupe du reste.
           </p>
         </header>
 
@@ -77,6 +77,7 @@ export function CandidateOpportunities() {
                 detailPath={`/candidat/offres/${opportunity.id}`}
                 bookmarked={isBookmarked(opportunity.id)}
                 onBookmark={() => toggleBookmark(opportunity.id)}
+                hideCompany
               />
             ))}
           </div>

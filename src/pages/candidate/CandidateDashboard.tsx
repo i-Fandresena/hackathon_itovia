@@ -89,6 +89,7 @@ export function CandidateDashboard() {
               detailPath={`/candidat/offres/${opportunity.id}`}
               bookmarked={isBookmarked(opportunity.id)}
               onBookmark={() => toggleBookmark(opportunity.id)}
+              hideCompany
             />
           ))}
         </div>

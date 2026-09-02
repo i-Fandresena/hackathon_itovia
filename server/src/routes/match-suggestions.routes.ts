@@ -124,10 +124,12 @@ router.post('/:id/interest', async (req, res, next) => {
 })
 
 /**
- * Décliner un profil proposé — le désélectionne (il sort de `/received`/
+ * Décliner/annuler — le candidat peut annuler sa candidature à tout moment
+ * avant la mise en relation (pas seulement à la proposition initiale) ; le
+ * recruteur écarte un profil proposé. Désélectionne (sort de `/received`/
  * `/mine`) et journalise la décision pour l'admin, symétrique de
- * `/interest`. Le candidat/recruteur ne fait que décider, jamais
- * l'admin qui seul fait ensuite avancer le dossier.
+ * `/interest`. Le candidat/recruteur ne fait que décider, jamais l'admin
+ * qui seul fait ensuite avancer le dossier.
  */
 router.post('/:id/decline', async (req, res, next) => {
   try {
@@ -150,8 +152,8 @@ router.post('/:id/decline', async (req, res, next) => {
         res.status(404).json({ error: 'Suggestion introuvable.' })
         return
       }
-      if (suggestion.status !== 'proposee_candidat') {
-        res.status(400).json({ error: 'Cette suggestion ne peut plus être déclinée.' })
+      if (['mise_en_relation', 'ecartee'].includes(suggestion.status)) {
+        res.status(400).json({ error: 'Cette candidature ne peut plus être annulée.' })
         return
       }
       const updated = await prisma.matchSuggestion.update({

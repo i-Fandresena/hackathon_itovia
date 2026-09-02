@@ -20,6 +20,9 @@ interface OpportunityDetailProps {
   backTo: string
   canApply?: boolean
   canBookmark?: boolean
+  /** Espace candidat : jamais l'identité de l'entreprise avant une mise en
+   *  relation confirmée par OffRec (décision produit 2026-09-02). */
+  hideCompany?: boolean
 }
 
 export function OpportunityDetail({
@@ -28,11 +31,19 @@ export function OpportunityDetail({
   backTo,
   canApply,
   canBookmark,
+  hideCompany,
 }: OpportunityDetailProps) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { opportunities, currentUser, isBookmarked, toggleBookmark, getSuggestionForOpportunity, expressInterest } =
-    useApp()
+  const {
+    opportunities,
+    currentUser,
+    isBookmarked,
+    toggleBookmark,
+    getSuggestionForOpportunity,
+    expressInterest,
+    declineSuggestion,
+  } = useApp()
   const [feedback, setFeedback] = useState('')
 
   const opportunity = opportunities.find((o) => o.id === id)
@@ -50,10 +61,16 @@ export function OpportunityDetail({
     )
   }
 
-  const handleInterest = async () => {
+  const handleApply = async () => {
     if (!suggestion) return
     const result = await expressInterest(suggestion.id)
-    setFeedback(result.ok ? 'Votre intérêt a été transmis à OffRec.' : result.error ?? 'Erreur')
+    setFeedback(result.ok ? 'Votre candidature a été transmise à OffRec.' : result.error ?? 'Erreur')
+  }
+
+  const handleCancel = async () => {
+    if (!suggestion) return
+    const result = await declineSuggestion(suggestion.id)
+    setFeedback(result.ok ? 'Votre candidature a été annulée.' : result.error ?? 'Erreur')
   }
 
   return (
@@ -68,7 +85,7 @@ export function OpportunityDetail({
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
             <div>
               <h1>{opportunity.title}</h1>
-              <p>{opportunity.companyName}</p>
+              {!hideCompany && <p>{opportunity.companyName}</p>}
             </div>
             {canBookmark && (
               <Button
@@ -150,25 +167,31 @@ export function OpportunityDetail({
           <Card>
             <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Sparkles size={18} />
-              Cette offre vous intéresse ?
+              {suggestion.status === 'proposee_candidat' ? 'Postuler à cette offre' : 'Votre candidature'}
             </h2>
             {suggestion.status === 'proposee_candidat' ? (
               <>
                 <p style={{ color: 'var(--color-ink-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
-                  Dites-le à OffRec : si l’entreprise est intéressée elle aussi, nous
-                  vous mettrons en relation directement — pas besoin de candidature ni
-                  de message à rédiger.
+                  OffRec s’occupe de la mise en relation si l’entreprise est
+                  intéressée elle aussi — pas de message à rédiger.
                 </p>
-                <Button onClick={handleInterest}>Je suis intéressé·e</Button>
+                <Button onClick={handleApply}>Postuler</Button>
               </>
             ) : (
-              <p style={{ color: 'var(--color-accent)', fontWeight: 600 }}>
-                {suggestion.status === 'interet_candidat' && 'Votre intérêt a été transmis à OffRec.'}
-                {suggestion.status === 'proposee_recruteur' && 'OffRec a transmis votre profil à l’entreprise.'}
-                {suggestion.status === 'interet_recruteur' && "L'entreprise est intéressée — OffRec finalise la mise en relation."}
-                {suggestion.status === 'mise_en_relation' && 'Vous êtes mis en relation — retrouvez la conversation dans Messages.'}
-                {suggestion.status === 'ecartee' && 'Cette suggestion a été écartée.'}
-              </p>
+              <>
+                <p style={{ color: 'var(--color-accent)', fontWeight: 600, marginBottom: suggestion.status !== 'mise_en_relation' && suggestion.status !== 'ecartee' ? '0.75rem' : 0 }}>
+                  {suggestion.status === 'interet_candidat' && 'Votre candidature a été transmise à OffRec.'}
+                  {suggestion.status === 'proposee_recruteur' && 'OffRec a transmis votre candidature à l’entreprise.'}
+                  {suggestion.status === 'interet_recruteur' && "L'entreprise est intéressée — OffRec finalise la mise en relation."}
+                  {suggestion.status === 'mise_en_relation' && 'Vous êtes mis en relation — retrouvez la conversation dans Messages.'}
+                  {suggestion.status === 'ecartee' && 'Cette candidature a été annulée.'}
+                </p>
+                {suggestion.status !== 'mise_en_relation' && suggestion.status !== 'ecartee' && (
+                  <Button variant="outline" onClick={handleCancel}>
+                    Annuler ma candidature
+                  </Button>
+                )}
+              </>
             )}
             {feedback && (
               <p style={{ marginTop: '0.75rem', fontSize: '0.9rem' }}>{feedback}</p>

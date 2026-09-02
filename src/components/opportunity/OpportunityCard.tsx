@@ -16,6 +16,9 @@ interface OpportunityCardProps {
   bookmarked?: boolean
   onBookmark?: () => void
   showMatch?: boolean
+  /** Espace candidat : jamais l'identité de l'entreprise avant une mise en
+   *  relation confirmée par OffRec (décision produit 2026-09-02). */
+  hideCompany?: boolean
 }
 
 export function OpportunityCard({
@@ -25,6 +28,7 @@ export function OpportunityCard({
   bookmarked,
   onBookmark,
   showMatch,
+  hideCompany,
 }: OpportunityCardProps) {
   return (
     <Card className="opp-card">
@@ -36,7 +40,7 @@ export function OpportunityCard({
           <h3>
             <Link to={detailPath}>{opportunity.title}</Link>
           </h3>
-          <p className="opp-company">{opportunity.companyName}</p>
+          {!hideCompany && <p className="opp-company">{opportunity.companyName}</p>}
         </div>
         {onBookmark && (
           <button
