@@ -45,6 +45,7 @@ import type {
   Provider,
   Recommendation,
   RecruiterProfile,
+  TalentAccountProfile,
   User,
   UserRole,
 } from '../types'
@@ -93,7 +94,8 @@ interface AppContextValue {
     email: string,
     password: string,
     role: UserRole,
-    profile: CandidateProfile | RecruiterProfile | IndividualProfile,
+    profile: CandidateProfile | RecruiterProfile | IndividualProfile | TalentAccountProfile,
+    verificationToken: string,
   ) => Promise<Result>
   updateCandidateProfile: (profile: CandidateProfile) => Promise<Result>
   addOpportunity: (opp: OpportunityInput) => Promise<Result & { opportunity?: Opportunity }>
@@ -245,16 +247,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       email: string,
       password: string,
       role: UserRole,
-      profile: CandidateProfile | RecruiterProfile | IndividualProfile,
+      profile: CandidateProfile | RecruiterProfile | IndividualProfile | TalentAccountProfile,
+      verificationToken: string,
     ) => {
       try {
         const { user } = await apiRegister({
           email,
           password,
           role,
+          verificationToken,
           candidateProfile: role === 'candidate' ? (profile as CandidateProfile) : undefined,
           recruiterProfile: role === 'recruiter' ? (profile as RecruiterProfile) : undefined,
           individualProfile: role === 'particulier' ? (profile as IndividualProfile) : undefined,
+          talentAccountProfile: role === 'talent' ? (profile as TalentAccountProfile) : undefined,
         })
         setCurrentUser(user)
         await loadRoleScopedData(user)

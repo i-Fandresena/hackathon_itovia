@@ -99,6 +99,14 @@ router.post('/talents', async (req, res, next) => {
       })
       if (fromLeadId) {
         await tx.talentLead.update({ where: { id: fromLeadId }, data: { status: 'converti' } })
+        // Si la personne a créé un compte de suivi après sa demande de
+        // contact, on le relie au profil désormais réel — c'est ce qui
+        // fait apparaître le vrai statut dans "Mon espace" (§7.3.14 : le
+        // compte n'a fait qu'observer, l'agent seul a créé ce profil).
+        await tx.talentAccountProfile.updateMany({
+          where: { leadId: fromLeadId },
+          data: { talentId: created.id },
+        })
       }
       return created
     })

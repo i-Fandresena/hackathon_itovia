@@ -1,0 +1,129 @@
+.verify-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(12, 14, 18, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.verify-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 2rem 1.75rem 1.75rem;
+}
+
+.verify-modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.verify-modal-close:hover {
+  background: var(--color-border-strong);
+  color: var(--color-ink);
+}
+
+.verify-modal-title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  color: var(--color-ink);
+  margin: 0 0 0.6rem;
+}
+
+.verify-modal-text {
+  font-size: 0.875rem;
+  color: var(--color-ink-secondary);
+  line-height: 1.5;
+  margin: 0 0 1.5rem;
+}
+
+.verify-modal-digits {
+  display: flex;
+  gap: 0.65rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.verify-modal-digit {
+  width: 3rem;
+  height: 3.5rem;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  color: var(--color-ink);
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.verify-modal-digit:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+.verify-modal-error {
+  font-size: 0.8125rem;
+  color: var(--color-danger);
+  text-align: center;
+  margin: 0 0 1rem;
+}
+
+.verify-modal-hint {
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+  line-height: 1.5;
+  text-align: center;
+  margin: 0 0 1.25rem;
+}
+
+.verify-modal-resend {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: none;
+  border: none;
+  color: var(--color-accent-hover);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5rem;
+}
+
+.verify-modal-resend:disabled {
+  color: var(--color-ink-faint);
+  cursor: default;
+}
+
+@media (max-width: 480px) {
+  .verify-modal {
+    padding: 1.75rem 1.25rem 1.5rem;
+  }
+
+  .verify-modal-digit {
+    width: 2.75rem;
+    height: 3.25rem;
+  }
+}

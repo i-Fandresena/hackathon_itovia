@@ -75,7 +75,7 @@ sa verticale.
 | Artisan / fournisseur / transporteur | Annuaire | Être trouvé, revendiquer sa fiche, construire une réputation vérifiable | `/annuaire/:id` (fiche), revendication de fiche (non encore implémentée, voir §8) |
 | Partenaire B2B local (quincaillerie, microfinance, programme habitat/emploi, association professionnelle) | Annuaire | Identifier un réseau local plus vérifiable, co-financer la collecte | Aucune surface produit dédiée aujourd'hui — relation commerciale hors app, prévue Phase C/D (§8) |
 | Talent diplômé (jeune diplômé, freelance) | Emploi | Créer son profil, déposer un CV, être matché à des offres, postuler, suivre ses candidatures | `/candidat/*` (rôle `candidate`, existant) |
-| Talent non-diplômé (économie informelle, compétent mais sans diplôme) | Emploi | Voir ses compétences vérifiées par un agent, être recommandé à des entreprises sans barrière du diplôme | Profil créé et géré **par un agent de terrain** (§4.1 du cahier MVP) — pas de compte de connexion propre au MVP, voir §8 |
+| Talent non-diplômé (économie informelle, compétent mais sans diplôme) | Emploi | Voir ses compétences vérifiées par un agent, être recommandé à des entreprises sans barrière du diplôme | Profil vérifié créé et géré **exclusivement par un agent de terrain** (§4.1 du cahier MVP, §7.3 règle 14) ; un compte de connexion "de suivi" optionnel (rôle `talent`) permet de voir son statut, sans pouvoir sur le profil — voir §8 |
 | Agent de terrain | Emploi | Créer et vérifier des profils de talents non-diplômés, suivre ses propres indicateurs | Nouveau rôle `agent`, back-office dédié — voir §8 |
 | Entreprise | Emploi | Publier des offres, recevoir une shortlist distinguant profils vérifiés humainement et profils matchés par IA, contacter, suivre le success fee d'un placement | `/recruteur/*` (rôle `recruiter`, existant) |
 | Administrateur OffRec | Les deux | Superviser utilisateurs, offres, annuaire, KPIs pilote (dont le KPI d'inclusion féminine), statuts financiers | `/admin/*` |
@@ -420,10 +420,16 @@ temps que l'implémentation.
 **Phase F — RBAC emploi : rôle agent et talents non-diplômés**
 - [ ] Nouveau rôle `agent` (RBAC serveur, §7.3) : back-office dédié, sans
   accès aux fonctions candidat/recruteur/particulier/admin.
-- [ ] Entité talent non-diplômé : créée et modifiée uniquement par l'agent
-  qui la suit (pas de compte de connexion propre au MVP — décision du
-  2026-09-01, voir décisions produit) ; champs nom, contact, localisation,
-  compétences déclarées, disponibilité, **genre (obligatoire)**.
+- [x] Entité talent non-diplômé : créée et modifiée **uniquement par l'agent**
+  qui la suit (§7.3 règle 14, inchangée) ; champs nom, contact, localisation,
+  compétences déclarées, disponibilité, **genre (obligatoire)**. Décision du
+  2026-09-01 (pas de compte de connexion propre au MVP) **révisée le
+  2026-09-02** : un compte de connexion "de suivi" (`TalentAccountProfile`)
+  peut désormais être créé en self-service après une demande de contact
+  (`TalentLead`), mais il n'a **aucun pouvoir d'écriture** sur le profil
+  vérifié — il observe seulement le statut (lead puis, une fois lié, le
+  `TalentProfile` réel). Le profil vérifié et la grille de compétences
+  restent exclusivement créés/remplis par l'agent.
 - [ ] Grille de vérification de compétences standardisée par métier
   (checklist + note qualitative de l'agent) — un référentiel par métier, pas
   un champ libre (§7.3, règle 15).

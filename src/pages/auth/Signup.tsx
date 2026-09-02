@@ -1,14 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { ACTIVE_SECTORS, GENDER_LABELS, PROVINCES, SECTOR_LABELS, SECTORS, TRADES, TRADE_SECTOR } from '../../data/constants'
 import { useApp } from '../../context/AppContext'
-import { apiSubmitTalentLead } from '../../lib/api'
+import { ApiError, apiSendVerificationCode, apiSubmitTalentLead } from '../../lib/api'
 import { homePathForRole } from '../../lib/roles'
 import { LogoMark } from '../../components/brand/Logo'
 import { AnimatedIcon } from '../../components/ui/AnimatedIcon'
-import type { Gender, Sector, UserRole } from '../../types'
+import { EmailVerificationModal } from '../../components/auth/EmailVerificationModal'
+import type { Gender, Sector, TalentLead, UserRole } from '../../types'
 import './Auth.css'
 
 const ROLE_OPTIONS: { role: UserRole; label: string; icon: 'target' | 'briefcase' | 'search' }[] = [
@@ -52,7 +53,8 @@ export function Signup() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [leadSubmitted, setLeadSubmitted] = useState(false)
+  const [submittedLead, setSubmittedLead] = useState<TalentLead | null>(null)
+  const [showVerifyModal, setShowVerifyModal] = useState(false)
 
   useEffect(() => {
     if (currentUser) {
@@ -69,7 +71,7 @@ export function Signup() {
 
     if (isNonDiplomaPath) {
       try {
-        await apiSubmitTalentLead({
+        const lead = await apiSubmitTalentLead({
           fullName,
           phone,
           province,
@@ -79,7 +81,7 @@ export function Signup() {
           sector: TRADE_SECTOR[trade as (typeof TRADES)[number]],
           message: message.trim() || undefined,
         })
-        setLeadSubmitted(true)
+        setSubmittedLead(lead)
       } catch {
         setError('Impossible d’envoyer votre demande. Veuillez réessayer.')
       }
@@ -87,41 +89,75 @@ export function Signup() {
       return
     }
 
+    // Un compte n'est jamais créé avant que l'email ne soit vérifié — la
+    // modale s'ouvre ici, register() n'est appelé qu'au succès (onVerified).
+    try {
+      await apiSendVerificationCode(email)
+      setShowVerifyModal(true)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Impossible d’envoyer le code de vérification.')
+    }
+    setLoading(false)
+  }
+
+  const handleVerified = async (verificationToken: string) => {
+    setShowVerifyModal(false)
+    setLoading(true)
+    setError('')
+
     let result
     if (role === 'candidate') {
-      result = await register(email, password, 'candidate', {
-        fullName,
+      result = await register(
         email,
-        phone,
-        province,
-        city: province,
-        gender,
-        educationLevel: 'licence',
-        skills: [],
-        experienceLevel: 'debutant',
-        desiredOpportunityTypes: ['emploi', 'stage'],
-        availability: 'flexible',
-        sector: sector || undefined,
-      })
+        password,
+        'candidate',
+        {
+          fullName,
+          email,
+          phone,
+          province,
+          city: province,
+          gender,
+          educationLevel: 'licence',
+          skills: [],
+          experienceLevel: 'debutant',
+          desiredOpportunityTypes: ['emploi', 'stage'],
+          availability: 'flexible',
+          sector: sector || undefined,
+        },
+        verificationToken,
+      )
       if (result.ok) { navigate('/candidat/profil'); return }
     } else if (role === 'recruiter') {
-      result = await register(email, password, 'recruiter', {
-        companyName,
+      result = await register(
         email,
-        phone,
-        province,
-        city: province,
-        sector: sector || 'autre',
-      })
+        password,
+        'recruiter',
+        {
+          companyName,
+          email,
+          phone,
+          province,
+          city: province,
+          sector: sector || 'autre',
+        },
+        verificationToken,
+      )
       if (result.ok) { navigate('/recruteur'); return }
     } else {
-      result = await register(email, password, 'particulier', {
-        fullName,
+      result = await register(
         email,
-        phone,
-        province,
-        city: province,
-      })
+        password,
+        'particulier',
+        {
+          fullName,
+          email,
+          phone,
+          province,
+          city: province,
+        },
+        verificationToken,
+      )
       if (result.ok) { navigate('/particulier'); return }
     }
 
@@ -192,7 +228,7 @@ export function Signup() {
                 key={o.role}
                 type="button"
                 className={`signup-role-btn ${role === o.role ? 'active' : ''}`}
-                onClick={() => { setRole(o.role); setLeadSubmitted(false); setError('') }}
+                onClick={() => { setRole(o.role); setSubmittedLead(null); setError('') }}
               >
                 {role === o.role && (
                   <motion.span
@@ -222,7 +258,7 @@ export function Signup() {
                 <button
                   type="button"
                   className={`signup-role-btn ${candidatePath === 'diplome' ? 'active' : ''}`}
-                  onClick={() => { setCandidatePath('diplome'); setLeadSubmitted(false); setError('') }}
+                  onClick={() => { setCandidatePath('diplome'); setSubmittedLead(null); setError('') }}
                 >
                   {candidatePath === 'diplome' && (
                     <motion.span layoutId="signup-path-pill" className="signup-role-pill" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />
@@ -232,7 +268,7 @@ export function Signup() {
                 <button
                   type="button"
                   className={`signup-role-btn ${candidatePath === 'non_diplome' ? 'active' : ''}`}
-                  onClick={() => { setCandidatePath('non_diplome'); setLeadSubmitted(false); setError('') }}
+                  onClick={() => { setCandidatePath('non_diplome'); setSubmittedLead(null); setError('') }}
                 >
                   {candidatePath === 'non_diplome' && (
                     <motion.span layoutId="signup-path-pill" className="signup-role-pill" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />
@@ -248,10 +284,37 @@ export function Signup() {
             </>
           )}
 
-          {leadSubmitted ? (
+          {submittedLead ? (
             <div className="split-success">
-              Votre demande a bien été envoyée. Un agent de terrain OffRec vous
-              contactera au {phone} pour vérifier votre métier.
+              <p>
+                Votre demande a bien été envoyée. Un agent de terrain OffRec vous
+                contactera au {phone} pour vérifier votre métier.
+              </p>
+              <p className="split-success-hint">
+                Vous pouvez aussi créer un compte de suivi dès maintenant pour
+                voir l’avancement de votre demande depuis votre espace.
+              </p>
+              <motion.button
+                type="button"
+                className="split-submit-btn split-success-cta"
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() =>
+                  navigate('/inscription-talent', {
+                    state: {
+                      leadId: submittedLead.id,
+                      fullName: submittedLead.fullName,
+                      phone: submittedLead.phone,
+                      province: submittedLead.province,
+                      city: submittedLead.city,
+                      gender: submittedLead.gender,
+                    },
+                  })
+                }
+              >
+                Poursuivre vers l’inscription
+                <ArrowRight size={16} />
+              </motion.button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="split-form" noValidate>
@@ -457,6 +520,14 @@ export function Signup() {
           )}
         </div>
       </motion.div>
+
+      {showVerifyModal && (
+        <EmailVerificationModal
+          email={email}
+          onVerified={handleVerified}
+          onClose={() => { setShowVerifyModal(false); setLoading(false) }}
+        />
+      )}
     </div>
   )
 }

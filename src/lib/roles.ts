@@ -6,6 +6,7 @@ const HOME_PATH: Record<UserRole, string> = {
   particulier: '/particulier',
   admin: '/admin',
   agent: '/agent',
+  talent: '/mon-espace',
 }
 
 /** Espace d'accueil d'un rôle une fois connecté. */

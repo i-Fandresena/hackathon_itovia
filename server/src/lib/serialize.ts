@@ -6,6 +6,7 @@ type UserWithProfiles = Prisma.UserGetPayload<{
     recruiterProfile: true
     individualProfile: true
     agentProfile: true
+    talentAccountProfile: true
     member: true
   }
 }>
@@ -21,6 +22,7 @@ export function serializeUser(user: UserWithProfiles) {
     recruiterProfile: user.recruiterProfile ?? undefined,
     individualProfile: user.individualProfile ?? undefined,
     agentProfile: user.agentProfile ?? undefined,
+    talentAccountProfile: user.talentAccountProfile ?? undefined,
     /** Identité communautaire (annuaire) : absente tant que l'utilisateur n'a rien publié. */
     memberId: user.member?.id ?? null,
   }

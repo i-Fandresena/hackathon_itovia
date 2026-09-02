@@ -13,6 +13,10 @@ enum UserRole {
   particulier
   admin
   agent
+  /// Compte de suivi pour un talent non-diplômé (§7.3.14 inchangé : ce
+  /// compte observe son statut, il ne crée ni ne modifie jamais le
+  /// TalentProfile vérifié — toujours créé par l'agent).
+  talent
 }
 
 enum Gender {
@@ -139,6 +143,23 @@ enum LeadStatus {
   ignore
 }
 
+/// Code de vérification d'email à 4 chiffres, requis avant la création de
+/// tout compte (`POST /auth/register`) — jamais de compte non vérifié en
+/// base. `token` est généré une fois le code validé (ou le lien email
+/// cliqué) et consommé à usage unique par `/auth/register`.
+model EmailVerification {
+  id         String    @id @default(uuid())
+  email      String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  token      String?   @unique
+  createdAt  DateTime  @default(now())
+
+  @@index([email])
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -147,11 +168,12 @@ model User {
   status       UserStatus @default(active)
   createdAt    DateTime   @default(now())
 
-  candidateProfile  CandidateProfile?
-  recruiterProfile  RecruiterProfile?
-  individualProfile IndividualProfile?
-  agentProfile      AgentProfile?
-  member            Member?
+  candidateProfile      CandidateProfile?
+  recruiterProfile      RecruiterProfile?
+  individualProfile     IndividualProfile?
+  agentProfile          AgentProfile?
+  talentAccountProfile  TalentAccountProfile?
+  member                Member?
 
   opportunities Opportunity[]  @relation("RecruiterOpportunities")
   applications  Application[]
@@ -510,14 +532,17 @@ model TalentProfile {
   verifications TalentVerification[]
   proposals     TalentOpportunityProposal[]
   placements    Placement[]
+  accountProfile TalentAccountProfile?
 
   @@index([agentId])
 }
 
 /// Demande de contact "je n'ai pas de diplôme mais je sais faire un
-/// métier" déposée en self-service à l'inscription — ne crée aucun compte
-/// de connexion (§7.3.14, décision produit 2026-09-02). Un agent reprend
-/// la demande et crée lui-même le TalentProfile correspondant.
+/// métier" déposée en self-service à l'inscription. Ne crée jamais elle-
+/// même de TalentProfile — un agent reprend la demande et le crée
+/// (§7.3.14). Peut en revanche être liée à un TalentAccountProfile
+/// (compte de suivi, décision produit 2026-09-02) si la personne choisit
+/// de "poursuivre vers l'inscription" après sa demande.
 model TalentLead {
   id        String     @id @default(uuid())
   fullName  String
@@ -531,7 +556,30 @@ model TalentLead {
   status    LeadStatus @default(nouveau)
   createdAt DateTime   @default(now())
 
+  accountProfile TalentAccountProfile?
+
   @@index([status])
+}
+
+/// Compte de suivi d'un talent non-diplômé (décision produit 2026-09-02) :
+/// un vrai compte de connexion, mais qui n'a AUCUN pouvoir d'écriture sur
+/// TalentProfile — il observe uniquement le statut de la demande (`lead`)
+/// puis, une fois qu'un agent l'a repris, le statut réel du profil vérifié
+/// (`talent`). Le profil vérifié et la grille de compétences restent
+/// exclusivement créés/remplis par l'agent (§7.3.14 inchangé).
+model TalentAccountProfile {
+  userId   String  @id
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName String
+  phone    String
+  province String
+  city     String
+  gender   Gender
+
+  leadId   String?     @unique
+  lead     TalentLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  talentId String?     @unique
+  talent   TalentProfile? @relation(fields: [talentId], references: [id], onDelete: SetNull)
 }
 
 /// Un enregistrement par événement de vérification : historique conservé,

@@ -43,6 +43,7 @@ const USER_INCLUDE = {
   recruiterProfile: true,
   individualProfile: true,
   agentProfile: true,
+  talentAccountProfile: true,
   member: true,
 } as const
 
@@ -58,10 +59,21 @@ function setSessionCookie(res: import('express').Response, token: string): void 
 router.post('/register', authLimiter, async (req, res, next) => {
   try {
     const body = registerSchema.parse(req.body)
+    const email = body.email.toLowerCase()
 
-    const existing = await prisma.user.findUnique({ where: { email: body.email.toLowerCase() } })
+    const existing = await prisma.user.findUnique({ where: { email } })
     if (existing) {
       res.status(409).json({ error: 'Un compte existe déjà avec cet email.' })
+      return
+    }
+
+    // Aucun compte n'est créé sans email vérifié — jamais de compte "en
+    // attente de confirmation" laissé en base.
+    const verification = await prisma.emailVerification.findUnique({
+      where: { token: body.verificationToken },
+    })
+    if (!verification || verification.email !== email || !verification.verifiedAt) {
+      res.status(400).json({ error: 'Vérification email invalide ou expirée. Recommencez.' })
       return
     }
 
@@ -77,19 +89,30 @@ router.post('/register', authLimiter, async (req, res, next) => {
       res.status(400).json({ error: 'Profil particulier requis.' })
       return
     }
+    if (body.role === 'talent' && !body.talentAccountProfile) {
+      res.status(400).json({ error: 'Profil requis.' })
+      return
+    }
 
     const passwordHash = await bcrypt.hash(body.password, 12)
 
-    const user = await prisma.user.create({
-      data: {
-        email: body.email.toLowerCase(),
-        passwordHash,
-        role: body.role,
-        candidateProfile: body.candidateProfile ? { create: body.candidateProfile } : undefined,
-        recruiterProfile: body.recruiterProfile ? { create: body.recruiterProfile } : undefined,
-        individualProfile: body.individualProfile ? { create: body.individualProfile } : undefined,
-      },
-      include: USER_INCLUDE,
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          role: body.role,
+          candidateProfile: body.candidateProfile ? { create: body.candidateProfile } : undefined,
+          recruiterProfile: body.recruiterProfile ? { create: body.recruiterProfile } : undefined,
+          individualProfile: body.individualProfile ? { create: body.individualProfile } : undefined,
+          talentAccountProfile: body.talentAccountProfile ? { create: body.talentAccountProfile } : undefined,
+        },
+        include: USER_INCLUDE,
+      })
+      // Token à usage unique : une fois le compte créé, il ne doit plus
+      // pouvoir servir à en créer un autre.
+      await tx.emailVerification.delete({ where: { id: verification.id } })
+      return created
     })
 
     await prisma.auditLog.create({

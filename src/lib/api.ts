@@ -13,6 +13,7 @@ import type {
   Recommendation,
   RecruiterProfile,
   Sector,
+  TalentAccountProfile,
   TalentLead,
   TalentProfile,
   TalentVerification,
@@ -83,14 +84,48 @@ export function apiRegister(payload: {
   email: string
   password: string
   role: UserRole
+  verificationToken: string
   candidateProfile?: CandidateProfile
   recruiterProfile?: RecruiterProfile
   individualProfile?: IndividualProfile
+  talentAccountProfile?: Omit<TalentAccountProfile, 'email'>
 }) {
   return request<{ user: ApiUser }>('/auth/register', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+/* ------------------------------------------------------------------ */
+/* Vérification d'email                                               */
+/* ------------------------------------------------------------------ */
+
+export function apiSendVerificationCode(email: string) {
+  return request<{ ok: true }>('/verification/send-code', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function apiVerifyCode(email: string, code: string) {
+  return request<{ token: string }>('/verification/verify-code', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  })
+}
+
+/** Sondé pendant que la modale est ouverte : détecte une vérification
+ *  faite via le lien cliqué dans l'email, dans un autre onglet. */
+export function apiVerificationStatus(email: string) {
+  return request<{ verified: boolean; token?: string }>(
+    `/verification/status?email=${encodeURIComponent(email)}`,
+  )
+}
+
+export function apiConfirmVerificationLink(token: string) {
+  return request<{ ok: true; email: string }>(
+    `/verification/confirm?token=${encodeURIComponent(token)}`,
+  )
 }
 
 export function apiLogout() {
@@ -505,6 +540,24 @@ export function apiUpdateLeadStatus(id: string, status: TalentLead['status']) {
     method: 'PATCH',
     body: JSON.stringify({ status }),
   }).then((r) => r.lead)
+}
+
+/* ------------------------------------------------------------------ */
+/* Compte de suivi (talent non-diplômé)                               */
+/* ------------------------------------------------------------------ */
+
+export interface TalentAccountMe {
+  fullName: string
+  phone: string
+  province: string
+  city: string
+  gender: 'femme' | 'homme' | 'autre'
+  lead: TalentLead | null
+  talent: TalentDetail | null
+}
+
+export function apiTalentAccountMe() {
+  return request<{ account: TalentAccountMe }>('/talent-account/me').then((r) => r.account)
 }
 
 /* ------------------------------------------------------------------ */

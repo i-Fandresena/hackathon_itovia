@@ -41,13 +41,35 @@ export const individualProfileSchema = z.object({
   city: z.string().min(2),
 })
 
+/** Compte de suivi d'un talent non-diplômé — jamais de pouvoir d'écriture
+ *  sur TalentProfile, voir schema.prisma TalentAccountProfile. */
+export const talentAccountProfileSchema = z.object({
+  fullName: z.string().min(2),
+  phone: z.string().min(6),
+  province: z.string().min(2),
+  city: z.string().min(2),
+  gender: z.enum(genders),
+  leadId: z.string().uuid().optional(),
+})
+
 export const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères.'),
-  role: z.enum(['candidate', 'recruiter', 'particulier']),
+  role: z.enum(['candidate', 'recruiter', 'particulier', 'talent']),
+  verificationToken: z.string().min(1, 'Vérification email requise.'),
   candidateProfile: candidateProfileSchema.optional(),
   recruiterProfile: recruiterProfileSchema.optional(),
   individualProfile: individualProfileSchema.optional(),
+  talentAccountProfile: talentAccountProfileSchema.optional(),
+})
+
+export const sendVerificationCodeSchema = z.object({
+  email: z.string().email(),
+})
+
+export const verifyCodeSchema = z.object({
+  email: z.string().email(),
+  code: z.string().regex(/^\d{4}$/, 'Le code doit contenir 4 chiffres.'),
 })
 
 export const loginSchema = z.object({

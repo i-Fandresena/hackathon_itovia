@@ -5,6 +5,9 @@ import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/auth/Login'
 import { Signup } from './pages/auth/Signup'
+import { VerifyEmailLink } from './pages/auth/VerifyEmailLink'
+import { TalentAccountSignup } from './pages/auth/TalentAccountSignup'
+import { TalentSpace } from './pages/talent/TalentSpace'
 import { CandidateDashboard } from './pages/candidate/CandidateDashboard'
 import { CandidateProfile } from './pages/candidate/CandidateProfile'
 import { CandidateOpportunities } from './pages/candidate/CandidateOpportunities'
@@ -40,9 +43,19 @@ export default function App() {
               retour vers la landing (voir Auth.css `.split-back-link`). */}
           <Route path="connexion" element={<Login />} />
           <Route path="inscription" element={<Signup />} />
+          <Route path="inscription-talent" element={<TalentAccountSignup />} />
+          <Route path="verification-email" element={<VerifyEmailLink />} />
 
           <Route element={<Layout />}>
             <Route index element={<Landing />} />
+            <Route
+              path="mon-espace"
+              element={
+                <ProtectedRoute role="talent">
+                  <TalentSpace />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="offres/:id"
               element={

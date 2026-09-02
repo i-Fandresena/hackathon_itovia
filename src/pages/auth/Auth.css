@@ -278,6 +278,26 @@
   line-height: 1.5;
 }
 
+.split-success p {
+  margin: 0 0 0.6rem;
+}
+
+.split-success-hint {
+  color: #166534;
+  opacity: 0.85;
+  font-size: 0.85rem;
+}
+
+.split-success-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: auto;
+  margin-top: 0.4rem;
+  padding: 0.65rem 1.25rem;
+}
+
 .split-subtoggle-hint {
   font-size: 0.8125rem;
   color: #6b7280;

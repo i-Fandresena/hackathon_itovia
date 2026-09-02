@@ -1,4 +1,4 @@
-export type UserRole = 'candidate' | 'recruiter' | 'particulier' | 'admin' | 'agent'
+export type UserRole = 'candidate' | 'recruiter' | 'particulier' | 'admin' | 'agent' | 'talent'
 
 export type Gender = 'femme' | 'homme' | 'autre'
 
@@ -112,6 +112,7 @@ export interface User {
   recruiterProfile?: RecruiterProfile
   individualProfile?: IndividualProfile
   agentProfile?: AgentProfile
+  talentAccountProfile?: TalentAccountProfile
   createdAt: string
 }
 
@@ -150,6 +151,19 @@ export interface TalentLead {
   message?: string
   status: LeadStatus
   createdAt: string
+}
+
+/** Compte de suivi d'un talent non-diplômé — observe son statut, ne peut
+ *  jamais créer ni modifier son propre TalentProfile (§7.3.14). */
+export interface TalentAccountProfile {
+  fullName: string
+  email: string
+  phone: string
+  province: string
+  city: string
+  gender: Gender
+  leadId?: string
+  talentId?: string
 }
 
 export interface TalentVerification {
