@@ -4,10 +4,40 @@
    ═══════════════════════════════════════════════ */
 
 .split-auth-page {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  min-height: calc(100vh - var(--header-h, 64px));
+  min-height: 100vh;
   background: #ffffff;
+}
+
+/* Plein écran, sans header/footer public — seul moyen de revenir à la
+   landing. Position fixe : reste au même endroit sur les deux panneaux
+   (bleu à gauche/en haut, blanc à droite/en bas en mobile). */
+.split-back-link {
+  position: fixed;
+  top: 1.25rem;
+  left: 1.25rem;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s ease;
+}
+
+.split-back-link:hover {
+  background: rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+  text-decoration: none;
 }
 
 /* ── Panneau gauche bleu ── */
@@ -355,14 +385,14 @@
 
 /* Le formulaire d'inscription peut être plus haut que 100vh */
 .split-signup-page {
-  min-height: calc(100vh - var(--header-h, 64px));
+  min-height: 100vh;
   align-items: stretch;
 }
 
 .split-signup-page .split-left-panel {
   position: sticky;
-  top: var(--header-h, 64px);
-  height: calc(100vh - var(--header-h, 64px));
+  top: 0;
+  height: 100vh;
   align-self: flex-start;
 }
 

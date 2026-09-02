@@ -36,10 +36,13 @@ export default function App() {
     <AppProvider>
       <BrowserRouter>
         <Routes>
+          {/* Plein écran, sans le header/footer public — juste un bouton
+              retour vers la landing (voir Auth.css `.split-back-link`). */}
+          <Route path="connexion" element={<Login />} />
+          <Route path="inscription" element={<Signup />} />
+
           <Route element={<Layout />}>
             <Route index element={<Landing />} />
-            <Route path="connexion" element={<Login />} />
-            <Route path="inscription" element={<Signup />} />
             <Route
               path="offres/:id"
               element={

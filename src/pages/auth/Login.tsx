@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { homePathForRole } from '../../lib/roles'
 import { LogoMark } from '../../components/brand/Logo'
@@ -54,6 +54,11 @@ export function Login() {
 
   return (
     <div className="split-auth-page">
+      <Link to="/" className="split-back-link">
+        <ArrowLeft size={16} aria-hidden />
+        Retour à l’accueil
+      </Link>
+
       {/* ── Panneau gauche bleu ── */}
       <div className="split-left-panel">
         <svg className="split-wave" viewBox="0 0 560 560" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

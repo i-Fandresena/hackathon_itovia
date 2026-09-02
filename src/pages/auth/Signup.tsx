@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { ACTIVE_SECTORS, GENDER_LABELS, PROVINCES, SECTOR_LABELS, SECTORS, TRADES, TRADE_SECTOR } from '../../data/constants'
 import { useApp } from '../../context/AppContext'
 import { apiSubmitTalentLead } from '../../lib/api'
@@ -133,6 +133,11 @@ export function Signup() {
 
   return (
     <div className="split-auth-page split-signup-page">
+      <Link to="/" className="split-back-link">
+        <ArrowLeft size={16} aria-hidden />
+        Retour à l’accueil
+      </Link>
+
       {/* ── Panneau gauche bleu ── */}
       <div className="split-left-panel">
         <svg className="split-wave" viewBox="0 0 560 560" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
