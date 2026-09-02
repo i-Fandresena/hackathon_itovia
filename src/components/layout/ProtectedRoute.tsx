@@ -5,7 +5,7 @@ import { homePathForRole } from '../../lib/roles'
 import type { UserRole } from '../../types'
 
 interface ProtectedRouteProps {
-  role?: UserRole
+  role?: UserRole | UserRole[]
   children: React.ReactNode
 }
 
@@ -27,7 +27,8 @@ export function ProtectedRoute({ role, children }: ProtectedRouteProps) {
     return <Navigate to="/connexion" state={{ from: location }} replace />
   }
 
-  if (role && currentUser.role !== role) {
+  const allowedRoles = Array.isArray(role) ? role : role ? [role] : null
+  if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
     return <Navigate to={homePathForRole(currentUser.role)} replace />
   }
 

@@ -206,7 +206,7 @@ export default function App() {
             <Route
               path="messages"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute role={['recruiter', 'particulier', 'admin', 'agent', 'talent']}>
                   <Messages />
                 </ProtectedRoute>
               }

@@ -457,6 +457,15 @@ export function apiSendMessage(conversationId: string, content: string) {
   )
 }
 
+/** Espace recruteur : point d'entrée unique pour joindre OffRec, sans avoir
+ *  à connaître l'identité d'un compte admin. */
+export function apiContactOffrec(message: string) {
+  return request<{ conversationId: string }>('/messages/contact-offrec', {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  })
+}
+
 /* ------------------------------------------------------------------ */
 /* Abonnements / paiement simulé                                       */
 /* ------------------------------------------------------------------ */

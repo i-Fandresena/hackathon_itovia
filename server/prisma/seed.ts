@@ -656,7 +656,7 @@ async function main() {
   })
 
   console.log('Compte admin de démonstration…')
-  await prisma.user.create({
+  const demoAdmin = await prisma.user.create({
     data: { email: 'admin@demo.mg', passwordHash, role: 'admin' },
   })
 
@@ -810,23 +810,26 @@ async function main() {
     data: { recruiterId: userIdByKey.get('port-toamasina')!, type: 'subscription', amountAr: 100000, description: 'Abonnement Starter' },
   })
 
-  console.log('Un fil de messagerie de démonstration…')
-  const [participantAId, participantBId] = [userIdByKey.get('candidat-1')!, userIdByKey.get('techmada')!].sort()
+  console.log('Un fil de messagerie de démonstration (recruteur ↔ OffRec)…')
+  // Plus de messagerie candidat ↔ recruteur : OffRec est l'unique
+  // intermédiaire (décision produit 2026-09-02) — l'espace recruteur ne
+  // peut échanger qu'avec un compte admin.
+  const [participantAId, participantBId] = [userIdByKey.get('techmada')!, demoAdmin.id].sort()
   const conversation = await prisma.conversation.create({
-    data: { participantAId, participantBId, opportunityId: opportunityIdByKey.get('opp-1') },
-  })
-  await prisma.message.create({
-    data: {
-      conversationId: conversation.id,
-      senderId: userIdByKey.get('candidat-1')!,
-      content: 'Bonjour, je viens de postuler à votre offre d’assistant·e marketing digital. Je suis disponible pour un entretien dès cette semaine.',
-    },
+    data: { participantAId, participantBId },
   })
   await prisma.message.create({
     data: {
       conversationId: conversation.id,
       senderId: userIdByKey.get('techmada')!,
-      content: 'Merci pour votre candidature ! Nous revenons vers vous d’ici quelques jours.',
+      content: 'Bonjour, où en est le profil que vous nous avez proposé pour l’offre d’assistant·e marketing digital ?',
+    },
+  })
+  await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      senderId: demoAdmin.id,
+      content: 'Bonjour, la candidate a confirmé son intérêt de son côté — nous finalisons la mise en relation d’ici peu.',
     },
   })
 

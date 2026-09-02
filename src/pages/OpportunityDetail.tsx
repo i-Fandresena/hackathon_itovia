@@ -183,7 +183,7 @@ export function OpportunityDetail({
                   {suggestion.status === 'interet_candidat' && 'Votre candidature a été transmise à OffRec.'}
                   {suggestion.status === 'proposee_recruteur' && 'OffRec a transmis votre candidature à l’entreprise.'}
                   {suggestion.status === 'interet_recruteur' && "L'entreprise est intéressée — OffRec finalise la mise en relation."}
-                  {suggestion.status === 'mise_en_relation' && 'Vous êtes mis en relation — retrouvez la conversation dans Messages.'}
+                  {suggestion.status === 'mise_en_relation' && 'Vous êtes mis en relation — OffRec vous recontacte avec les prochaines étapes.'}
                   {suggestion.status === 'ecartee' && 'Cette candidature a été annulée.'}
                 </p>
                 {suggestion.status !== 'mise_en_relation' && suggestion.status !== 'ecartee' && (

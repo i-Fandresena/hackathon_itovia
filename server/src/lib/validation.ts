@@ -139,6 +139,10 @@ export const sendMessageSchema = z.object({
   content: z.string().min(1).max(2000),
 })
 
+export const contactOffrecSchema = z.object({
+  message: z.string().min(1).max(2000),
+})
+
 export const subscribeSchema = z.object({
   planCode: z.string().min(1),
 })
