@@ -109,12 +109,33 @@
 }
 
 
+/* Pastille de la landing : Connexion/Inscription toujours joignables sans
+   barre en bas — visible seulement sous 900px, `.header-nav` prend le
+   relais au-delà. */
+.header-auth-mobile {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.header-auth-mobile a:first-child {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+
 @media (min-width: 900px) {
   .header-nav {
     display: flex;
   }
 
   .tab-bar {
+    display: none;
+  }
+
+  .header-auth-mobile {
     display: none;
   }
 }

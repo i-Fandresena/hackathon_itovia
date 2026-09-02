@@ -1,5 +1,5 @@
 import { HelpCircle, LogIn, Store, Briefcase, UserPlus } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { Logo } from '../brand/Logo'
 import { Button } from '../ui/Button'
 import { TabBar, type TabBarItem } from './TabBar'
@@ -17,7 +17,10 @@ interface HeaderProps {
  * l'écran (`TabBar`) : les 5 liens publics tiennent tous, pas d'onglet
  * « Menu » nécessaire ici. Exception : la landing (`floating`) n'affiche
  * jamais cette barre — une page d'accueil ne doit pas donner l'impression
- * d'être déjà dans l'espace applicatif connecté.
+ * d'être déjà dans l'espace applicatif connecté. Sans barre en bas, la
+ * pastille garde donc Connexion/Inscription toujours visibles (pas
+ * seulement à partir de 900px comme `.header-nav`), sinon plus aucun
+ * moyen d'y accéder sur mobile/tablette.
  */
 export function Header({ floating }: HeaderProps = {}) {
   const navLinks = [
@@ -50,6 +53,15 @@ export function Header({ floating }: HeaderProps = {}) {
             <Button size="sm">Créer un compte</Button>
           </NavLink>
         </nav>
+
+        {floating && (
+          <div className="header-auth-mobile">
+            <Link to="/connexion">Connexion</Link>
+            <Link to="/inscription">
+              <Button size="sm">S'inscrire</Button>
+            </Link>
+          </div>
+        )}
       </div>
 
       {!floating && <TabBar items={tabItems} />}
