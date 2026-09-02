@@ -19,7 +19,7 @@ export function Layout() {
   return (
     <>
       <Header floating={pathname === '/'} />
-      <main>
+      <main className="public-main">
         <PageMotion>
           <Outlet />
         </PageMotion>

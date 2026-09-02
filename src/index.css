@@ -175,6 +175,15 @@ textarea {
   padding: 2rem 0 3rem;
 }
 
+/* La barre d'onglets (TabBar) remplace le hamburger du Header public sous
+   899px : elle est fixe en bas, le contenu (et le pied de page) ne doit
+   jamais passer dessous. */
+@media (max-width: 899px) {
+  .public-main {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 .page-header {
   margin-bottom: 2rem;
 }

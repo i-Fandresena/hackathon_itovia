@@ -1,9 +1,8 @@
-import { Bell, LogOut, Menu, X } from 'lucide-react'
-import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { HelpCircle, LogIn, Store, Briefcase, UserPlus } from 'lucide-react'
+import { NavLink } from 'react-router-dom'
 import { Logo } from '../brand/Logo'
-import { useApp } from '../../context/AppContext'
 import { Button } from '../ui/Button'
+import { TabBar, type TabBarItem } from './TabBar'
 import './Header.css'
 
 interface HeaderProps {
@@ -11,103 +10,47 @@ interface HeaderProps {
   floating?: boolean
 }
 
+/**
+ * Coquille publique (visiteur non connecté — dès qu'un compte est
+ * connecté, `Layout.tsx` bascule entièrement sur `AppShell`). Sous 900px,
+ * la nav horizontale est remplacée par la barre d'onglets en bas de
+ * l'écran (`TabBar`) : les 5 liens publics tiennent tous, pas d'onglet
+ * « Menu » nécessaire ici.
+ */
 export function Header({ floating }: HeaderProps = {}) {
-  const { currentUser, logout, unreadCount } = useApp()
-  const navigate = useNavigate()
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  const handleLogout = async () => {
-    await logout()
-    navigate('/')
-    setMenuOpen(false)
-  }
-
-  const candidateLinks = [
-    { to: '/candidat', label: 'Tableau de bord' },
-    { to: '/candidat/offres', label: 'Offres' },
+  const navLinks = [
     { to: '/annuaire', label: 'Annuaire' },
-    { to: '/candidat/favoris', label: 'Favoris' },
-    { to: '/candidat/profil', label: 'Profil' },
+    { to: '/connexion', label: 'Connexion' },
   ]
 
-  const recruiterLinks = [
-    { to: '/recruteur', label: 'Tableau de bord' },
-    { to: '/recruteur/publier', label: 'Publier' },
-    { to: '/recruteur/offres', label: 'Mes offres' },
-    { to: '/annuaire', label: 'Annuaire' },
-    { to: '/recruteur/candidatures', label: 'Candidatures' },
+  const tabItems: TabBarItem[] = [
+    { key: 'comment', label: 'Guide', icon: HelpCircle, href: '/#comment-ca-marche' },
+    { key: 'offres', label: 'Offres', icon: Briefcase, href: '/#offres' },
+    { key: 'annuaire', label: 'Annuaire', icon: Store, to: '/annuaire' },
+    { key: 'connexion', label: 'Connexion', icon: LogIn, to: '/connexion' },
+    { key: 'inscription', label: 'Inscription', icon: UserPlus, to: '/inscription' },
   ]
-
-  const navLinks =
-    currentUser?.role === 'recruiter' ? recruiterLinks : candidateLinks
 
   return (
     <header className={`site-header ${floating ? 'floating' : ''}`.trim()}>
       <div className="container header-inner">
-        <span onClick={() => setMenuOpen(false)} role="presentation">
-          <Logo to="/" />
-        </span>
+        <Logo to="/" />
 
-        <nav className={`header-nav ${menuOpen ? 'open' : ''}`}>
-          {!currentUser ? (
-            <>
-              <a href="/#comment-ca-marche" onClick={() => setMenuOpen(false)}>
-                Comment ça marche
-              </a>
-              <a href="/#offres" onClick={() => setMenuOpen(false)}>
-                Offres
-              </a>
-              <NavLink to="/annuaire" onClick={() => setMenuOpen(false)}>
-                Annuaire
-              </NavLink>
-              <NavLink to="/connexion" onClick={() => setMenuOpen(false)}>
-                Connexion
-              </NavLink>
-              <NavLink to="/inscription" onClick={() => setMenuOpen(false)}>
-                <Button size="sm">Créer un compte</Button>
-              </NavLink>
-            </>
-          ) : (
-            <>
-              {navLinks.map((l) => (
-                <NavLink
-                  key={l.to}
-                  to={l.to}
-                  end={l.to === '/candidat' || l.to === '/recruteur'}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {l.label}
-                </NavLink>
-              ))}
-              {currentUser.role === 'candidate' && (
-                <NavLink
-                  to="/candidat/notifications"
-                  className="notif-link"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <Bell size={18} />
-                  {unreadCount > 0 && (
-                    <span className="notif-badge">{unreadCount}</span>
-                  )}
-                </NavLink>
-              )}
-              <button type="button" className="nav-logout" onClick={handleLogout}>
-                <LogOut size={16} />
-                Déconnexion
-              </button>
-            </>
-          )}
+        <nav className="header-nav">
+          <a href="/#comment-ca-marche">Comment ça marche</a>
+          <a href="/#offres">Offres</a>
+          {navLinks.map((l) => (
+            <NavLink key={l.to} to={l.to}>
+              {l.label}
+            </NavLink>
+          ))}
+          <NavLink to="/inscription">
+            <Button size="sm">Créer un compte</Button>
+          </NavLink>
         </nav>
-
-        <button
-          type="button"
-          className="menu-toggle"
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
-        >
-          {menuOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
       </div>
+
+      <TabBar items={tabItems} />
     </header>
   )
 }

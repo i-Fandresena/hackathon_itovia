@@ -40,45 +40,15 @@ const ROLE_LABELS: Record<UserRole, string> = {
 }
 
 /**
- * Rail de navigation. Il porte aussi la carte de profil et les raccourcis
- * métiers : ce sont les deux entrées les plus utilisées de l'annuaire.
+ * Source unique des liens de nav par rôle — utilisée par le rail complet
+ * (`Sidebar`) et par la barre d'onglets mobile (`TabBar` dans `AppShell`,
+ * qui n'en affiche que les 4 premiers + un onglet « Menu » ouvrant ce même
+ * rail). Ne pas dupliquer cette liste ailleurs.
  */
-export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
-  const {
-    currentUser,
-    currentMemberId,
-    recommendations,
-    providers,
-    members,
-    opportunities,
-    bookmarks,
-    unreadCount,
-  } = useApp()
-
-  const role = currentUser?.role ?? 'candidate'
-  const displayName =
-    currentUser?.candidateProfile?.fullName ??
-    currentUser?.recruiterProfile?.companyName ??
-    currentUser?.individualProfile?.fullName ??
-    currentUser?.email ??
-    'Membre'
-  const city =
-    currentUser?.candidateProfile?.city ??
-    currentUser?.recruiterProfile?.city ??
-    currentUser?.individualProfile?.city
-
-  const contributions = useMemo(
-    () => recommendations.filter((r) => r.authorMemberId === currentMemberId).length,
-    [recommendations, currentMemberId],
-  )
-
-  /** Les métiers les mieux fournis, pour entrer dans l'annuaire en un clic. */
-  const topTrades = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const p of providers) counts.set(p.trade, (counts.get(p.trade) ?? 0) + 1)
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
-  }, [providers])
-
+export function getLinksByRole(
+  role: UserRole,
+  unreadCount: number,
+): { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; badge?: number }[] {
   const LINKS_BY_ROLE: Record<
     UserRole,
     { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; badge?: number }[]
@@ -125,7 +95,50 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
       { to: '/messages', label: 'Messages', icon: MessageCircle },
     ],
   }
-  const links = LINKS_BY_ROLE[role]
+  return LINKS_BY_ROLE[role]
+}
+
+/**
+ * Rail de navigation. Il porte aussi la carte de profil et les raccourcis
+ * métiers : ce sont les deux entrées les plus utilisées de l'annuaire.
+ */
+export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
+  const {
+    currentUser,
+    currentMemberId,
+    recommendations,
+    providers,
+    members,
+    opportunities,
+    bookmarks,
+    unreadCount,
+  } = useApp()
+
+  const role = currentUser?.role ?? 'candidate'
+  const displayName =
+    currentUser?.candidateProfile?.fullName ??
+    currentUser?.recruiterProfile?.companyName ??
+    currentUser?.individualProfile?.fullName ??
+    currentUser?.email ??
+    'Membre'
+  const city =
+    currentUser?.candidateProfile?.city ??
+    currentUser?.recruiterProfile?.city ??
+    currentUser?.individualProfile?.city
+
+  const contributions = useMemo(
+    () => recommendations.filter((r) => r.authorMemberId === currentMemberId).length,
+    [recommendations, currentMemberId],
+  )
+
+  /** Les métiers les mieux fournis, pour entrer dans l'annuaire en un clic. */
+  const topTrades = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of providers) counts.set(p.trade, (counts.get(p.trade) ?? 0) + 1)
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+  }, [providers])
+
+  const links = getLinksByRole(role, unreadCount)
 
   return (
     <div className="side">

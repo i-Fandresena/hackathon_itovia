@@ -1,11 +1,12 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
-import { Menu, Search, X } from 'lucide-react'
+import { Menu as MenuIcon, Search, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { PageMotion } from '../motion/Motion'
 import { Logo } from '../brand/Logo'
 import { RightRail } from './RightRail'
-import { Sidebar } from './Sidebar'
+import { Sidebar, getLinksByRole } from './Sidebar'
+import { TabBar, type TabBarItem } from './TabBar'
 import './AppShell.css'
 
 /**
@@ -14,7 +15,7 @@ import './AppShell.css'
  * gauche devient un panneau coulissant.
  */
 export function AppShell() {
-  const { logout } = useApp()
+  const { logout, currentUser, unreadCount } = useApp()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -32,19 +33,28 @@ export function AppShell() {
     setMenuOpen(false)
   }
 
+  const role = currentUser?.role ?? 'candidate'
+  const tabItems: TabBarItem[] = useMemo(() => {
+    const allLinks = getLinksByRole(role, unreadCount)
+    const primary = allLinks.slice(0, 4)
+    const hiddenBadgeTotal = allLinks.slice(4).reduce((sum, l) => sum + (l.badge ?? 0), 0)
+    return [
+      ...primary.map((l) => ({ key: l.to, label: l.label, icon: l.icon, to: l.to, end: l.end, badge: l.badge })),
+      {
+        key: 'menu',
+        label: 'Menu',
+        icon: MenuIcon,
+        active: menuOpen,
+        badge: hiddenBadgeTotal,
+        onClick: () => setMenuOpen(true),
+      },
+    ]
+  }, [role, unreadCount, menuOpen])
+
   return (
     <div className="shell">
       <header className="shell-top">
         <div className="shell-top-inner">
-          <button
-            type="button"
-            className="shell-menu"
-            onClick={() => setMenuOpen(!menuOpen)}
-            aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
-          >
-            {menuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-
           <Logo to="/" />
 
           <form className="shell-search" onSubmit={handleSearch} role="search">
@@ -94,6 +104,8 @@ export function AppShell() {
           <RightRail />
         </div>
       </div>
+
+      <TabBar items={tabItems} />
     </div>
   )
 }
