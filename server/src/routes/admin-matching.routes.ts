@@ -102,6 +102,7 @@ router.post('/match-suggestions', async (req, res, next) => {
         // Jamais l'identité de l'entreprise avant une mise en relation
         // confirmée (décision produit 2026-09-02).
         message: `OffRec vous recommande « ${opportunity.title} ».`,
+        link: `/candidat/offres/${opportunity.id}`,
       },
     })
 
@@ -156,6 +157,7 @@ router.patch('/match-suggestions/:id', async (req, res, next) => {
           userId: existing.opportunity.recruiterId,
           title: 'Nouveau candidat proposé',
           message: `OffRec vous propose un profil pour « ${existing.opportunity.title} ».`,
+          link: '/recruteur/candidatures',
         },
       })
     }
@@ -166,11 +168,13 @@ router.patch('/match-suggestions/:id', async (req, res, next) => {
             userId: existing.candidateId,
             title: 'Mise en relation confirmée',
             message: `OffRec vous met en relation avec ${existing.opportunity.companyName} pour « ${existing.opportunity.title} ».`,
+            link: `/candidat/offres/${existing.opportunityId}`,
           },
           {
             userId: existing.opportunity.recruiterId,
             title: 'Mise en relation confirmée',
             message: `OffRec vous met en relation avec un candidat pour « ${existing.opportunity.title} ».`,
+            link: '/recruteur/candidatures',
           },
         ],
       })

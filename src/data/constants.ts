@@ -129,6 +129,17 @@ export const SECTOR_DETAIL_LABELS: Record<string, string> = {
  *  secteurs restent sélectionnables, juste pas mis en avant. */
 export const ACTIVE_SECTORS: Sector[] = ['btp', 'textile_artisanat', 'digital']
 
+/** Description courte affichée au clic sur un secteur (rail « Secteurs
+ *  d'activité ») — purement descriptif, jamais un chiffre de traction. */
+export const SECTOR_DESCRIPTIONS: Record<Sector, string> = {
+  btp: 'Construction, gros œuvre, second œuvre et matériaux.',
+  textile_artisanat: 'Couture, tissage, maroquinerie et artisanat local.',
+  digital: 'Développement, community management, design et services digitaux.',
+  agroalimentaire: 'Production, transformation et distribution alimentaire.',
+  services_commerce: 'Vente, services aux particuliers et aux entreprises.',
+  autre: 'Autres secteurs d’activité suivis par OffRec.',
+}
+
 export const STATS = {
   opportunities: 240,
   candidates: 1800,

@@ -44,13 +44,26 @@ export function Messages() {
     apiConversationMessages(selectedId).then(setMessages)
   }, [selectedId])
 
-  const handleSend = async (e: FormEvent) => {
+  const handleSend = (e: FormEvent) => {
     e.preventDefault()
-    if (!selectedId || !draft.trim()) return
-    const { message } = await apiSendMessage(selectedId, draft.trim())
-    setMessages((m) => (m ? [...m, message] : [message]))
+    const content = draft.trim()
+    if (!selectedId || !content) return
+
+    // Optimiste : le message apparaît et le champ se vide immédiatement,
+    // avant même la réponse serveur — la latence réseau ne se voit plus.
+    const tempId = `temp-${Date.now()}`
+    setMessages((m) => [...(m ?? []), { id: tempId, senderId: 'me', content, createdAt: new Date().toISOString(), mine: true }])
     setDraft('')
-    loadConversations()
+
+    apiSendMessage(selectedId, content)
+      .then(({ message }) => {
+        setMessages((m) => (m ? m.map((msg) => (msg.id === tempId ? message : msg)) : m))
+        loadConversations()
+      })
+      .catch(() => {
+        setMessages((m) => (m ? m.filter((msg) => msg.id !== tempId) : m))
+        setDraft(content)
+      })
   }
 
   const handleContactOffrec = async (e: FormEvent) => {

@@ -344,6 +344,9 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   message   String
+  /// Chemin frontend (ex. `/messages?c=...`, `/candidat/offres/...`) — la
+  /// notification navigue vers sa source au clic, jamais générique.
+  link      String?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 

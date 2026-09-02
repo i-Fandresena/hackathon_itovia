@@ -258,6 +258,8 @@ export interface Notification {
   userId: string
   title: string
   message: string
+  /** Chemin frontend vers la source de la notification — absent si non cliquable. */
+  link?: string | null
   read: boolean
   createdAt: string
 }

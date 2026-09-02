@@ -81,6 +81,43 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Thème sombre : bascule manuelle uniquement (attribut posé par
+   `useTheme`/`ThemeToggle`), pas de détection auto via prefers-color-scheme
+   — la préférence système ne sert qu'à choisir la valeur initiale. Tout le
+   reste de l'app lit déjà `var(--color-*)`, donc redéfinir ces jetons ici
+   suffit à re-thémer l'essentiel sans toucher aux composants. */
+:root[data-theme='dark'] {
+  --color-ink: #f2f3f5;
+  --color-ink-secondary: #c6cad2;
+  --color-ink-muted: #9299a6;
+  --color-ink-faint: #6b7280;
+
+  --color-bg: #0e1015;
+  --color-bg-elevated: #171a21;
+  --color-bg-subtle: #20242d;
+
+  --color-accent: #5b8cff;
+  --color-accent-hover: #7ea1ff;
+  --color-accent-muted: rgba(91, 140, 255, 0.16);
+  --color-accent-ring: rgba(91, 140, 255, 0.32);
+
+  --color-border: rgba(255, 255, 255, 0.09);
+  --color-border-strong: rgba(255, 255, 255, 0.16);
+
+  --color-success: #34d399;
+  --color-success-bg: rgba(5, 150, 105, 0.18);
+  --color-warning: #fbbf24;
+  --color-warning-bg: rgba(217, 119, 6, 0.18);
+  --color-danger: #f87171;
+  --color-danger-bg: rgba(220, 38, 38, 0.18);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
+  --shadow-glow: 0 0 0 1px var(--color-border), 0 12px 40px rgba(91, 140, 255, 0.2);
+}
+
 *,
 *::before,
 *::after {

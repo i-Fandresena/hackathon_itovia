@@ -167,12 +167,35 @@
   display: flex;
   align-items: center;
   gap: 0.55rem;
+  width: 100%;
   padding: 0.5rem 0.75rem;
+  border: none;
+  background: none;
   border-radius: var(--radius-md);
+  font: inherit;
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--color-ink-secondary);
+  cursor: pointer;
+  text-align: left;
   transition: background 0.2s var(--ease-out), color 0.2s var(--ease-out);
+}
+
+.side-sector-detail {
+  padding: 0.4rem 0.75rem 0.7rem 2.05rem;
+}
+
+.side-sector-detail p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+  line-height: 1.4;
+}
+
+.side-sector-stats {
+  margin-top: 0.3rem !important;
+  font-weight: 600;
+  color: var(--color-ink-secondary) !important;
 }
 
 .side-trade span:first-of-type {

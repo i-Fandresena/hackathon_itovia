@@ -1,0 +1,20 @@
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-ink-secondary);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background 0.2s var(--ease-out), color 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+}
+
+.theme-toggle:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-ink);
+  border-color: var(--color-border-strong);
+}

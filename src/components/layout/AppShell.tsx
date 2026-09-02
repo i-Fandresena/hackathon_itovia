@@ -4,6 +4,7 @@ import { Menu as MenuIcon, Search, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { PageMotion } from '../motion/Motion'
 import { Logo } from '../brand/Logo'
+import { ThemeToggle } from '../ui/ThemeToggle'
 import { RightRail } from './RightRail'
 import { Sidebar, getLinksByRole } from './Sidebar'
 import { TabBar, type TabBarItem } from './TabBar'
@@ -67,6 +68,8 @@ export function AppShell() {
               aria-label="Rechercher dans l’annuaire"
             />
           </form>
+
+          <ThemeToggle className="shell-theme-toggle" />
         </div>
       </header>
 

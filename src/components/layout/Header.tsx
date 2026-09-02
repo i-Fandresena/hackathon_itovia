@@ -2,6 +2,7 @@ import { HelpCircle, LogIn, Store, Briefcase, UserPlus } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { Logo } from '../brand/Logo'
 import { Button } from '../ui/Button'
+import { ThemeToggle } from '../ui/ThemeToggle'
 import { TabBar, type TabBarItem } from './TabBar'
 import './Header.css'
 
@@ -41,27 +42,31 @@ export function Header({ floating }: HeaderProps = {}) {
       <div className="container header-inner">
         <Logo to="/" />
 
-        <nav className="header-nav">
-          <a href="/#comment-ca-marche">Comment ça marche</a>
-          <a href="/#offres">Offres</a>
-          {navLinks.map((l) => (
-            <NavLink key={l.to} to={l.to}>
-              {l.label}
+        <div className="header-right">
+          <nav className="header-nav">
+            <a href="/#comment-ca-marche">Comment ça marche</a>
+            <a href="/#offres">Offres</a>
+            {navLinks.map((l) => (
+              <NavLink key={l.to} to={l.to}>
+                {l.label}
+              </NavLink>
+            ))}
+            <NavLink to="/inscription">
+              <Button size="sm">Créer un compte</Button>
             </NavLink>
-          ))}
-          <NavLink to="/inscription">
-            <Button size="sm">Créer un compte</Button>
-          </NavLink>
-        </nav>
+          </nav>
 
-        {floating && (
-          <div className="header-auth-mobile">
-            <Link to="/connexion">Connexion</Link>
-            <Link to="/inscription">
-              <Button size="sm">S'inscrire</Button>
-            </Link>
-          </div>
-        )}
+          {floating && (
+            <div className="header-auth-mobile">
+              <Link to="/connexion">Connexion</Link>
+              <Link to="/inscription">
+                <Button size="sm">S'inscrire</Button>
+              </Link>
+            </div>
+          )}
+
+          <ThemeToggle />
+        </div>
       </div>
 
       {!floating && <TabBar items={tabItems} />}

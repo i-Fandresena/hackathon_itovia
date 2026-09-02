@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -23,7 +23,8 @@ import {
   Wrench,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import type { UserRole } from '../../types'
+import { ACTIVE_SECTORS, SECTOR_DESCRIPTIONS, SECTOR_LABELS, SECTORS, TRADE_SECTOR } from '../../data/constants'
+import type { Sector, UserRole } from '../../types'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -132,12 +133,24 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
     [recommendations, currentMemberId],
   )
 
-  /** Les métiers les mieux fournis, pour entrer dans l'annuaire en un clic. */
-  const topTrades = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const p of providers) counts.set(p.trade, (counts.get(p.trade) ?? 0) + 1)
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
-  }, [providers])
+  const mySector: Sector | undefined =
+    currentUser?.candidateProfile?.sector ?? currentUser?.recruiterProfile?.sector
+
+  /** Secteurs ciblés par OffRec, affichage contextuel : le secteur propre
+   *  au candidat/à l'entreprise en tête, puis les secteurs pilotes — pas la
+   *  même liste figée pour tout le monde. */
+  const sectorInsights = useMemo(() => {
+    const ordered = [mySector, ...ACTIVE_SECTORS, ...SECTORS].filter((s): s is Sector => Boolean(s))
+    const seen = new Set<Sector>()
+    const unique = ordered.filter((s) => (seen.has(s) ? false : (seen.add(s), true)))
+    return unique.slice(0, 5).map((sector) => ({
+      sector,
+      offersCount: opportunities.filter((o) => o.sector === sector).length,
+      providersCount: providers.filter((p) => TRADE_SECTOR[p.trade as keyof typeof TRADE_SECTOR] === sector).length,
+    }))
+  }, [mySector, opportunities, providers])
+
+  const [expandedSector, setExpandedSector] = useState<Sector | null>(null)
 
   const links = getLinksByRole(role, unreadCount)
 
@@ -204,20 +217,34 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
         ))}
       </nav>
 
-      {topTrades.length > 0 && (
+      {sectorInsights.length > 0 && (
         <div className="side-section">
-          <p className="side-section-title">Métiers</p>
-          {topTrades.map(([trade, count]) => (
-            <NavLink
-              key={trade}
-              to={`/annuaire?trade=${encodeURIComponent(trade)}`}
-              className="side-trade"
-              onClick={onNavigate}
-            >
-              <Wrench size={14} aria-hidden />
-              <span>{trade}</span>
-              <span className="side-trade-count">{count}</span>
-            </NavLink>
+          <p className="side-section-title">Secteurs d’activité</p>
+          {sectorInsights.map(({ sector, offersCount, providersCount }) => (
+            <div key={sector}>
+              <button
+                type="button"
+                className="side-trade"
+                onClick={() => setExpandedSector((s) => (s === sector ? null : sector))}
+                aria-expanded={expandedSector === sector}
+              >
+                <Wrench size={14} aria-hidden />
+                <span>
+                  {SECTOR_LABELS[sector]}
+                  {sector === mySector ? ' · votre secteur' : ''}
+                </span>
+                <span className="side-trade-count">{offersCount + providersCount}</span>
+              </button>
+              {expandedSector === sector && (
+                <div className="side-sector-detail">
+                  <p>{SECTOR_DESCRIPTIONS[sector]}</p>
+                  <p className="side-sector-stats">
+                    {offersCount} offre{offersCount > 1 ? 's' : ''} · {providersCount} prestataire
+                    {providersCount > 1 ? 's' : ''} dans l’annuaire
+                  </p>
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}

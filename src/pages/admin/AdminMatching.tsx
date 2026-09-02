@@ -177,6 +177,11 @@ export function AdminMatching() {
                   </div>
                   <Badge variant="muted">{STATUS_LABELS[s.status]}</Badge>
                 </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.65rem' }}>
+                  <Button size="sm" variant="ghost" onClick={() => handleTransition(s.id, 'ecartee')}>
+                    Annuler la proposition
+                  </Button>
+                </div>
               </Card>
             ))}
           </div>

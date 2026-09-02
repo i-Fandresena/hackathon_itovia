@@ -187,6 +187,7 @@ router.post('/talents/:id/propose', async (req, res, next) => {
         userId: opportunity.recruiterId,
         title: 'Nouveau profil recommandé',
         message: `Un agent de terrain a recommandé un profil vérifié pour « ${opportunity.title} ».`,
+        link: `/recruteur/offres/${opportunity.id}/shortlist`,
       },
     })
     res.status(201).json({ proposal })

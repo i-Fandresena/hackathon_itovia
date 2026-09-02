@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Bell, HelpCircle, TrendingUp } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { formatAriary, formatMonth } from '../../lib/format'
@@ -11,9 +11,15 @@ import './RightRail.css'
  * fragiles et alimenter les prix constatés.
  */
 export function RightRail() {
-  const { notifications, providers, recommendations } = useApp()
+  const { notifications, providers, recommendations, markNotificationRead } = useApp()
+  const navigate = useNavigate()
 
   const recentNotifications = useMemo(() => notifications.slice(0, 3), [notifications])
+
+  const handleNotifClick = (n: (typeof notifications)[number]) => {
+    markNotificationRead(n.id)
+    if (n.link) navigate(n.link)
+  }
 
   /** Fiches reposant sur 0 ou 1 retour : ce sont les trous de l'annuaire. */
   const toConfirm = useMemo(() => {
@@ -53,8 +59,17 @@ export function RightRail() {
           <ul className="rail-notifs">
             {recentNotifications.map((n) => (
               <li key={n.id} className={n.read ? '' : 'unread'}>
-                <strong>{n.title}</strong>
-                <span>{n.message}</span>
+                {n.link ? (
+                  <button type="button" className="rail-notif-btn" onClick={() => handleNotifClick(n)}>
+                    <strong>{n.title}</strong>
+                    <span>{n.message}</span>
+                  </button>
+                ) : (
+                  <>
+                    <strong>{n.title}</strong>
+                    <span>{n.message}</span>
+                  </>
+                )}
               </li>
             ))}
           </ul>
