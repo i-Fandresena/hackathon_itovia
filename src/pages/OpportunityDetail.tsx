@@ -9,6 +9,7 @@ import { MatchScore } from '../components/ui/MatchScore'
 import {
   EXPERIENCE_LABELS,
   OPPORTUNITY_TYPE_LABELS,
+  SECTOR_DETAIL_LABELS,
 } from '../data/constants'
 import { useApp } from '../context/AppContext'
 import { apiStartConversation } from '../lib/api'
@@ -148,6 +149,24 @@ export function OpportunityDetail({
               </Badge>
             ))}
           </div>
+          {opportunity.sectorDetails && Object.keys(opportunity.sectorDetails).length > 0 && (
+            <>
+              <h3 style={{ fontSize: '1rem', margin: '1rem 0 0.5rem' }}>Détails</h3>
+              <dl style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {Object.entries(opportunity.sectorDetails).map(([key, value]) => {
+                  if (value === '' || value === false) return null
+                  return (
+                    <div key={key} style={{ display: 'flex', gap: '0.5rem', fontSize: '0.9rem' }}>
+                      <dt style={{ color: 'var(--color-ink-muted)', minWidth: 160 }}>
+                        {SECTOR_DETAIL_LABELS[key] ?? key}
+                      </dt>
+                      <dd style={{ margin: 0 }}>{value === true ? 'Oui' : value}</dd>
+                    </div>
+                  )
+                })}
+              </dl>
+            </>
+          )}
         </Card>
 
         {canApply && currentUser?.role === 'candidate' && (

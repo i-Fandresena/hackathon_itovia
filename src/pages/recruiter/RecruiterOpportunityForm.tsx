@@ -16,10 +16,13 @@ import {
 import { useApp } from '../../context/AppContext'
 import type { ExperienceLevel, OpportunityType, Sector } from '../../types'
 
+type SectorDetails = Record<string, string | boolean>
+
 const defaultForm: {
   title: string
   category: string
   sector: Sector
+  sectorDetails: SectorDetails
   description: string
   province: string
   city: string
@@ -31,6 +34,7 @@ const defaultForm: {
   title: '',
   category: CATEGORIES[0],
   sector: ACTIVE_SECTORS[0],
+  sectorDetails: {},
   description: '',
   province: PROVINCES[0],
   city: PROVINCES[0],
@@ -56,6 +60,7 @@ export function RecruiterOpportunityForm() {
         title: existing.title,
         category: existing.category,
         sector: existing.sector,
+        sectorDetails: existing.sectorDetails ?? {},
         description: existing.description,
         province: existing.province,
         city: existing.city,
@@ -66,6 +71,10 @@ export function RecruiterOpportunityForm() {
       })
     }
   }, [id, opportunities])
+
+  const setDetail = (key: string, value: string | boolean) => {
+    setForm((f) => ({ ...f, sectorDetails: { ...f.sectorDetails, [key]: value } }))
+  }
 
   const toggleSkill = (skill: string) => {
     setForm((f) => ({
@@ -127,6 +136,48 @@ export function RecruiterOpportunityForm() {
                 ))}
               </Select>
             </Field>
+            {form.sector === 'btp' && (
+              <>
+                <Field label="Outils requis" hint="Optionnel — ex. bétonnière, niveau laser fourni par l'entreprise.">
+                  <Input
+                    value={(form.sectorDetails.outils as string) ?? ''}
+                    onChange={(e) => setDetail('outils', e.target.value)}
+                  />
+                </Field>
+                <Field label="Infos chantier" hint="Optionnel — localisation du chantier, durée, conditions.">
+                  <Input
+                    value={(form.sectorDetails.chantier as string) ?? ''}
+                    onChange={(e) => setDetail('chantier', e.target.value)}
+                  />
+                </Field>
+                <Field label="Transport / logement" hint="Optionnel — précisez si transport ou logement est fourni.">
+                  <Input
+                    value={(form.sectorDetails.transport as string) ?? ''}
+                    onChange={(e) => setDetail('transport', e.target.value)}
+                  />
+                </Field>
+              </>
+            )}
+            {form.sector === 'digital' && (
+              <>
+                <Field label="Stack technique" hint="Optionnel — ex. React, TypeScript, PostgreSQL.">
+                  <Input
+                    value={(form.sectorDetails.stackTechnique as string) ?? ''}
+                    onChange={(e) => setDetail('stackTechnique', e.target.value)}
+                  />
+                </Field>
+                <Field label="Télétravail">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.sectorDetails.teletravail)}
+                      onChange={(e) => setDetail('teletravail', e.target.checked)}
+                    />
+                    Télétravail possible
+                  </label>
+                </Field>
+              </>
+            )}
             <Field label="Description" hint="Détaillez le poste, les responsabilités et les prérequis (au moins 10 caractères).">
               <Textarea
                 required

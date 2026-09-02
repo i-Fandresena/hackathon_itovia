@@ -7,6 +7,7 @@ export interface DbOpportunity {
   title: string
   category: string
   sector: string
+  sectorDetails?: unknown
   description: string
   province: string
   city: string
@@ -26,6 +27,7 @@ export function toDomainOpportunity(o: DbOpportunity): Opportunity {
     title: o.title,
     category: o.category,
     sector: o.sector as Opportunity['sector'],
+    sectorDetails: (o.sectorDetails ?? undefined) as Opportunity['sectorDetails'],
     description: o.description,
     province: o.province,
     city: o.city,

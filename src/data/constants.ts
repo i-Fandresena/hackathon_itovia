@@ -114,6 +114,16 @@ export const SECTOR_LABELS: Record<Sector, string> = {
   autre: 'Autre',
 }
 
+/** Libellés des champs additionnels par secteur (`Opportunity.sectorDetails`)
+ *  — affichage seulement, la clé technique reste en camelCase en base. */
+export const SECTOR_DETAIL_LABELS: Record<string, string> = {
+  outils: 'Outils requis',
+  chantier: 'Infos chantier',
+  transport: 'Transport / logement',
+  stackTechnique: 'Stack technique',
+  teletravail: 'Télétravail',
+}
+
 /** Secteurs mis en avant pour le pilote — densité plutôt que dilution
  *  (150-200 profils visés sur 6 mois, une seule région) : les autres
  *  secteurs restent sélectionnables, juste pas mis en avant. */

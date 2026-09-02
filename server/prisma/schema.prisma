@@ -233,6 +233,11 @@ model Opportunity {
   /// Taxonomie transversale (filtre) — distincte de `category`, qui reste
   /// la classification fine héritée des métiers de bureau.
   sector          Sector          @default(autre)
+  /// Champs additionnels dépendant du secteur (ex. outils/chantier pour le
+  /// BTP, stack technique pour le digital) — même pattern que
+  /// TalentVerification.checklist, pas de colonnes typées pour des champs
+  /// qui ne s'appliquent qu'à une partie des secteurs.
+  sectorDetails   Json?
   description     String
   province        String
   city            String

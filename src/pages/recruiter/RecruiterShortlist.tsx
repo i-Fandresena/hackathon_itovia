@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react'
-import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Input } from '../../components/ui/Form'
 import { Loading } from '../../components/ui/Loading'
+import { VerificationBadge } from '../../components/ui/VerificationBadge'
 import { apiCreatePlacement, apiShortlist, apiStartConversation, type ShortlistMatched, type ShortlistProposed } from '../../lib/api'
 
 /**
@@ -88,10 +88,10 @@ export function RecruiterShortlist() {
             {data.proposed.map((p) => (
               <Card key={p.talentId}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     <strong>{p.fullName}</strong>
-                    <Badge variant="success">Vérifié humain</Badge>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)', marginTop: '0.25rem' }}>
+                    <VerificationBadge kind="human" subtitle="par un agent de terrain" />
+                    <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)' }}>
                       {p.trade}
                     </p>
                   </div>
@@ -125,10 +125,10 @@ export function RecruiterShortlist() {
             {data.matched.map((m) => (
               <Card key={m.candidateId}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     <strong>{m.fullName}</strong>
-                    <Badge variant="primary">{m.match.score}% · matché IA</Badge>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)', marginTop: '0.25rem' }}>
+                    <VerificationBadge kind="ai" subtitle={`${m.match.score}% de compatibilité`} />
+                    <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)' }}>
                       {m.match.reasons.slice(0, 2).join(' · ')}
                     </p>
                   </div>

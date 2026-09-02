@@ -59,6 +59,7 @@ export const opportunityInputSchema = z.object({
   title: z.string().min(3, 'Le titre doit contenir au moins 3 caractères.'),
   category: z.string().min(2, 'La catégorie est requise.'),
   sector: z.enum(sectors, { errorMap: () => ({ message: 'Secteur invalide.' }) }),
+  sectorDetails: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
   description: z.string().min(10, 'La description doit contenir au moins 10 caractères.'),
   province: z.string().min(2, 'La province est requise.'),
   city: z.string().min(2, 'La ville est requise.'),

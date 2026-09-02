@@ -197,7 +197,7 @@
   border-radius: inherit;
 }
 
-@media (min-width: 860px) {
+@media (min-width: 880px) {
   .hero {
     padding-top: calc(var(--header-h) + 4rem);
   }

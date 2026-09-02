@@ -189,6 +189,10 @@ export interface Opportunity {
   title: string
   category: string
   sector: Sector
+  /** Champs additionnels propres au secteur (ex. outils/chantier pour le
+   *  BTP, stack technique pour le digital) — absent pour les secteurs qui
+   *  n'en définissent pas. */
+  sectorDetails?: Record<string, string | boolean>
   description: string
   province: string
   city: string

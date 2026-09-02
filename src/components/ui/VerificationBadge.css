@@ -1,0 +1,69 @@
+.verify-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.85rem 0.5rem 0.5rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-xs);
+  max-width: 100%;
+}
+
+.verify-badge-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: #fff;
+}
+
+.verify-badge-human .verify-badge-icon {
+  background: var(--color-success);
+}
+
+.verify-badge-ai .verify-badge-icon {
+  background: var(--color-accent);
+}
+
+.verify-badge-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.verify-badge-text strong {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.verify-badge-text span {
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Mobile-first : sur un viewport étroit, laisser le texte s'enrouler plutôt
+   que déborder (le badge peut se retrouver à côté d'un champ de saisie
+   dans la shortlist, voir RecruiterShortlist.tsx). */
+@media (max-width: 640px) {
+  .verify-badge {
+    width: 100%;
+  }
+
+  .verify-badge-text strong,
+  .verify-badge-text span {
+    white-space: normal;
+  }
+}

@@ -10,15 +10,35 @@ export function MatchScore({ match, compact }: MatchScoreProps) {
   const tone =
     match.score >= 75 ? 'high' : match.score >= 50 ? 'mid' : 'low'
 
-  return (
-    <div className={`match-score match-${tone} ${compact ? 'match-compact' : ''}`}>
-      <div className="match-header">
-        <span className="match-pct">{match.score}%</span>
-        {!compact && <span className="match-label">compatibilité profil</span>}
+  if (compact) {
+    return (
+      <div className={`match-score match-${tone} match-compact`}>
+        <div className="match-header">
+          <span className="match-pct">{match.score}%</span>
+        </div>
       </div>
-      {!compact && match.reasons.length > 0 && (
+    )
+  }
+
+  const [topReason, ...otherReasons] = match.reasons
+
+  return (
+    <div className={`match-score match-${tone}`}>
+      <div className="match-header">
+        <span className="match-label">Compatibilité profil</span>
+        <span className="match-pct">{match.score}%</span>
+      </div>
+      <div className="match-bar-track" role="progressbar" aria-valuenow={match.score} aria-valuemin={0} aria-valuemax={100}>
+        <div className="match-bar-fill" style={{ width: `${match.score}%` }} />
+      </div>
+      {topReason && (
+        <p className="match-why">
+          <strong>Pourquoi ce match ·</strong> {topReason}
+        </p>
+      )}
+      {otherReasons.length > 0 && (
         <ul className="match-reasons">
-          {match.reasons.map((r) => (
+          {otherReasons.map((r) => (
             <li key={r}>{r}</li>
           ))}
         </ul>

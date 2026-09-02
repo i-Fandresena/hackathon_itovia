@@ -1,3 +1,16 @@
+/**
+ * Convention de breakpoints (mobile-first : styles de base = mobile,
+ * `min-width` pour les améliorations progressives) — reflète ce qui est
+ * déjà en usage dans le projet, ne pas en introduire de nouveaux sans
+ * raison :
+ *   640px  — petite tablette / grand téléphone (Directory, ProviderCard,
+ *            OpportunityCard, Footer, MatchScore/badges)
+ *   768px  — tablette (Auth, Messages, OpportunityFilters, Landing)
+ *   900px  — bascule nav desktop (Header.css)
+ *   1024px — sidebar fixe au lieu du tiroir mobile (AppShell.css)
+ *   1100px — cartes en disposition large (ProviderCard, OpportunityCard)
+ *   1320px — rail droit visible (AppShell.css)
+ */
 :root {
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 
