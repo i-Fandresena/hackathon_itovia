@@ -1,124 +1,443 @@
+/* ═══════════════════════════════════════════════
+   Page de connexion — Layout split-screen
+   Panneau bleu (gauche) + formulaire blanc (droite)
+   ═══════════════════════════════════════════════ */
+
+.split-auth-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: calc(100vh - var(--header-h, 64px));
+  background: #ffffff;
+}
+
+/* ── Panneau gauche bleu ── */
+.split-left-panel {
+  position: relative;
+  background: linear-gradient(155deg, #1a56ff 0%, #0a3dd1 55%, #0730b0 100%);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2.5rem;
+}
+
+/* Vagues SVG en bas du panneau bleu */
+.split-wave {
+  position: absolute;
+  bottom: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 110%;
+  min-width: 400px;
+  opacity: 1;
+  pointer-events: none;
+}
+
+.split-brand-block {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  max-width: 340px;
+}
+
+/* Badge logo circulaire blanc */
+.split-logo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.split-brand-name {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.04em;
+  margin: 0 0 1rem 0;
+  line-height: 1.1;
+}
+
+.split-brand-tagline {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.6;
+  margin: 0 0 2rem 0;
+}
+
+.split-feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.split-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.split-feature-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+/* ── Panneau droit blanc ── */
+.split-right-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  background: #ffffff;
+}
+
+.split-form-wrapper {
+  width: 100%;
+  max-width: 380px;
+}
+
+.split-form-header {
+  margin-bottom: 2.25rem;
+}
+
+.split-form-title {
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.04em;
+  margin: 0 0 0.4rem 0;
+}
+
+.split-form-subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* ── Formulaire ── */
+.split-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.split-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.split-label {
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: 0.01em;
+}
+
+/* Input avec bordure basse style Spacer */
+.split-input {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 0.25rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  color: #111827;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #e2e8f0;
+  border-radius: 0;
+  outline: none;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.split-input::placeholder {
+  color: #9ca3af;
+}
+
+.split-input:hover {
+  border-bottom-color: #94a3b8;
+}
+
+.split-input:focus {
+  border-bottom-color: #1a56ff;
+}
+
+/* Wrapper champ mot de passe */
+.split-input-pw-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.split-input-pw-wrap .split-input {
+  padding-right: 2.5rem;
+}
+
+.split-pw-toggle {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 0.3rem;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.2s ease;
+}
+
+.split-pw-toggle:hover {
+  color: #374151;
+}
+
+/* Message d'erreur */
+.split-error {
+  padding: 0.7rem 0.9rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-size: 0.84375rem;
+  border-radius: 8px;
+  line-height: 1.45;
+  overflow: hidden;
+}
+
+/* Bouton principal bleu */
+.split-submit-btn {
+  width: 100%;
+  height: 2.85rem;
+  margin-top: 0.5rem;
+  background: linear-gradient(135deg, #1a56ff 0%, #1040d4 100%);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(26, 86, 255, 0.28);
+  transition: box-shadow 0.2s ease, opacity 0.2s ease;
+  letter-spacing: 0.01em;
+}
+
+.split-submit-btn:hover:not(:disabled) {
+  box-shadow: 0 6px 24px rgba(26, 86, 255, 0.38);
+}
+
+.split-submit-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* Lien inscription */
+.split-signup-row {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin: 0.35rem 0 0 0;
+}
+
+.split-signup-link {
+  color: #1a56ff;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.split-signup-link:hover {
+  color: #1040d4;
+  text-decoration: underline;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .split-auth-page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .split-left-panel {
+    padding: 2.5rem 1.5rem 4rem;
+    min-height: 240px;
+  }
+
+  .split-wave {
+    bottom: -30px;
+  }
+
+  .split-brand-name {
+    font-size: 1.6rem;
+  }
+
+  .split-brand-tagline,
+  .split-feature-list {
+    display: none;
+  }
+
+  .split-right-panel {
+    padding: 2rem 1.5rem 2.5rem;
+  }
+}
+
+/* Ancien style de secours */
 .auth-page {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - var(--header-h) - 160px);
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: 2rem 0;
+  min-height: calc(100vh - var(--header-h, 64px) - 120px);
+  padding: 2rem 1rem;
 }
 
-/* Même recette que le ciel du hero de la landing, en version discrète :
-   l'écran de connexion doit rester reconnaissable comme OffRec. */
-.auth-page::before {
-  content: '';
+/* ═══════════════════════════════════════════════
+   Page d'inscription — styles additionnels
+   ═══════════════════════════════════════════════ */
+
+/* Le formulaire d'inscription peut être plus haut que 100vh */
+.split-signup-page {
+  min-height: calc(100vh - var(--header-h, 64px));
+  align-items: stretch;
+}
+
+.split-signup-page .split-left-panel {
+  position: sticky;
+  top: var(--header-h, 64px);
+  height: calc(100vh - var(--header-h, 64px));
+  align-self: flex-start;
+}
+
+.signup-form-wrapper {
+  max-width: 420px;
+  padding: 1rem 0;
+}
+
+/* Sélecteur de rôle pill style */
+.signup-role-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.signup-role-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.7rem 1rem;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  font-family: inherit;
+  overflow: hidden;
+}
+
+.signup-role-btn:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.signup-role-btn.active {
+  border-color: #1a56ff;
+  background: rgba(26, 86, 255, 0.04);
+}
+
+.signup-role-pill {
   position: absolute;
-  inset: -20% -10%;
-  z-index: -1;
-  background:
-    radial-gradient(ellipse 55% 45% at 82% 8%, rgba(26, 86, 255, 0.14), transparent 60%),
-    radial-gradient(ellipse 45% 38% at 6% 92%, rgba(26, 86, 255, 0.08), transparent 65%);
+  inset: 0;
+  border-radius: 9px;
+  background: transparent;
+  border: 2px solid #1a56ff;
   pointer-events: none;
 }
 
-.auth-eyebrow {
+.signup-role-icon-wrap {
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin-bottom: 0.85rem;
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(26, 86, 255, 0.06);
+  flex-shrink: 0;
 }
 
-.auth-container {
-  max-width: 420px;
-  width: 100%;
-  padding-top: 1rem;
+.signup-role-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #374151;
   position: relative;
   z-index: 1;
 }
 
-.auth-container .card {
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
-}
-
-.auth-container h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  margin-bottom: 0.35rem;
-  text-align: center;
-}
-
-.auth-sub {
-  text-align: center;
-  color: var(--color-ink-muted);
-  margin-bottom: 1.5rem;
-  font-size: 0.9375rem;
-  line-height: 1.55;
-}
-
-.auth-error {
-  color: var(--color-danger);
-  font-size: 0.875rem;
-  margin-bottom: 0.75rem;
-  padding: 0.65rem 0.85rem;
-  background: var(--color-danger-bg);
-  border-radius: var(--radius-sm);
-}
-
-.auth-footer {
-  text-align: center;
-  margin-top: 1.5rem;
-  font-size: 0.875rem;
-  color: var(--color-ink-muted);
-}
-
-.demo-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 1.25rem;
-  justify-content: center;
-}
-
-.role-toggle {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  padding: 4px;
-  background: var(--color-bg);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-}
-
-.role-toggle button {
-  position: relative;
-  padding: 0.7rem 0.4rem;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  font-size: 0.7rem;
+.signup-role-btn.active .signup-role-label {
+  color: #1a56ff;
   font-weight: 600;
-  line-height: 1.25;
+}
+
+/* Select style cohérent avec split-input */
+.split-select {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 0.25rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  color: #111827;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #e2e8f0;
+  border-radius: 0;
+  outline: none;
+  transition: border-color 0.2s ease;
   cursor: pointer;
-  color: var(--color-ink-muted);
-  transition: color 0.2s var(--ease-out);
+  appearance: auto;
 }
 
-.role-toggle button.active {
-  color: var(--color-ink);
+.split-select:hover {
+  border-bottom-color: #94a3b8;
 }
 
-.role-toggle-pill {
-  position: absolute;
-  inset: 0;
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-xs);
+.split-select:focus {
+  border-bottom-color: #1a56ff;
 }
 
-.role-toggle button span {
-  position: relative;
+/* Responsive inscription */
+@media (max-width: 768px) {
+  .split-signup-page .split-left-panel {
+    position: static;
+    height: auto;
+  }
+
+  .signup-form-wrapper {
+    max-width: 100%;
+  }
 }

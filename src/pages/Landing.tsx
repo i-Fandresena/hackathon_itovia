@@ -118,9 +118,6 @@ export function Landing() {
                   </Button>
                 </Link>
               </div>
-              <p className="hero-demo">
-                Démo : <code>candidat@demo.mg</code> · <code>demo123</code>
-              </p>
             </FadeUp>
           </div>
 

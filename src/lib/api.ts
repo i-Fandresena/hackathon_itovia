@@ -22,9 +22,11 @@ const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http:/
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  details?: Record<string, unknown>
+  constructor(message: string, status: number, details?: Record<string, unknown>) {
     super(message)
     this.status = status
+    this.details = details
   }
 }
 
@@ -38,7 +40,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const isJson = res.headers.get('content-type')?.includes('application/json')
   const body = isJson ? await res.json() : undefined
   if (!res.ok) {
-    throw new ApiError(body?.error ?? `Erreur ${res.status}`, res.status)
+    let errorMsg = body?.error ?? `Erreur ${res.status}`
+    if (body?.details?.fieldErrors) {
+      const fieldDetails = Object.entries(body.details.fieldErrors)
+        .map(([field, msgs]) => `${field}: ${(msgs as string[]).join(', ')}`)
+        .join(' ; ')
+      if (fieldDetails && !errorMsg.includes('(')) {
+        errorMsg = `${errorMsg} (${fieldDetails})`
+      }
+    }
+    throw new ApiError(errorMsg, res.status, body?.details)
   }
   return body as T
 }

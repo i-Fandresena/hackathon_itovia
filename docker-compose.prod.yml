@@ -1,0 +1,27 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: offrec-web
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=coolify"
+      - "traefik.http.routers.offrec-http.entryPoints=http"
+      - "traefik.http.routers.offrec-http.rule=Host(`offrec.qualitec.mg`)"
+      - "traefik.http.routers.offrec-http.middlewares=offrec-redirect-https"
+      - "traefik.http.middlewares.offrec-redirect-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.offrec-https.entryPoints=https"
+      - "traefik.http.routers.offrec-https.rule=Host(`offrec.qualitec.mg`)"
+      - "traefik.http.routers.offrec-https.tls=true"
+      - "traefik.http.routers.offrec-https.tls.certresolver=letsencrypt"
+      - "traefik.http.services.offrec.loadbalancer.server.port=80"
+
+networks:
+  coolify:
+    external: true

@@ -8,7 +8,12 @@ export function errorHandler(
   _next: NextFunction,
 ): void {
   if (err instanceof ZodError) {
-    res.status(400).json({ error: 'Données invalides.', details: err.flatten() })
+    const fieldErrs = err.flatten().fieldErrors
+    const formatted = Object.entries(fieldErrs)
+      .map(([field, msgs]) => `${field}: ${msgs?.join(', ')}`)
+      .join(' ; ')
+    const message = formatted ? `Données invalides (${formatted})` : 'Données invalides.'
+    res.status(400).json({ error: message, details: err.flatten() })
     return
   }
   if (err instanceof Error) {

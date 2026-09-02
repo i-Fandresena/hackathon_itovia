@@ -88,8 +88,9 @@
 
 /* icône, libellé et badge doivent peindre au-dessus de la pastille animée */
 .side-nav a > svg,
-.side-nav a > span {
+.side-nav a > span:not(.side-nav-pill) {
   position: relative;
+  z-index: 2 !important;
 }
 
 .side-nav a span:first-of-type {
@@ -102,7 +103,12 @@
 }
 
 .side-nav a.active {
-  color: #fff;
+  color: #ffffff !important;
+}
+
+.side-nav a.active > svg,
+.side-nav a.active > span {
+  color: #ffffff !important;
 }
 
 .side-nav a.active:hover {
@@ -116,7 +122,8 @@
   inset: 0;
   background: var(--color-accent);
   border-radius: var(--radius-md);
-  box-shadow: 0 6px 16px rgba(26, 86, 255, 0.25);
+  box-shadow: 0 4px 14px rgba(26, 86, 255, 0.3);
+  z-index: 1 !important;
 }
 
 .side-badge {

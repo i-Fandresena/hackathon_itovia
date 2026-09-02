@@ -1,0 +1,53 @@
+/* ── AnimatedIcon — SVG draw-on animation ── */
+
+.anim-icon {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Tous les strokes partent invisibles */
+.anim-stroke {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  animation: icon-draw 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: var(--icon-delay, 0s);
+}
+
+.anim-stroke-rect {
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation-duration: 0.5s;
+}
+
+.anim-stroke-circle {
+  stroke-dasharray: 56;
+  stroke-dashoffset: 56;
+  animation-duration: 0.5s;
+}
+
+.anim-stroke-circle2 {
+  stroke-dasharray: 38;
+  stroke-dashoffset: 38;
+  animation-duration: 0.45s;
+  animation-delay: calc(var(--icon-delay, 0s) + 0.1s);
+}
+
+.anim-stroke-delay1 {
+  animation-delay: calc(var(--icon-delay, 0s) + 0.15s);
+}
+
+.anim-stroke-delay2 {
+  animation-delay: calc(var(--icon-delay, 0s) + 0.28s);
+}
+
+/* Pop scale pour les étoiles */
+.anim-pop .anim-stroke {
+  animation: icon-draw 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation-delay: var(--icon-delay, 0s);
+}
+
+@keyframes icon-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}

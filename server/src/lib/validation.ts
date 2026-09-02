@@ -53,15 +53,15 @@ export const loginSchema = z.object({
 })
 
 export const opportunityInputSchema = z.object({
-  title: z.string().min(3),
-  category: z.string().min(2),
-  description: z.string().min(20),
-  province: z.string().min(2),
-  city: z.string().min(2),
-  opportunityType: z.enum(opportunityTypes),
+  title: z.string().min(3, 'Le titre doit contenir au moins 3 caractères.'),
+  category: z.string().min(2, 'La catégorie est requise.'),
+  description: z.string().min(10, 'La description doit contenir au moins 10 caractères.'),
+  province: z.string().min(2, 'La province est requise.'),
+  city: z.string().min(2, 'La ville est requise.'),
+  opportunityType: z.enum(opportunityTypes, { errorMap: () => ({ message: 'Type d’opportunité invalide.' }) }),
   requiredSkills: z.array(z.string().min(1)).default([]),
-  level: z.enum(experienceLevels),
-  deadline: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Date invalide.'),
+  level: z.enum(experienceLevels, { errorMap: () => ({ message: 'Niveau d’expérience invalide.' }) }),
+  deadline: z.string().refine((v) => Boolean(v) && !Number.isNaN(Date.parse(v)), 'Date limite invalide.'),
   featured: z.boolean().optional(),
 })
 

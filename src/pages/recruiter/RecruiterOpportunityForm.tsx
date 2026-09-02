@@ -32,7 +32,7 @@ const defaultForm: {
   opportunityType: 'emploi',
   requiredSkills: [],
   level: 'junior',
-  deadline: '',
+  deadline: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
 }
 
 export function RecruiterOpportunityForm() {
@@ -109,9 +109,11 @@ export function RecruiterOpportunityForm() {
                 ))}
               </Select>
             </Field>
-            <Field label="Description">
+            <Field label="Description" hint="Détaillez le poste, les responsabilités et les prérequis (au moins 10 caractères).">
               <Textarea
                 required
+                minLength={10}
+                placeholder="Ex. Nous recrutons un développeur React/TypeScript motivé pour rejoindre notre équipe à Antananarivo..."
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
@@ -130,6 +132,8 @@ export function RecruiterOpportunityForm() {
             </Field>
             <Field label="Ville">
               <Input
+                required
+                placeholder="Ex. Antananarivo, Tamatave..."
                 value={form.city}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
               />
@@ -179,7 +183,7 @@ export function RecruiterOpportunityForm() {
                 ))}
               </div>
             </Field>
-            <Field label="Date limite">
+            <Field label="Date limite de candidature">
               <Input
                 type="date"
                 required
@@ -187,7 +191,22 @@ export function RecruiterOpportunityForm() {
                 onChange={(e) => setForm({ ...form, deadline: e.target.value })}
               />
             </Field>
-            {error && <p style={{ color: 'var(--color-danger, #c0392b)' }}>{error}</p>}
+            {error && (
+              <div
+                style={{
+                  color: 'var(--color-danger, #dc2626)',
+                  background: 'var(--color-danger-bg, #fef2f2)',
+                  border: '1px solid #fecaca',
+                  padding: '0.75rem 1rem',
+                  borderRadius: 'var(--radius-md, 8px)',
+                  marginBottom: '1rem',
+                  fontSize: '0.875rem',
+                  lineHeight: 1.4,
+                }}
+              >
+                {error}
+              </div>
+            )}
             <Button type="submit" fullWidth>
               {isEdit ? 'Enregistrer' : 'Publier l’offre'}
             </Button>
