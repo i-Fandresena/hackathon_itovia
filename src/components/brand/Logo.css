@@ -18,7 +18,9 @@
 }
 
 .logo-mark-bg {
-  fill: var(--color-ink);
+  /* Toujours un fond sombre, y compris en thème clair/sombre : c'est un
+     repère de marque, il ne doit pas s'inverser avec le thème. */
+  fill: var(--color-dark);
 }
 
 .logo-dot {

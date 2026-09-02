@@ -36,6 +36,20 @@
   --color-dark-elevated: #141820;
   --color-dark-border: rgba(255, 255, 255, 0.08);
 
+  /* Boutons/pastilles "pleins" (CTA primaire) : doivent rester lisibles
+     dans les deux thèmes, donc ils s'inversent avec lui plutôt que de
+     réutiliser `--color-ink` (qui, lui, s'inverse pour rester le texte
+     lisible sur `--color-bg` — pas pour peindre un fond plein). */
+  --color-solid: #0c0e12;
+  --color-solid-hover: #1a1d24;
+  --color-solid-text: #ffffff;
+
+  /* Fonds translucides avec `backdrop-filter` (barres de tête sticky/pastille
+     flottante) : une couleur `rgba` fixe ne peut pas lire `--color-bg`, donc
+     ce sont des jetons à part, redéfinis dans le bloc thème sombre. */
+  --color-bg-translucent: rgba(244, 245, 247, 0.85);
+  --color-surface-translucent: rgba(255, 255, 255, 0.94);
+
   --color-border: rgba(12, 14, 18, 0.08);
   --color-border-strong: rgba(12, 14, 18, 0.14);
 
@@ -116,6 +130,13 @@
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
   --shadow-glow: 0 0 0 1px var(--color-border), 0 12px 40px rgba(91, 140, 255, 0.2);
+
+  --color-solid: #f2f3f5;
+  --color-solid-hover: #dde0e5;
+  --color-solid-text: #14161b;
+
+  --color-bg-translucent: rgba(14, 16, 21, 0.85);
+  --color-surface-translucent: rgba(23, 26, 33, 0.92);
 }
 
 *,
