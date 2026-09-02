@@ -182,7 +182,7 @@
   }
 
   .shell-body {
-    grid-template-columns: 252px minmax(0, 1fr);
+    grid-template-columns: 264px minmax(0, 1fr);
   }
 
   .shell-side {
@@ -191,6 +191,9 @@
     max-height: calc(100vh - var(--header-h) - 2.5rem);
     overflow-y: auto;
     overflow-x: hidden;
+    /* Espace entre le trait de défilement et le contenu du rail, pour ne
+       jamais le coller aux cartes. */
+    padding-right: 0.75rem;
     scrollbar-width: thin;
   }
 
@@ -201,7 +204,7 @@
 
 @media (min-width: 1320px) {
   .shell-body {
-    grid-template-columns: 252px minmax(0, 1fr) 304px;
+    grid-template-columns: 264px minmax(0, 1fr) 304px;
   }
 
   .shell-rail {

@@ -65,7 +65,7 @@ export function Header({ floating }: HeaderProps = {}) {
             </div>
           )}
 
-          <ThemeToggle />
+          {!floating && <ThemeToggle />}
         </div>
       </div>
 
