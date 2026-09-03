@@ -70,20 +70,15 @@
   max-width: 340px;
 }
 
-/* Badge logo circulaire blanc — fond plein, pas translucide : le logo n'a
-   pas de variante claire dédiée, il lui faut un vrai fond blanc pour rester
-   lisible sur le panneau bleu. */
+/* Icône transparente dédiée à ce panneau bleu — pas de fond derrière (le
+   fichier est déjà conçu pour se poser directement dessus). */
 .split-logo-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 72px;
   height: 72px;
-  background: #fff;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-radius: 50%;
   margin-bottom: 1.5rem;
-  box-shadow: var(--shadow-md);
 }
 
 .split-brand-name {

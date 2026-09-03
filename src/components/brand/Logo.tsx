@@ -9,7 +9,7 @@ interface LogoProps {
 
 /** Ratio hauteur/largeur des fichiers sources — évite toute déformation
  *  quand on ne fixe qu'une seule dimension. */
-const MARK_RATIO = 191 / 300
+const MARK_RATIO = 199 / 320
 const FULL_RATIO = 135 / 640
 
 export function LogoMark({ size = 32 }: { size?: number }) {
