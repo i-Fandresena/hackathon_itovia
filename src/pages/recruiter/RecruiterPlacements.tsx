@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Briefcase } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
+import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Select } from '../../components/ui/Form'
@@ -19,14 +20,33 @@ const STAGE_LABELS: Record<PlacementStage, string> = {
 
 export function RecruiterPlacements() {
   const [placements, setPlacements] = useState<Placement[] | null>(null)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    apiMyPlacements().then(setPlacements)
-  }, [])
+  const load = () => {
+    setError('')
+    apiMyPlacements()
+      .then(setPlacements)
+      .catch(() => setError('Impossible de charger les placements.'))
+  }
+
+  useEffect(load, [])
 
   const handleStageChange = async (id: string, stage: PlacementStage) => {
     setPlacements((list) => list?.map((p) => (p.id === id ? { ...p, stage } : p)) ?? null)
     await apiUpdatePlacementStage(id, stage)
+  }
+
+  if (error) {
+    return (
+      <div className="page">
+        <div className="container">
+          <p style={{ marginBottom: '1rem' }}>{error}</p>
+          <Button size="sm" onClick={load}>
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   if (!placements) {

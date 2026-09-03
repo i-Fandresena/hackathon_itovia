@@ -29,12 +29,29 @@ export function RecruiterShortlist() {
   const [data, setData] = useState<{ matched: ShortlistMatched[]; proposed: ShortlistProposed[] } | null>(null)
   const [salary, setSalary] = useState<Record<string, string>>({})
   const [feedback, setFeedback] = useState('')
+  const [error, setError] = useState('')
 
   const load = () => {
-    apiShortlist(id).then(setData)
+    setError('')
+    apiShortlist(id)
+      .then(setData)
+      .catch(() => setError('Impossible de charger la shortlist.'))
   }
 
   useEffect(load, [id])
+
+  if (error) {
+    return (
+      <div className="page">
+        <div className="container">
+          <p style={{ marginBottom: '1rem' }}>{error}</p>
+          <Button size="sm" onClick={load}>
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   if (!data) {
     return (

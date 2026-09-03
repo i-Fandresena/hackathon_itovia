@@ -60,9 +60,13 @@ export function Sourcing() {
   const [form, setForm] = useState<SourcingLeadInput>(defaultForm)
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   const load = () => {
-    apiListSourcingLeads().then(setLeads)
+    setLoadError('')
+    apiListSourcingLeads()
+      .then(setLeads)
+      .catch(() => setLoadError('Impossible de charger les pistes de veille.'))
   }
 
   useEffect(load, [])
@@ -93,6 +97,19 @@ export function Sourcing() {
   const ignore = async (id: string) => {
     await apiUpdateSourcingLeadStatus(id, 'ignore')
     load()
+  }
+
+  if (loadError) {
+    return (
+      <div className="page">
+        <div className="container">
+          <p style={{ marginBottom: '1rem' }}>{loadError}</p>
+          <Button size="sm" onClick={load}>
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   if (!leads) {

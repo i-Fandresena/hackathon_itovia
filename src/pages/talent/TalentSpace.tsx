@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Clock, ShieldCheck } from 'lucide-react'
-import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
+import { Button } from '../../components/ui/Button'
+import { Card } from '../../components/ui/Card'
 import { Loading } from '../../components/ui/Loading'
 import { apiTalentAccountMe, type TalentAccountMe } from '../../lib/api'
 import { formatDate } from '../../lib/format'
@@ -35,10 +36,29 @@ const TALENT_STATUS_VARIANT: Record<TalentStatus, 'muted' | 'primary' | 'success
  */
 export function TalentSpace() {
   const [account, setAccount] = useState<TalentAccountMe | null>(null)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    apiTalentAccountMe().then(setAccount)
-  }, [])
+  const load = () => {
+    setError('')
+    apiTalentAccountMe()
+      .then(setAccount)
+      .catch(() => setError('Impossible de charger votre espace.'))
+  }
+
+  useEffect(load, [])
+
+  if (error) {
+    return (
+      <div className="page">
+        <div className="container">
+          <p style={{ marginBottom: '1rem' }}>{error}</p>
+          <Button size="sm" onClick={load}>
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   if (!account) {
     return (

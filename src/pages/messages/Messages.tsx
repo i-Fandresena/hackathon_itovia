@@ -27,9 +27,13 @@ export function Messages() {
   const [messages, setMessages] = useState<ConversationMessage[] | null>(null)
   const [draft, setDraft] = useState('')
   const [newMessage, setNewMessage] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   const loadConversations = () => {
-    apiMyConversations().then(setConversations)
+    setLoadError('')
+    apiMyConversations()
+      .then(setConversations)
+      .catch(() => setLoadError('Impossible de charger vos conversations.'))
   }
 
   useEffect(() => {
@@ -41,7 +45,9 @@ export function Messages() {
       setMessages(null)
       return
     }
-    apiConversationMessages(selectedId).then(setMessages)
+    apiConversationMessages(selectedId)
+      .then(setMessages)
+      .catch(() => setLoadError('Impossible de charger cette conversation.'))
   }, [selectedId])
 
   const handleSend = (e: FormEvent) => {
@@ -73,6 +79,19 @@ export function Messages() {
     setNewMessage('')
     loadConversations()
     setSearchParams({ c: conversationId })
+  }
+
+  if (loadError && !conversations) {
+    return (
+      <div className="page">
+        <div className="container">
+          <p style={{ marginBottom: '1rem' }}>{loadError}</p>
+          <Button size="sm" onClick={loadConversations}>
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   if (!conversations) {

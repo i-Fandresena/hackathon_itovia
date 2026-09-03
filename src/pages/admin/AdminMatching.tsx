@@ -36,31 +36,41 @@ export function AdminMatching() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [selectedOpp, setSelectedOpp] = useState('')
   const [pool, setPool] = useState<CandidatePoolEntry[] | null>(null)
+  const [poolError, setPoolError] = useState('')
   const [queue, setQueue] = useState<AdminMatchSuggestion[] | null>(null)
   const [feedback, setFeedback] = useState('')
 
   useEffect(() => {
-    apiListOpportunities().then((opps) => {
-      setOpportunities(opps)
-      if (opps.length > 0) setSelectedOpp(opps[0].id)
-    })
+    apiListOpportunities()
+      .then((opps) => {
+        setOpportunities(opps)
+        if (opps.length > 0) setSelectedOpp(opps[0].id)
+      })
+      .catch(() => setFeedback('Impossible de charger les offres.'))
     loadQueue()
   }, [])
 
   const loadQueue = () => {
-    apiAdminMatchSuggestions().then(setQueue)
+    apiAdminMatchSuggestions()
+      .then(setQueue)
+      .catch(() => setFeedback('Impossible de charger la file de suggestions.'))
   }
 
-  useEffect(() => {
+  const loadPool = () => {
     if (!selectedOpp) return
     setPool(null)
-    apiAdminCandidatePool(selectedOpp).then(setPool)
-  }, [selectedOpp])
+    setPoolError('')
+    apiAdminCandidatePool(selectedOpp)
+      .then(setPool)
+      .catch(() => setPoolError('Impossible de charger le vivier de candidats.'))
+  }
+
+  useEffect(loadPool, [selectedOpp])
 
   const handlePropose = async (candidateId: string) => {
     await apiAdminCreateSuggestion(selectedOpp, candidateId)
     setFeedback('Suggestion envoyée au candidat.')
-    apiAdminCandidatePool(selectedOpp).then(setPool)
+    loadPool()
     loadQueue()
   }
 
@@ -101,7 +111,14 @@ export function AdminMatching() {
               ))}
             </Select>
           </div>
-          {!pool ? (
+          {poolError ? (
+            <div>
+              <p style={{ marginBottom: '0.75rem' }}>{poolError}</p>
+              <Button size="sm" onClick={loadPool}>
+                Réessayer
+              </Button>
+            </div>
+          ) : !pool ? (
             <Loading />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>

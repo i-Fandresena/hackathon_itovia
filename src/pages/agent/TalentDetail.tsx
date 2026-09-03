@@ -27,19 +27,36 @@ export function TalentDetail() {
   const [note, setNote] = useState('')
   const [selectedOpportunity, setSelectedOpportunity] = useState('')
   const [feedback, setFeedback] = useState('')
+  const [error, setError] = useState('')
 
   const load = () => {
-    apiTalentDetail(id).then((t) => {
-      setTalent(t)
-      const grid = VERIFICATION_GRIDS[t.trade] ?? VERIFICATION_GRIDS.default
-      setChecklist(Object.fromEntries(grid.map((item) => [item, false])))
-    })
+    setError('')
+    apiTalentDetail(id)
+      .then((t) => {
+        setTalent(t)
+        const grid = VERIFICATION_GRIDS[t.trade] ?? VERIFICATION_GRIDS.default
+        setChecklist(Object.fromEntries(grid.map((item) => [item, false])))
+      })
+      .catch(() => setError('Impossible de charger ce talent.'))
   }
 
   useEffect(load, [id])
   useEffect(() => {
     apiListOpportunities().then(setOpportunities)
   }, [])
+
+  if (error) {
+    return (
+      <div className="page">
+        <div className="container">
+          <p style={{ marginBottom: '1rem' }}>{error}</p>
+          <Button size="sm" onClick={load}>
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   if (!talent) {
     return (

@@ -27,9 +27,13 @@ const STATUS_VARIANT: Record<LeadStatus, 'muted' | 'primary' | 'success'> = {
 
 export function Leads() {
   const [leads, setLeads] = useState<TalentLead[] | null>(null)
+  const [error, setError] = useState('')
 
   const load = () => {
-    apiListLeads().then(setLeads)
+    setError('')
+    apiListLeads()
+      .then(setLeads)
+      .catch(() => setError('Impossible de charger les demandes.'))
   }
 
   useEffect(load, [])
@@ -42,6 +46,19 @@ export function Leads() {
   const ignore = async (id: string) => {
     await apiUpdateLeadStatus(id, 'ignore')
     load()
+  }
+
+  if (error) {
+    return (
+      <div className="page">
+        <div className="container">
+          <p style={{ marginBottom: '1rem' }}>{error}</p>
+          <Button size="sm" onClick={load}>
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   if (!leads) {

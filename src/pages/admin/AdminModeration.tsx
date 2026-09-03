@@ -26,9 +26,13 @@ const ACTIONS: { action: ModerationActionType; label: string; variant: 'ghost' |
 export function AdminModeration() {
   const [reports, setReports] = useState<AdminReport[] | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState('')
 
   const load = () => {
-    apiAdminReports().then(setReports)
+    setError('')
+    apiAdminReports()
+      .then(setReports)
+      .catch(() => setError('Impossible de charger les signalements.'))
   }
 
   useEffect(load, [])
@@ -41,6 +45,19 @@ export function AdminModeration() {
     } finally {
       setBusyId(null)
     }
+  }
+
+  if (error) {
+    return (
+      <div className="page">
+        <div className="container">
+          <p style={{ marginBottom: '1rem' }}>{error}</p>
+          <Button size="sm" onClick={load}>
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   if (!reports) {
