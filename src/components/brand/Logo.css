@@ -7,10 +7,16 @@
   text-decoration: none;
 }
 
+/* Le logo n'a pas de variante claire dédiée : un fond blanc constant
+   garantit sa lisibilité sur n'importe quel fond (thème sombre compris),
+   plutôt que de dépendre du fond de la coquille qui l'entoure. */
 .logo-brand {
   display: inline-flex;
   align-items: center;
   gap: 0.625rem;
+  background: #fff;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-md);
 }
 
 .logo-mark-img,
