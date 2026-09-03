@@ -17,16 +17,13 @@
   }
 }
 
-.footer-logo .logo-wordmark {
-  color: #fff;
-}
-
-.footer-logo .logo-mark-bg {
-  fill: #fff;
-}
-
-.footer-logo .logo-mark-svg path[stroke^='url'] {
-  stroke: #1a56ff;
+/* Le logo garde ses couleurs de marque (pas de variante claire) : sur le
+   fond sombre constant du footer, une pastille blanche derrière assure le
+   contraste plutôt que d'essayer de le recolorer. */
+.footer-logo.logo-brand {
+  background: #fff;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius-md);
 }
 
 .footer-brand {

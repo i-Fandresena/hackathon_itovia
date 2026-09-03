@@ -7,58 +7,41 @@ interface LogoProps {
   className?: string
 }
 
+/** Ratio hauteur/largeur des fichiers sources — évite toute déformation
+ *  quand on ne fixe qu'une seule dimension. */
+const MARK_RATIO = 191 / 300
+const FULL_RATIO = 135 / 640
+
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
+    <img
+      src="/logo-mark.png"
+      alt=""
       aria-hidden
-      className="logo-mark-svg"
-    >
-      <rect width="40" height="40" rx="10" className="logo-mark-bg" />
-      <path
-        d="M12 26.5C12 19.596 17.596 14 24.5 14"
-        stroke="url(#logoArc)"
-        strokeWidth="2.75"
-        strokeLinecap="round"
-      />
-      <path
-        d="M28 13.5L28 22.5L19 22.5"
-        stroke="url(#logoArrow)"
-        strokeWidth="2.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="24.5" cy="14" r="2" className="logo-dot" />
-      <circle cx="19" cy="22.5" r="1.5" fill="#fff" fillOpacity="0.9" />
-      <defs>
-        <linearGradient id="logoArc" x1="12" y1="14" x2="28" y2="26" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#5B8CFF" />
-          <stop offset="1" stopColor="#1A56FF" />
-        </linearGradient>
-        <linearGradient id="logoArrow" x1="19" y1="13.5" x2="28" y2="22.5" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#fff" />
-          <stop offset="1" stopColor="#A8C4FF" />
-        </linearGradient>
-      </defs>
-    </svg>
+      width={size}
+      height={Math.round(size * MARK_RATIO)}
+      className="logo-mark-img"
+    />
   )
 }
 
 export function Logo({ variant = 'full', to = '/', className = '' }: LogoProps) {
-  const content = (
-    <span className={`logo-brand ${className}`.trim()}>
-      <LogoMark size={variant === 'mark' ? 36 : 32} />
-      {variant === 'full' && (
-        <span className="logo-wordmark">
-          Off<span className="logo-word-accent">Rec</span>
-        </span>
-      )}
-    </span>
-  )
+  const content =
+    variant === 'mark' ? (
+      <span className={`logo-brand ${className}`.trim()}>
+        <LogoMark size={36} />
+      </span>
+    ) : (
+      <span className={`logo-brand ${className}`.trim()}>
+        <img
+          src="/logo.png"
+          alt="OffRec"
+          height={32}
+          width={Math.round(32 / FULL_RATIO)}
+          className="logo-full-img"
+        />
+      </span>
+    )
 
   if (to) {
     return (

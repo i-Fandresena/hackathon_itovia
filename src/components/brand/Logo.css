@@ -13,27 +13,8 @@
   gap: 0.625rem;
 }
 
-.logo-mark-svg {
+.logo-mark-img,
+.logo-full-img {
+  display: block;
   flex-shrink: 0;
-}
-
-.logo-mark-bg {
-  /* Toujours un fond sombre, y compris en thème clair/sombre : c'est un
-     repère de marque, il ne doit pas s'inverser avec le thème. */
-  fill: var(--color-dark);
-}
-
-.logo-dot {
-  fill: #ff6b4a;
-}
-
-.logo-wordmark {
-  font-size: 1.125rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  color: var(--color-ink);
-}
-
-.logo-word-accent {
-  color: var(--color-accent);
 }
