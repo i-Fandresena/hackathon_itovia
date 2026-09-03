@@ -1,12 +1,17 @@
 import type {
   AgentProfile,
+  Availability,
   CandidateProfile,
+  EducationLevel,
+  ExperienceLevel,
+  Gender,
   IndividualProfile,
   Notification,
   Member,
   MatchSuggestion,
   MatchSuggestionStatus,
   Opportunity,
+  OpportunityType,
   Placement,
   PlacementStage,
   Provider,
@@ -283,7 +288,11 @@ export interface CandidatePoolEntry {
   candidateId: string
   fullName: string
   email: string
-  alreadySuggested: boolean
+  /** `null` tant qu'aucune suggestion active n'existe (jamais proposé, ou
+   *  une proposition précédente a été écartée) — sinon l'id à passer à
+   *  `apiAdminUpdateSuggestionStatus` pour l'annuler. */
+  suggestionId: string | null
+  status: MatchSuggestionStatus | null
   match: { score: number; reasons: string[] }
 }
 
@@ -291,6 +300,30 @@ export function apiAdminCandidatePool(opportunityId: string) {
   return request<{ pool: CandidatePoolEntry[] }>(
     `/admin/matching/opportunities/${opportunityId}/candidate-pool`,
   ).then((r) => r.pool)
+}
+
+/** Fiche détaillée d'un candidat, pour aperçu avant de le proposer. */
+export interface AdminCandidateDetail {
+  fullName: string
+  email: string
+  phone: string
+  province: string
+  city: string
+  gender: Gender
+  educationLevel: EducationLevel
+  skills: string[]
+  experienceLevel: ExperienceLevel
+  desiredOpportunityTypes: OpportunityType[]
+  availability: Availability
+  cvUrl?: string | null
+  sector?: Sector | null
+  memberSince: string
+}
+
+export function apiAdminCandidateDetail(candidateId: string) {
+  return request<{ candidate: AdminCandidateDetail }>(`/admin/matching/candidates/${candidateId}`).then(
+    (r) => r.candidate,
+  )
 }
 
 export function apiAdminCreateSuggestion(opportunityId: string, candidateId: string) {

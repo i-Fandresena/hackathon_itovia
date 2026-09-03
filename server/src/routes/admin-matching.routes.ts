@@ -28,7 +28,9 @@ const ADMIN_ALLOWED_TRANSITIONS: Record<string, string[]> = {
 /**
  * Vivier de candidats diplômés pour une offre — même moteur que l'ancien
  * classement "matché IA" en direct, mais consulté par l'admin plutôt que
- * montré tel quel au recruteur (décision produit 2026-09-02).
+ * montré tel quel au recruteur (décision produit 2026-09-02). `status` reste
+ * `null` tant qu'aucune suggestion n'existe (ou qu'elle a été écartée) — le
+ * front s'en sert pour proposer "Proposer" ou "Annuler" selon le cas.
  */
 router.get('/opportunities/:id/candidate-pool', async (req, res, next) => {
   try {
@@ -43,19 +45,59 @@ router.get('/opportunities/:id/candidate-pool', async (req, res, next) => {
       prisma.candidateProfile.findMany({ include: { user: { select: { id: true, email: true } } } }),
       prisma.matchSuggestion.findMany({ where: { opportunityId: opportunity.id } }),
     ])
-    const alreadySuggested = new Set(existing.map((s) => s.candidateId))
+    const existingByCandidate = new Map(existing.map((s) => [s.candidateId, s]))
 
     const pool = candidateProfiles
-      .map((p) => ({
-        candidateId: p.userId,
-        fullName: p.fullName,
-        email: p.user.email,
-        alreadySuggested: alreadySuggested.has(p.userId),
-        match: scoreOpportunity(toDomainCandidateProfile(p, p.user.email), domainOpportunity),
-      }))
+      .map((p) => {
+        const suggestion = existingByCandidate.get(p.userId)
+        return {
+          candidateId: p.userId,
+          fullName: p.fullName,
+          email: p.user.email,
+          suggestionId: suggestion && suggestion.status !== 'ecartee' ? suggestion.id : null,
+          status: suggestion && suggestion.status !== 'ecartee' ? suggestion.status : null,
+          match: scoreOpportunity(toDomainCandidateProfile(p, p.user.email), domainOpportunity),
+        }
+      })
       .sort((a, b) => b.match.score - a.match.score)
 
     res.json({ pool })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Détail complet d'un profil candidat, pour que l'admin puisse l'examiner
+ * avant de décider de le proposer — jamais le mot de passe ni autre champ
+ * sensible, `select` explicite uniquement.
+ */
+router.get('/candidates/:id', async (req, res, next) => {
+  try {
+    const profile = await prisma.candidateProfile.findUnique({
+      where: { userId: req.params.id },
+      select: {
+        fullName: true,
+        phone: true,
+        province: true,
+        city: true,
+        gender: true,
+        educationLevel: true,
+        skills: true,
+        experienceLevel: true,
+        desiredOpportunityTypes: true,
+        availability: true,
+        cvUrl: true,
+        sector: true,
+        user: { select: { email: true, createdAt: true } },
+      },
+    })
+    if (!profile) {
+      res.status(404).json({ error: 'Candidat introuvable.' })
+      return
+    }
+    const { user, ...rest } = profile
+    res.json({ candidate: { ...rest, email: user.email, memberSince: user.createdAt } })
   } catch (err) {
     next(err)
   }
@@ -80,20 +122,31 @@ router.post('/match-suggestions', async (req, res, next) => {
       toDomainOpportunity(opportunity),
     )
 
-    const suggestion = await prisma.matchSuggestion
-      .create({
-        data: {
-          opportunityId: body.opportunityId,
-          candidateId: body.candidateId,
-          score: match.score,
-          reasons: match.reasons,
-        },
-      })
-      .catch(() => null)
-    if (!suggestion) {
+    // Une paire (offre, candidat) ne peut exister qu'une fois en base
+    // (contrainte unique) : si une suggestion écartée existe déjà, on la
+    // réactive plutôt que d'échouer — c'est exactement ce que permet le
+    // bouton "Annuler" côté vivier de candidats.
+    const existing = await prisma.matchSuggestion.findUnique({
+      where: { opportunityId_candidateId: { opportunityId: body.opportunityId, candidateId: body.candidateId } },
+    })
+    if (existing && existing.status !== 'ecartee') {
       res.status(409).json({ error: 'Ce candidat a déjà été proposé pour cette offre.' })
       return
     }
+
+    const suggestion = existing
+      ? await prisma.matchSuggestion.update({
+          where: { id: existing.id },
+          data: { status: 'proposee_candidat', score: match.score, reasons: match.reasons },
+        })
+      : await prisma.matchSuggestion.create({
+          data: {
+            opportunityId: body.opportunityId,
+            candidateId: body.candidateId,
+            score: match.score,
+            reasons: match.reasons,
+          },
+        })
 
     await prisma.notification.create({
       data: {
