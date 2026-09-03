@@ -52,8 +52,14 @@ function buildHtml(code: string, confirmUrl: string): string {
               </td>
             </tr>
             <tr>
-              <td style="font-size:13px;color:#6b7280;line-height:1.5;">
+              <td style="font-size:13px;color:#6b7280;line-height:1.5;padding-bottom:20px;">
                 Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet email — aucun compte ne sera créé.
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#9ca3af;line-height:1.5;border-top:1px solid #e5e7eb;padding-top:16px;">
+                OffRec — Qualitec, Antananarivo, Madagascar.<br />
+                Vous recevez cet email suite à une demande d'inscription sur offrec.qualitec.mg.
               </td>
             </tr>
           </table>
@@ -62,6 +68,23 @@ function buildHtml(code: string, confirmUrl: string): string {
     </table>
   </body>
 </html>`.trim()
+}
+
+function buildText(code: string, confirmUrl: string): string {
+  return [
+    'OffRec — Vérification de votre adresse email',
+    '',
+    `Votre code de vérification : ${code}`,
+    '(expire dans 10 minutes)',
+    '',
+    `Ou cliquez sur ce lien pour vérifier en un clic : ${confirmUrl}`,
+    '',
+    "Si vous n'êtes pas à l'origine de cette demande, ignorez cet email — aucun compte ne sera créé.",
+    '',
+    '—',
+    'OffRec — Qualitec, Antananarivo, Madagascar',
+    'offrec.qualitec.mg',
+  ].join('\n')
 }
 
 export async function sendVerificationEmail(email: string, code: string, confirmToken: string): Promise<SendResult> {
@@ -83,8 +106,13 @@ export async function sendVerificationEmail(email: string, code: string, confirm
     const result = await client.emails.send({
       from: fromEmail,
       to: email,
-      subject: `Votre code de vérification OffRec : ${code}`,
+      // Le code n'apparaît jamais dans le sujet : ni exposé sur un écran de
+      // verrouillage via l'aperçu de notification, ni comme motif classique
+      // de déclenchement des filtres anti-spam sur les OTP en clair.
+      subject: 'Confirmez votre adresse email — OffRec',
       html: buildHtml(code, confirmUrl),
+      text: buildText(code, confirmUrl),
+      replyTo: 'contact@qualitec.mg',
     })
     if (result.error) {
       console.error('[mailer] Erreur Resend', result.error)
