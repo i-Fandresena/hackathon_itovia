@@ -4,7 +4,14 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Field, Input, Select } from '../../components/ui/Form'
 import { AVAILABILITY_LABELS, COMMON_SKILLS, GENDER_LABELS, PROVINCES, SECTOR_LABELS, TRADES, TRADE_SECTOR } from '../../data/constants'
-import { apiCreateTalent, apiLeadDetail, apiTalentDetail, apiUpdateTalent, type TalentInput } from '../../lib/api'
+import {
+  apiCreateTalent,
+  apiLeadDetail,
+  apiSourcingLeadDetail,
+  apiTalentDetail,
+  apiUpdateTalent,
+  type TalentInput,
+} from '../../lib/api'
 import type { Availability, Gender } from '../../types'
 
 const defaultForm: TalentInput = {
@@ -23,11 +30,12 @@ export function TalentForm() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const fromLead = searchParams.get('fromLead')
+  const fromSourcingLead = searchParams.get('fromSourcingLead')
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const [form, setForm] = useState<TalentInput>(defaultForm)
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(isEdit || Boolean(fromLead))
+  const [loading, setLoading] = useState(isEdit || Boolean(fromLead) || Boolean(fromSourcingLead))
 
   useEffect(() => {
     if (id) {
@@ -62,8 +70,26 @@ export function TalentForm() {
         }))
         setLoading(false)
       })
+      return
     }
-  }, [id, fromLead])
+    if (fromSourcingLead) {
+      // La piste de veille ne connaît pas encore l'identité de la personne
+      // (c'est justement ce que le contact réel de l'agent doit établir) —
+      // seuls le métier/secteur/lieu sont repris, nom/téléphone restent à
+      // saisir après vérification.
+      apiSourcingLeadDetail(fromSourcingLead).then((lead) => {
+        setForm((f) => ({
+          ...f,
+          province: lead.province,
+          city: lead.city,
+          trade: lead.trade,
+          sector: lead.sector,
+          fromSourcingLeadId: lead.id,
+        }))
+        setLoading(false)
+      })
+    }
+  }, [id, fromLead, fromSourcingLead])
 
   const setTrade = (trade: string) => {
     setForm((f) => ({ ...f, trade, sector: TRADE_SECTOR[trade as (typeof TRADES)[number]] ?? f.sector }))
@@ -94,7 +120,11 @@ export function TalentForm() {
       <div className="container" style={{ maxWidth: 640 }}>
         <header className="page-header">
           <h1>{isEdit ? 'Modifier le talent' : 'Nouveau talent'}</h1>
-          <p>Renseignez les informations déclarées par la personne rencontrée sur le terrain.</p>
+          <p>
+            {fromSourcingLead
+              ? 'Métier, secteur et lieu repris de la piste de veille — complétez avec les informations de la personne une fois le contact établi.'
+              : 'Renseignez les informations déclarées par la personne rencontrée sur le terrain.'}
+          </p>
         </header>
         <Card>
           <form onSubmit={handleSubmit}>

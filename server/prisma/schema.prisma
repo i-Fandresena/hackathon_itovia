@@ -143,6 +143,15 @@ enum LeadStatus {
   ignore
 }
 
+/// `talent` : signal repéré d'un potentiel profil non-diplômé à approcher.
+/// `opportunity` : signal repéré d'un employeur/besoin qui pourrait publier
+/// une offre sur OffRec. Distinct de `LeadStatus` "nouveau/contacte/..." qui
+/// reste le statut d'avancement, réutilisé tel quel pour `SourcingLead`.
+enum SourcingLeadType {
+  talent
+  opportunity
+}
+
 /// Code de vérification d'email à 4 chiffres, requis avant la création de
 /// tout compte (`POST /auth/register`) — jamais de compte non vérifié en
 /// base. `token` est généré une fois le code validé (ou le lien email
@@ -183,6 +192,7 @@ model User {
   auditLogs     AuditLog[]
 
   talentsManaged        TalentProfile[]
+  sourcingLeads         SourcingLead[]
   placementsAsRecruiter Placement[]     @relation("PlacementsAsRecruiter")
   placementsAsCandidate Placement[]     @relation("PlacementsAsCandidate")
 
@@ -572,6 +582,7 @@ model TalentProfile {
   proposals     TalentOpportunityProposal[]
   placements    Placement[]
   accountProfile TalentAccountProfile?
+  sourcedFrom    SourcingLead[]
 
   @@index([agentId])
 }
@@ -597,6 +608,38 @@ model TalentLead {
 
   accountProfile TalentAccountProfile?
 
+  @@index([status])
+}
+
+/// Piste de veille journalisée par un agent (en ligne ou sur le terrain) :
+/// jamais un profil ni une offre en soi, seulement un signal à vérifier
+/// soi-même — l'annuaire ne s'étoffe qu'après un vrai contact et, pour un
+/// talent, la même vérification humaine que n'importe quel TalentProfile
+/// (§7.3.15). Distinct de TalentLead (déposé en self-service par la
+/// personne elle-même) : ici c'est l'agent qui a repéré le signal.
+model SourcingLead {
+  id          String           @id @default(uuid())
+  agentId     String
+  agent       User             @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  type        SourcingLeadType
+  /// D'où vient le signal — ex. "Groupe Facebook Bâtiment Antananarivo",
+  /// "Affiche quartier Analakely", "Bouche-à-oreille".
+  source      String
+  sourceUrl   String?
+  trade       String
+  sector      Sector
+  province    String
+  city        String
+  description String
+  status      LeadStatus       @default(nouveau)
+  /// Rempli seulement si type=talent et que la piste a donné lieu à un
+  /// vrai TalentProfile vérifié.
+  talentId    String?
+  talent      TalentProfile?   @relation(fields: [talentId], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([agentId])
   @@index([status])
 }
 

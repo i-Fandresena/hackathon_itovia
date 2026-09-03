@@ -153,6 +153,28 @@ export interface TalentLead {
   createdAt: string
 }
 
+export type SourcingLeadType = 'talent' | 'opportunity'
+
+/** Piste de veille journalisée par un agent — un signal repéré en ligne ou
+ *  sur le terrain, jamais un profil ni une offre publiée en soi tant que
+ *  l'agent n'a pas vérifié réellement (§7.3.15). */
+export interface SourcingLead {
+  id: string
+  agentId: string
+  type: SourcingLeadType
+  source: string
+  sourceUrl?: string | null
+  trade: string
+  sector: Sector
+  province: string
+  city: string
+  description: string
+  status: LeadStatus
+  talentId?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 /** Compte de suivi d'un talent non-diplômé — observe son statut, ne peut
  *  jamais créer ni modifier son propre TalentProfile (§7.3.14). */
 export interface TalentAccountProfile {

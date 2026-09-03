@@ -13,6 +13,8 @@ import type {
   Recommendation,
   RecruiterProfile,
   Sector,
+  SourcingLead,
+  SourcingLeadType,
   TalentAccountProfile,
   TalentLead,
   TalentProfile,
@@ -531,6 +533,7 @@ export interface TalentInput {
   skills: string[]
   availability: string
   fromLeadId?: string
+  fromSourcingLeadId?: string
 }
 
 export function apiCreateTalent(input: TalentInput) {
@@ -565,9 +568,54 @@ export function apiProposeTalent(id: string, opportunityId: string) {
 }
 
 export function apiAgentStats() {
-  return request<{ profilesCreated: number; verificationRate: number; placements: number }>(
-    '/agent/stats',
-  )
+  return request<{
+    profilesCreated: number
+    verificationRate: number
+    placements: number
+    sourcingLeadsCount: number
+  }>('/agent/stats')
+}
+
+/**
+ * Veille : signaux qu'un agent a repérés en ligne ou sur le terrain — pas
+ * un profil ni une offre publiés en soi, juste une piste à vérifier
+ * soi-même (§7.3.15). Voir aussi `apiCreateTalent`'s `fromSourcingLeadId`.
+ */
+export interface SourcingLeadInput {
+  type: SourcingLeadType
+  source: string
+  sourceUrl?: string
+  trade: string
+  sector: Sector
+  province: string
+  city: string
+  description: string
+}
+
+export function apiListSourcingLeads(filters?: { status?: string; type?: string }) {
+  const params = new URLSearchParams()
+  if (filters?.status) params.set('status', filters.status)
+  if (filters?.type) params.set('type', filters.type)
+  const qs = params.toString()
+  return request<{ leads: SourcingLead[] }>(`/agent/sourcing${qs ? `?${qs}` : ''}`).then((r) => r.leads)
+}
+
+export function apiSourcingLeadDetail(id: string) {
+  return request<{ lead: SourcingLead }>(`/agent/sourcing/${id}`).then((r) => r.lead)
+}
+
+export function apiCreateSourcingLead(input: SourcingLeadInput) {
+  return request<{ lead: SourcingLead }>('/agent/sourcing', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }).then((r) => r.lead)
+}
+
+export function apiUpdateSourcingLeadStatus(id: string, status: SourcingLead['status']) {
+  return request<{ lead: SourcingLead }>(`/agent/sourcing/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  }).then((r) => r.lead)
 }
 
 /**

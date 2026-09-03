@@ -26,9 +26,12 @@ const STATUS_VARIANT: Record<TalentStatus, 'muted' | 'primary' | 'success'> = {
 
 export function AgentDashboard() {
   const [talents, setTalents] = useState<TalentProfile[] | null>(null)
-  const [stats, setStats] = useState<{ profilesCreated: number; verificationRate: number; placements: number } | null>(
-    null,
-  )
+  const [stats, setStats] = useState<{
+    profilesCreated: number
+    verificationRate: number
+    placements: number
+    sourcingLeadsCount: number
+  } | null>(null)
 
   useEffect(() => {
     Promise.all([apiMyTalents(), apiAgentStats()]).then(([t, s]) => {
@@ -87,6 +90,14 @@ export function AgentDashboard() {
               <strong>{stats.placements}</strong>
               <span>Placements</span>
             </Card>
+          </FadeUp>
+          <FadeUp eager index={3}>
+            <Link to="/agent/veille" style={{ textDecoration: 'none' }}>
+              <Card className="stat-card">
+                <strong>{stats.sourcingLeadsCount}</strong>
+                <span>Pistes de veille</span>
+              </Card>
+            </Link>
           </FadeUp>
         </div>
 

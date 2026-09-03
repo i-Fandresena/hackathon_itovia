@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
 import {
+  sourcingLeadInputSchema,
+  sourcingLeadStatusSchema,
   talentLeadStatusSchema,
   talentProfileInputSchema,
   talentProposeSchema,
@@ -92,7 +94,7 @@ router.get('/talents/:id', async (req, res, next) => {
 
 router.post('/talents', async (req, res, next) => {
   try {
-    const { fromLeadId, ...body } = talentProfileInputSchema.parse(req.body)
+    const { fromLeadId, fromSourcingLeadId, ...body } = talentProfileInputSchema.parse(req.body)
     const talent = await prisma.$transaction(async (tx) => {
       const created = await tx.talentProfile.create({
         data: { ...body, agentId: req.session!.sub },
@@ -106,6 +108,12 @@ router.post('/talents', async (req, res, next) => {
         await tx.talentAccountProfile.updateMany({
           where: { leadId: fromLeadId },
           data: { talentId: created.id },
+        })
+      }
+      if (fromSourcingLeadId) {
+        await tx.sourcingLead.updateMany({
+          where: { id: fromSourcingLeadId, agentId: req.session!.sub },
+          data: { status: 'converti', talentId: created.id },
         })
       }
       return created
@@ -199,16 +207,87 @@ router.post('/talents/:id/propose', async (req, res, next) => {
 router.get('/stats', async (req, res, next) => {
   try {
     const agentId = req.session!.sub
-    const [total, verified, placed] = await Promise.all([
+    const [total, verified, placed, sourcingLeadsCount] = await Promise.all([
       prisma.talentProfile.count({ where: { agentId } }),
       prisma.talentProfile.count({ where: { agentId, status: { in: ['verifie', 'recommande', 'place'] } } }),
       prisma.talentProfile.count({ where: { agentId, status: 'place' } }),
+      prisma.sourcingLead.count({ where: { agentId } }),
     ])
     res.json({
       profilesCreated: total,
       verificationRate: total > 0 ? verified / total : 0,
       placements: placed,
+      sourcingLeadsCount,
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Veille : signaux qu'un agent a repérés en ligne ou sur le terrain (profil
+ * potentiel ou besoin d'une entreprise) — jamais publiés tels quels dans
+ * l'annuaire. Un talent n'apparaît vérifié qu'après la même vérification
+ * humaine que n'importe quel TalentProfile (§7.3.15) ; une piste d'offre ne
+ * devient une vraie Opportunity que si l'entreprise crée elle-même un
+ * compte recruteur.
+ */
+router.get('/sourcing', async (req, res, next) => {
+  try {
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined
+    const type = typeof req.query.type === 'string' ? req.query.type : undefined
+    const leads = await prisma.sourcingLead.findMany({
+      where: {
+        agentId: req.session!.sub,
+        status: status ? (status as never) : undefined,
+        type: type ? (type as never) : undefined,
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    res.json({ leads })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.get('/sourcing/:id', async (req, res, next) => {
+  try {
+    const lead = await prisma.sourcingLead.findUnique({ where: { id: req.params.id } })
+    if (!lead || lead.agentId !== req.session!.sub) {
+      res.status(404).json({ error: 'Piste introuvable.' })
+      return
+    }
+    res.json({ lead })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.post('/sourcing', async (req, res, next) => {
+  try {
+    const body = sourcingLeadInputSchema.parse(req.body)
+    const lead = await prisma.sourcingLead.create({
+      data: { ...body, sourceUrl: body.sourceUrl || null, agentId: req.session!.sub },
+    })
+    res.status(201).json({ lead })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.patch('/sourcing/:id', async (req, res, next) => {
+  try {
+    const existing = await prisma.sourcingLead.findUnique({ where: { id: req.params.id } })
+    if (!existing || existing.agentId !== req.session!.sub) {
+      res.status(404).json({ error: 'Piste introuvable.' })
+      return
+    }
+    const body = sourcingLeadStatusSchema.parse(req.body)
+    const lead = await prisma.sourcingLead.update({
+      where: { id: req.params.id },
+      data: { status: body.status },
+    })
+    res.json({ lead })
   } catch (err) {
     next(err)
   }

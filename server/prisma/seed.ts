@@ -864,6 +864,48 @@ async function main() {
     }
   }
 
+  console.log('Pistes de veille (sourcing agent)…')
+  await prisma.sourcingLead.create({
+    data: {
+      agentId: userIdByKey.get('agent-1')!,
+      type: 'talent',
+      source: 'Groupe Facebook « Bâtiment Antananarivo »',
+      trade: 'Peintre en bâtiment',
+      sector: 'btp',
+      province: 'Antananarivo',
+      city: 'Antananarivo',
+      description: 'Plusieurs photos de chantiers récents postées par la même personne, à contacter pour évaluer.',
+      status: 'nouveau',
+    },
+  })
+  await prisma.sourcingLead.create({
+    data: {
+      agentId: userIdByKey.get('agent-1')!,
+      type: 'talent',
+      source: 'Affiche quartier Analamahitsy',
+      trade: 'Couturière',
+      sector: 'textile_artisanat',
+      province: 'Antananarivo',
+      city: 'Antananarivo',
+      description: 'Atelier de couture repéré près du marché — contact établi, profil créé et vérifié.',
+      status: 'converti',
+      talentId: talentIdByKey.get('talent-1'),
+    },
+  })
+  await prisma.sourcingLead.create({
+    data: {
+      agentId: userIdByKey.get('agent-2')!,
+      type: 'opportunity',
+      source: 'Annonce WhatsApp — Quincaillerie locale',
+      trade: 'Livreur / manutentionnaire',
+      sector: 'services_commerce',
+      province: 'Antananarivo',
+      city: 'Antananarivo',
+      description: 'La quincaillerie cherche un livreur régulier, pas encore de compte recruteur — premier contact fait.',
+      status: 'contacte',
+    },
+  })
+
   console.log('Propositions d’opportunités par les agents…')
   const proposals: { talentKey: string; opportunityKey: string }[] = [
     { talentKey: 'talent-1', opportunityKey: 'opp-4' },

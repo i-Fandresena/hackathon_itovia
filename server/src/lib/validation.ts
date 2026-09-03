@@ -172,6 +172,24 @@ export const talentProfileInputSchema = z.object({
   skills: z.array(z.string().min(1)).default([]),
   availability: z.enum(availabilities),
   fromLeadId: z.string().uuid().optional(),
+  fromSourcingLeadId: z.string().uuid().optional(),
+})
+
+const sourcingLeadTypes = ['talent', 'opportunity'] as const
+
+export const sourcingLeadInputSchema = z.object({
+  type: z.enum(sourcingLeadTypes),
+  source: z.string().min(2).max(200),
+  sourceUrl: z.string().url().max(500).optional().or(z.literal('')),
+  trade: z.string().min(2),
+  sector: z.enum(sectors),
+  province: z.string().min(2),
+  city: z.string().min(2),
+  description: z.string().min(5).max(1000),
+})
+
+export const sourcingLeadStatusSchema = z.object({
+  status: z.enum(leadStatuses),
 })
 
 export const talentLeadInputSchema = z.object({

@@ -34,6 +34,7 @@ import { AgentDashboard } from './pages/agent/AgentDashboard'
 import { TalentForm } from './pages/agent/TalentForm'
 import { TalentDetail } from './pages/agent/TalentDetail'
 import { Leads } from './pages/agent/Leads'
+import { Sourcing } from './pages/agent/Sourcing'
 
 export default function App() {
   return (
@@ -267,6 +268,14 @@ export default function App() {
               element={
                 <ProtectedRoute role="agent">
                   <Leads />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="agent/veille"
+              element={
+                <ProtectedRoute role="agent">
+                  <Sourcing />
                 </ProtectedRoute>
               }
             />

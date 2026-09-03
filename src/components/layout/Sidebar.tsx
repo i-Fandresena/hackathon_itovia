@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageCircle,
+  Radar,
   Search,
   ShieldCheck,
   Store,
@@ -89,6 +90,7 @@ export function getLinksByRole(
     agent: [
       { to: '/agent', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
       { to: '/agent/leads', label: 'Demandes de contact', icon: Inbox },
+      { to: '/agent/veille', label: 'Veille', icon: Radar },
       { to: '/agent/talents/nouveau', label: 'Nouveau talent', icon: ClipboardCheck },
       { to: '/messages', label: 'Messages', icon: MessageCircle },
     ],
