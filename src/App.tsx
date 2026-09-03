@@ -24,6 +24,7 @@ import { RecruiterApplications } from './pages/recruiter/RecruiterApplications'
 import { IndividualDashboard } from './pages/individual/IndividualDashboard'
 import { AdminDashboard } from './pages/admin/AdminDashboard'
 import { AdminModeration } from './pages/admin/AdminModeration'
+import { AdminPlacements } from './pages/admin/AdminPlacements'
 import { AdminAgents } from './pages/admin/AdminAgents'
 import { AdminMatching } from './pages/admin/AdminMatching'
 import { Messages } from './pages/messages/Messages'
@@ -251,6 +252,14 @@ export default function App() {
               element={
                 <ProtectedRoute role="admin">
                   <AdminAgents />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/placements"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminPlacements />
                 </ProtectedRoute>
               }
             />

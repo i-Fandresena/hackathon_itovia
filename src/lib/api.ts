@@ -702,6 +702,20 @@ export function apiUpdatePlacementStage(id: string, stage: PlacementStage) {
   }).then((r) => r.placement)
 }
 
+/** Vue admin : tous les placements, tous recruteurs confondus — le seul
+ *  point de contrôle qui existait jusque-là était le compteur agrégé du
+ *  tableau de bord. */
+export interface AdminPlacement extends Placement {
+  opportunity: { id: string; title: string; companyName: string } | null
+  recruiter: { id: string; email: string; recruiterProfile: { companyName: string } | null }
+  candidate: { id: string; email: string; candidateProfile: { fullName: string } | null } | null
+  talent: { id: string; fullName: string } | null
+}
+
+export function apiAdminPlacements() {
+  return request<{ placements: AdminPlacement[] }>('/placements').then((r) => r.placements)
+}
+
 /* ------------------------------------------------------------------ */
 /* Admin                                                               */
 /* ------------------------------------------------------------------ */

@@ -10,6 +10,14 @@ import { formatDate } from '../../lib/format'
 
 type ActivityItem = AdminStats['recentActivity'][number]
 
+const PLACEMENT_STAGE_SHORT: Record<string, string> = {
+  etape1_due: 'étape 1 due',
+  etape1_payee: 'étape 1 payée',
+  etape2_due: 'étape 2 due',
+  etape2_payee: 'étape 2 payée',
+  annule: 'annulé',
+}
+
 /**
  * Libellés lisibles pour les décisions candidat/recruteur (intérêt/déclin) —
  * c'est le "suivi des décisions prises par les entreprises" demandé, pas
@@ -33,6 +41,10 @@ function describeActivity(a: ActivityItem): string {
         : `Recruteur a écarté un profil — ${opportunityTitle ?? 'offre'}`
     case 'admin:create_agent':
       return 'Création d’un compte agent'
+    case 'admin_corrected_placement_stage': {
+      const toStage = typeof meta.toStage === 'string' ? PLACEMENT_STAGE_SHORT[meta.toStage] ?? meta.toStage : '?'
+      return `Placement corrigé — passé à ${toStage}`
+    }
     default:
       if (a.action.startsWith('moderation:')) {
         return `Modération — ${a.action.replace('moderation:', '')}`
@@ -129,10 +141,12 @@ export function AdminDashboard() {
               <strong>{stats.employment.femalePercent}%</strong>
               <span>Profils recommandés — femmes ({stats.employment.genderPoolSize} mesurés)</span>
             </Card>
-            <Card className="stat-card">
-              <strong>{stats.employment.placements}</strong>
-              <span>Placements</span>
-            </Card>
+            <Link to="/admin/placements" style={{ textDecoration: 'none' }}>
+              <Card className="stat-card">
+                <strong>{stats.employment.placements}</strong>
+                <span>Placements</span>
+              </Card>
+            </Link>
             <Card className="stat-card">
               <strong>{stats.employment.activePartnerCompanies}</strong>
               <span>Entreprises partenaires actives</span>

@@ -82,6 +82,7 @@ export function getLinksByRole(
     admin: [
       { to: '/admin', label: 'Tableau de bord', icon: ShieldCheck, end: true },
       { to: '/admin/mise-en-relation', label: 'Mise en relation', icon: Handshake },
+      { to: '/admin/placements', label: 'Placements', icon: ClipboardCheck },
       { to: '/admin/moderation', label: 'Modération', icon: AlertTriangle },
       { to: '/admin/agents', label: 'Agents de terrain', icon: UserPlus },
       { to: '/annuaire', label: 'Annuaire', icon: Store },
