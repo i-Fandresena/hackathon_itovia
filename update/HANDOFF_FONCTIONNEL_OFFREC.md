@@ -278,6 +278,8 @@ Priorisation fondée sur l'audit ci-dessus. Les efforts sont indicatifs.
 
 Objectif : avoir l'application complète qui tourne sur ta machine, avec des données réalistes, en une quinzaine de minutes. **Tu ne touches jamais à la production** — nous nous chargeons du redéploiement quand ton travail est prêt (§10).
 
+> 🗄️ **La base de données t'est fournie.** Le dossier [`update/db/`](db/README.md) contient un dump PostgreSQL restaurable en une commande (`offrec_demo.sql`, schéma + jeu de démonstration) et le schéma seul (`offrec_schema.sql`), avec les deux parcours d'installation détaillés. Ces fichiers sont générés depuis une base vierge remplie par le seed — **aucune donnée personnelle réelle**, la production n'est jamais dumpée (règle de confidentialité `CLAUDE.md`).
+
 ### Prérequis
 
 - **Node.js 22.x** (impératif — Vite 8 l'exige ; un `.nvmrc` est fourni, fais `nvm use`)
