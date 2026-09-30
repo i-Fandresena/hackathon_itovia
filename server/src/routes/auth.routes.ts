@@ -15,6 +15,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { candidateProfileSchema, loginSchema, registerSchema } from '../lib/validation.js'
 import { requireRole } from '../middleware/rbac.js'
 import { serializeUser } from '../lib/serialize.js'
+import { extractCVDataWithAI, calculateYearsOfExperience } from '../lib/cv-extraction.js'
 import { COMMON_SKILLS } from '../../../src/data/constants.js'
 
 const upload = multer({
@@ -201,16 +202,30 @@ router.put('/profile/candidate', requireRole('candidate'), async (req, res, next
 })
 
 /**
- * Dépôt de CV (MVP §4.2 du cahier des charges) : extraction texte simple +
- * reconnaissance de mots-clés contre le vocabulaire de compétences existant
- * — pas de matching sémantique IA (hors périmètre MVP). Les compétences
- * suggérées ne sont jamais appliquées automatiquement au profil : le
- * candidat les confirme dans l'UI (§7.3 règle 19, additif jamais décisionnaire).
+ * Dépôt de CV (MVP §4.2 du cahier des charges) : extraction structurée avec
+ * Gemini API pour extraire toutes les données pertinentes (info personnelle,
+ * expériences, formation, compétences, langues, projets, certifications).
+ * Les données extraites ne sont jamais appliquées automatiquement au profil :
+ * le candidat les confirme dans l'UI (§7.3 règle 19, additif jamais décisionnaire).
+ * 
+ * VALIDATION : Les données personnelles du CV doivent correspondre au profil
+ * du candidat connecté (nom, email, téléphone). Si incohérence, le CV est rejeté.
  */
 router.post('/profile/candidate/cv', requireRole('candidate'), upload.single('cv'), async (req, res, next) => {
   try {
     if (!req.file) {
       res.status(400).json({ error: 'Fichier PDF requis.' })
+      return
+    }
+
+    // Récupérer le profil candidat actuel
+    const currentProfile = await prisma.candidateProfile.findUnique({
+      where: { userId: req.session!.sub },
+      include: { user: { select: { email: true } } },
+    })
+
+    if (!currentProfile) {
+      res.status(404).json({ error: 'Profil candidat introuvable.' })
       return
     }
 
@@ -220,23 +235,176 @@ router.post('/profile/candidate/cv', requireRole('candidate'), upload.single('cv
     await writeFile(path.join(uploadsDir, fileName), req.file.buffer)
     const cvUrl = `/uploads/cv/${fileName}`
 
+    // Extraire le texte du PDF
     let extractedText = ''
     try {
       const parsed = await pdfParse(req.file.buffer)
-      extractedText = parsed.text.toLowerCase()
+      extractedText = parsed.text
     } catch {
       extractedText = ''
     }
-    const suggestedSkills = COMMON_SKILLS.filter((skill) =>
-      extractedText.includes(skill.toLowerCase()),
+
+    if (!extractedText || extractedText.trim().length === 0) {
+      res.status(400).json({ error: 'Impossible d\'extraire le texte du PDF. Vérifiez que le fichier est valide.' })
+      return
+    }
+
+    // Extraire les compétences simples (méthode legacy pour rapidité)
+    const suggestedSkillsSimple = COMMON_SKILLS.filter((skill) =>
+      extractedText.toLowerCase().includes(skill.toLowerCase()),
     )
 
+    // Extraire les données structurées avec Gemini
+    const extractedData = await extractCVDataWithAI(extractedText)
+
+    if (!extractedData) {
+      // L'extraction IA a échoué, on retourne quand même le CV avec extraction simple
+      console.warn('CV extraction with AI failed for user', req.session!.sub)
+      await prisma.candidateProfile.update({
+        where: { userId: req.session!.sub },
+        data: {
+          cvUrl,
+          cvSkillsSuggested: suggestedSkillsSimple,
+          cvExtractionConfidence: 'low',
+          cvExtractionDate: new Date(),
+        },
+      })
+      res.json({
+        cvUrl,
+        suggestedSkills: suggestedSkillsSimple,
+        extractedData: {},
+        validationWarnings: ['Extraction IA indisponible, compétences basiques extraites uniquement.'],
+      })
+      return
+    }
+
+    // VALIDATION : Vérifier que les données du CV correspondent au profil
+    const validationErrors: string[] = []
+    const cvInfo = extractedData.candidateInfo
+
+    // Normaliser les chaînes pour comparaison (minuscules, trim, suppression accents)
+    const normalize = (str: string | null | undefined): string => {
+      if (!str) return ''
+      return str
+        .toLowerCase()
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+    }
+
+    // Vérifier le nom complet (fullName dans profil vs firstName + lastName dans CV)
+    if (cvInfo.firstName || cvInfo.lastName) {
+      const profileFullName = normalize(currentProfile.fullName)
+      
+      // Vérifier si le nom du profil contient le prénom ET le nom du CV
+      const firstNameMatch = !cvInfo.firstName || profileFullName.includes(normalize(cvInfo.firstName))
+      const lastNameMatch = !cvInfo.lastName || profileFullName.includes(normalize(cvInfo.lastName))
+      
+      if (!firstNameMatch || !lastNameMatch) {
+        validationErrors.push(
+          `Le nom dans le CV (${cvInfo.firstName || ''} ${cvInfo.lastName || ''}) ne correspond pas au nom du profil (${currentProfile.fullName}).`
+        )
+      }
+    }
+
+    // Vérifier l'email
+    if (cvInfo.email) {
+      const cvEmail = normalize(cvInfo.email)
+      const profileEmail = normalize(currentProfile.user.email)
+      
+      if (cvEmail && cvEmail !== profileEmail) {
+        validationErrors.push(
+          `L'email dans le CV (${cvInfo.email}) ne correspond pas à l'email du profil (${currentProfile.user.email}).`
+        )
+      }
+    }
+
+    // Vérifier le téléphone (comparaison flexible)
+    if (cvInfo.phone && currentProfile.phone) {
+      // Extraire uniquement les chiffres pour comparaison
+      const extractDigits = (phone: string): string => phone.replace(/\D/g, '')
+      const cvPhoneDigits = extractDigits(cvInfo.phone)
+      const profilePhoneDigits = extractDigits(currentProfile.phone)
+      
+      // Vérifier si les numéros sont identiques ou si l'un contient l'autre
+      if (cvPhoneDigits && profilePhoneDigits) {
+        const phoneMatch = 
+          cvPhoneDigits === profilePhoneDigits ||
+          cvPhoneDigits.includes(profilePhoneDigits) ||
+          profilePhoneDigits.includes(cvPhoneDigits)
+        
+        if (!phoneMatch) {
+          validationErrors.push(
+            `Le téléphone dans le CV (${cvInfo.phone}) ne correspond pas au téléphone du profil (${currentProfile.phone}).`
+          )
+        }
+      }
+    }
+
+    // Si des erreurs de validation sont détectées, rejeter le CV
+    if (validationErrors.length > 0) {
+      res.status(400).json({
+        error: 'Le CV ne correspond pas à votre profil.',
+        validationErrors,
+        message: 'Les informations personnelles du CV doivent correspondre aux données de votre profil. Veuillez vérifier que le CV téléversé est bien le vôtre.',
+      })
+      return
+    }
+
+    // Calculer les années d'expérience si pas déjà calculé
+    const yearsOfExp =
+      extractedData.yearsOfExperience ?? calculateYearsOfExperience(extractedData.experiences)
+
+    // Fusionner les compétences : AI + simple extraction
+    const allSkills = new Set([
+      ...extractedData.skills,
+      ...suggestedSkillsSimple,
+    ])
+
+    // Mettre à jour le profil avec les données extraites
     await prisma.candidateProfile.update({
       where: { userId: req.session!.sub },
-      data: { cvUrl, cvSkillsSuggested: suggestedSkills },
+      data: {
+        cvUrl,
+        cvSkillsSuggested: Array.from(allSkills),
+        cvExtractedInfo: extractedData.candidateInfo as any,
+        cvProfessionalTitle: extractedData.professionalTitle,
+        cvProfessionalSummary: extractedData.professionalSummary,
+        cvExperiences: extractedData.experiences as any,
+        cvEducation: extractedData.education as any,
+        cvCertifications: extractedData.certifications as any,
+        cvProjects: extractedData.projects as any,
+        cvLanguages: extractedData.languages as any,
+        cvTechnologies: extractedData.technologies,
+        cvYearsOfExperience: yearsOfExp,
+        cvDesiredLocations: extractedData.desiredLocations,
+        cvAvailability: extractedData.availability,
+        cvExtractionConfidence: extractedData.extractionConfidence,
+        cvExtractionDate: new Date(extractedData.extractionDate),
+      },
     })
 
-    res.json({ cvUrl, suggestedSkills })
+    res.json({
+      cvUrl,
+      suggestedSkills: Array.from(allSkills),
+      extractedData: {
+        candidateInfo: extractedData.candidateInfo,
+        professionalTitle: extractedData.professionalTitle,
+        professionalSummary: extractedData.professionalSummary,
+        experiences: extractedData.experiences,
+        education: extractedData.education,
+        certifications: extractedData.certifications,
+        projects: extractedData.projects,
+        languages: extractedData.languages,
+        skills: extractedData.skills,
+        technologies: extractedData.technologies,
+        yearsOfExperience: yearsOfExp,
+        availability: extractedData.availability,
+        desiredLocations: extractedData.desiredLocations,
+        extractionConfidence: extractedData.extractionConfidence,
+      },
+      validationWarnings: [],
+    })
   } catch (err) {
     next(err)
   }

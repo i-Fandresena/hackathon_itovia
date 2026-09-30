@@ -225,6 +225,36 @@ model CandidateProfile {
   cvSkillsSuggested       String[]          @default([])
   /// Secteur d'intérêt déclaré — tag de filtrage, jamais une contrainte de matching.
   sector                  Sector?
+
+  // === Données extraites du CV (JSON) ===
+  /// Informations personnelles extraites du CV (nom, prénom, email, téléphone, etc.)
+  cvExtractedInfo         Json?
+  /// Titre professionnel extrait du CV
+  cvProfessionalTitle     String?
+  /// Résumé professionnel extrait du CV
+  cvProfessionalSummary   String?
+  /// Expériences professionnelles extraites du CV (JSON array)
+  cvExperiences           Json?
+  /// Formation académique extraite du CV (JSON array)
+  cvEducation             Json?
+  /// Certifications extraites du CV (JSON array)
+  cvCertifications        Json?
+  /// Projets/réalisations extraits du CV (JSON array)
+  cvProjects              Json?
+  /// Langues extraites du CV (JSON array)
+  cvLanguages             Json?
+  /// Technologie/outils extraits du CV (liste plate)
+  cvTechnologies          String[]          @default([])
+  /// Années d'expérience calculées à partir du CV
+  cvYearsOfExperience     Int?
+  /// Localisation souhaitée extraite du CV (liste)
+  cvDesiredLocations      String[]          @default([])
+  /// Disponibilité extraite du CV
+  cvAvailability          String?
+  /// Niveau de confiance de l'extraction (high/medium/low)
+  cvExtractionConfidence  String            @default("low")
+  /// Date d'extraction du CV
+  cvExtractionDate        DateTime?
 }
 
 model RecruiterProfile {

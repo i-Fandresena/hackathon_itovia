@@ -1,0 +1,15 @@
+-- AlterTable
+ALTER TABLE "CandidateProfile" ADD COLUMN     "cvAvailability" TEXT,
+ADD COLUMN     "cvCertifications" JSONB,
+ADD COLUMN     "cvDesiredLocations" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN     "cvEducation" JSONB,
+ADD COLUMN     "cvExperiences" JSONB,
+ADD COLUMN     "cvExtractedInfo" JSONB,
+ADD COLUMN     "cvExtractionConfidence" TEXT NOT NULL DEFAULT 'low',
+ADD COLUMN     "cvExtractionDate" TIMESTAMP(3),
+ADD COLUMN     "cvLanguages" JSONB,
+ADD COLUMN     "cvProfessionalSummary" TEXT,
+ADD COLUMN     "cvProfessionalTitle" TEXT,
+ADD COLUMN     "cvProjects" JSONB,
+ADD COLUMN     "cvTechnologies" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN     "cvYearsOfExperience" INTEGER;

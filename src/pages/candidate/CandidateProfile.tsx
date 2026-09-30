@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+﻿import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { FileText, Upload } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Field, Input, Select } from '../../components/ui/Form'
+import { CVExtractedData } from '../../components/cv/CVExtractedData'
 import {
   AVAILABILITY_LABELS,
   COMMON_SKILLS,
@@ -171,6 +172,9 @@ export function CandidateProfile() {
           )}
         </Card>
 
+        {/* Afficher les données extraites du CV si disponibles */}
+        <CVExtractedData profile={profile} />
+
         <Card>
           <form onSubmit={handleSubmit}>
             <Field label="Nom complet">
@@ -317,3 +321,4 @@ export function CandidateProfile() {
     </div>
   )
 }
+

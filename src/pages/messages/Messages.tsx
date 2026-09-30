@@ -36,18 +36,45 @@ export function Messages() {
       .catch(() => setLoadError('Impossible de charger vos conversations.'))
   }
 
+  const loadCurrentMessages = () => {
+    if (!selectedId) return
+    apiConversationMessages(selectedId)
+      .then(setMessages)
+      .catch(() => setLoadError('Impossible de charger cette conversation.'))
+  }
+
+  // Chargement initial des conversations
   useEffect(() => {
     loadConversations()
   }, [])
 
+  // Polling automatique : vérifie les nouvelles conversations toutes les 10 secondes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadConversations()
+    }, 10000) // 10 secondes
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // Chargement initial des messages de la conversation sélectionnée
   useEffect(() => {
     if (!selectedId) {
       setMessages(null)
       return
     }
-    apiConversationMessages(selectedId)
-      .then(setMessages)
-      .catch(() => setLoadError('Impossible de charger cette conversation.'))
+    loadCurrentMessages()
+  }, [selectedId])
+
+  // Polling automatique : vérifie les nouveaux messages toutes les 5 secondes si une conversation est ouverte
+  useEffect(() => {
+    if (!selectedId) return
+
+    const interval = setInterval(() => {
+      loadCurrentMessages()
+    }, 5000) // 5 secondes
+
+    return () => clearInterval(interval)
   }, [selectedId])
 
   const handleSend = (e: FormEvent) => {

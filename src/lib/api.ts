@@ -32,11 +32,11 @@ const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http:/
 
 export class ApiError extends Error {
   status: number
-  details?: Record<string, unknown>
-  constructor(message: string, status: number, details?: Record<string, unknown>) {
+  body?: any
+  constructor(message: string, status: number, body?: any) {
     super(message)
     this.status = status
-    this.details = details
+    this.body = body
   }
 }
 
@@ -148,7 +148,9 @@ export function apiUpdateCandidateProfile(profile: CandidateProfile) {
 
 /** Dépôt de CV : extraction simple + suggestions de compétences, jamais
  *  appliquées automatiquement au profil (le candidat confirme dans l'UI). */
-export async function apiUploadCv(file: File): Promise<{ cvUrl: string; suggestedSkills: string[] }> {
+export async function apiUploadCv(
+  file: File,
+): Promise<{ cvUrl: string; suggestedSkills: string[]; extractedData: Record<string, any>; validationWarnings: string[] }> {
   const form = new FormData()
   form.append('cv', file)
   const res = await fetch(`${API_BASE}/auth/profile/candidate/cv`, {
@@ -158,7 +160,7 @@ export async function apiUploadCv(file: File): Promise<{ cvUrl: string; suggeste
   })
   const body = await res.json().catch(() => undefined)
   if (!res.ok) {
-    throw new ApiError(body?.error ?? `Erreur ${res.status}`, res.status)
+    throw new ApiError(body?.error ?? `Erreur ${res.status}`, res.status, body)
   }
   return body
 }
