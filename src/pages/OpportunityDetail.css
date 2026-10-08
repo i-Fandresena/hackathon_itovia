@@ -1,0 +1,133 @@
+/* Détail d'une offre (public) / d'un dossier (espace candidat). */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  color: var(--color-accent-hover);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.detail-missing {
+  margin-top: 1.25rem;
+}
+
+.detail-header {
+  margin-top: 1rem;
+}
+
+.detail-company {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.detail-header + .detail-badges,
+.detail-location,
+.detail-report {
+  margin-bottom: 1rem;
+}
+
+.detail-dossier,
+.detail-match,
+.detail-description {
+  margin-bottom: 1.25rem;
+}
+
+.detail-dossier-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.detail-dossier h2,
+.detail-description h2 {
+  font-size: 1.1rem;
+}
+
+.detail-dossier-text {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+}
+
+.detail-dossier-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.detail-dossier-actions:empty {
+  display: none;
+}
+
+.detail-dossier-note {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-ink-muted);
+}
+
+.detail-feedback {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.detail-feedback.is-ok {
+  color: var(--color-success);
+}
+
+.detail-feedback.is-error {
+  color: var(--color-danger);
+}
+
+.detail-description h2 {
+  margin-bottom: 0.75rem;
+}
+
+.detail-description h3 {
+  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.detail-description-text {
+  line-height: 1.6;
+  color: var(--color-ink-muted);
+}
+
+.detail-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.detail-facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.detail-facts dt {
+  color: var(--color-ink-muted);
+  min-width: 160px;
+}
+
+.detail-facts dd {
+  margin: 0;
+}

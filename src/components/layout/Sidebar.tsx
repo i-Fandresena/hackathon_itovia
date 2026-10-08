@@ -1,13 +1,12 @@
-import { useMemo, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   AlertTriangle,
   Bell,
-  Bookmark,
   Briefcase,
   ClipboardCheck,
   CreditCard,
+  FileCheck2,
   FilePlus2,
   Handshake,
   Inbox,
@@ -21,11 +20,10 @@ import {
   UserPlus,
   UserRound,
   Users,
-  Wrench,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { ACTIVE_SECTORS, SECTOR_DESCRIPTIONS, SECTOR_LABELS, SECTORS, TRADE_SECTOR } from '../../data/constants'
-import type { Sector, UserRole } from '../../types'
+import { ROLE_LABELS } from '../../lib/roles'
+import type { CandidateProfile, User, UserRole } from '../../types'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -33,46 +31,48 @@ interface SidebarProps {
   onLogout: () => void
 }
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  candidate: 'Candidat',
-  recruiter: 'Recruteur',
-  particulier: 'Particulier',
-  admin: 'Administrateur',
-  agent: 'Agent de terrain',
-  talent: 'Compte de suivi',
+export interface RoleLink {
+  to: string
+  label: string
+  icon: typeof LayoutDashboard
+  end?: boolean
+  badge?: number
+  /** Entrée rangée sous « Compte » dans la carte latérale plutôt que dans
+   *  la navigation principale. */
+  account?: boolean
 }
 
 /**
- * Source unique des liens de nav par rôle — utilisée par le rail complet
- * (`Sidebar`) et par la barre d'onglets mobile (`TabBar` dans `AppShell`,
- * qui n'en affiche que les 4 premiers + un onglet « Menu » ouvrant ce même
- * rail). Ne pas dupliquer cette liste ailleurs.
+ * Source unique des liens de nav par rôle — utilisée par la carte latérale
+ * (`Sidebar`) et la barre d'onglets
+ * mobile (`TabBar` dans `AppShell`, qui n'en affiche que les 4 premiers + un
+ * onglet « Menu » ouvrant cette même carte). Ne pas dupliquer cette liste
+ * ailleurs.
+ *
+ * `canVerifyCv` ajoute « Vérification des CV » quel que soit le rôle :
+ * c'est une capacité accordée par l'admin, pas un rôle.
  */
-export function getLinksByRole(
-  role: UserRole,
-  unreadCount: number,
-): { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; badge?: number }[] {
-  const LINKS_BY_ROLE: Record<
-    UserRole,
-    { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; badge?: number }[]
-  > = {
+export function getLinksByRole(role: UserRole, unreadCount: number, canVerifyCv = false): RoleLink[] {
+  const LINKS_BY_ROLE: Record<UserRole, RoleLink[]> = {
+    // Les 4 premières entrées forment la barre d'onglets mobile : le suivi
+    // (offres, candidats proposés, notifications) y passe avant « Publier une
+    // offre », qui reste à un geste depuis le tableau de bord et « Mes offres ».
     recruiter: [
       { to: '/recruteur', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
-      { to: '/recruteur/publier', label: 'Publier une offre', icon: FilePlus2 },
       { to: '/recruteur/offres', label: 'Mes offres', icon: Briefcase },
       { to: '/recruteur/candidatures', label: 'Candidats proposés', icon: Users },
+      { to: '/recruteur/notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
+      { to: '/recruteur/publier', label: 'Publier une offre', icon: FilePlus2 },
       { to: '/recruteur/placements', label: 'Placements', icon: ClipboardCheck },
       { to: '/messages', label: 'Discuter avec OffRec', icon: MessageCircle },
-      { to: '/recruteur/abonnement', label: 'Abonnement', icon: CreditCard },
+      { to: '/recruteur/abonnement', label: 'Abonnement', icon: CreditCard, account: true },
       { to: '/annuaire', label: 'Annuaire', icon: Store },
     ],
     candidate: [
       { to: '/candidat', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
       { to: '/annuaire', label: 'Annuaire', icon: Store },
-      { to: '/candidat/offres', label: 'Offres', icon: Briefcase },
-      { to: '/candidat/favoris', label: 'Favoris', icon: Bookmark },
       { to: '/candidat/notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
-      { to: '/candidat/profil', label: 'Profil', icon: UserRound },
+      { to: '/candidat/profil', label: 'Profil', icon: UserRound, account: true },
     ],
     particulier: [
       { to: '/particulier', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
@@ -100,162 +100,170 @@ export function getLinksByRole(
       { to: '/messages', label: 'Messages', icon: MessageCircle },
     ],
   }
-  return LINKS_BY_ROLE[role]
+  const links = LINKS_BY_ROLE[role]
+  if (!canVerifyCv) return links
+  // En 4e position : la barre d'onglets mobile n'affiche que les 4 premiers
+  // liens, l'entrée y reste donc visible sans passer par « Menu », et ne
+  // déplace qu'un seul lien du rôle.
+  const cvLink: RoleLink = { to: '/verification-cv', label: 'Vérification des CV', icon: FileCheck2 }
+  return [...links.slice(0, 3), cvLink, ...links.slice(3)]
+}
+
+/** Identité affichée dans l'en-tête de la carte latérale : nom du profil
+ *  du rôle, à défaut le libellé du rôle (l'admin n'a pas de profil). */
+export function getAccountIdentity(user: User | null) {
+  const role = user?.role ?? 'candidate'
+  const profile =
+    user?.candidateProfile ??
+    user?.individualProfile ??
+    user?.agentProfile ??
+    user?.talentAccountProfile
+  const name = user?.recruiterProfile?.companyName || profile?.fullName || ROLE_LABELS[role]
+  return {
+    name,
+    initial: name.trim().charAt(0).toUpperCase(),
+    email: user?.email ?? '',
+  }
 }
 
 /**
- * Rail de navigation. Il porte aussi la carte de profil et les raccourcis
- * métiers : ce sont les deux entrées les plus utilisées de l'annuaire.
+ * Taux de complétion du profil candidat, calculé uniquement sur les champs
+ * que le candidat peut réellement laisser vides puis renseigner depuis
+ * `/candidat/profil` (les listes déroulantes ont toujours une valeur et ne
+ * comptent donc pas). Les autres rôles n'ont pas de page d'édition de
+ * profil : pas de taux pour eux.
+ */
+function candidateCompletion(profile: CandidateProfile): number {
+  const checks = [
+    profile.fullName.trim() !== '',
+    profile.phone.trim() !== '',
+    profile.province.trim() !== '',
+    profile.city.trim() !== '',
+    profile.skills.length > 0,
+    profile.desiredOpportunityTypes.length > 0,
+    Boolean(profile.cvUrl),
+  ]
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100)
+}
+
+const RING_SIZE = 60
+const RING_STROKE = 4
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS
+
+function ProfileCompletionCard({ percent, onNavigate }: { percent: number; onNavigate?: () => void }) {
+  return (
+    <Link to="/candidat/profil" className="side-completion" onClick={onNavigate}>
+      <span className="side-ring">
+        <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`} aria-hidden>
+          <circle
+            className="side-ring-track"
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            strokeWidth={RING_STROKE}
+            fill="none"
+          />
+          <circle
+            className="side-ring-progress"
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            strokeWidth={RING_STROKE}
+            fill="none"
+            strokeLinecap="round"
+            transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+            strokeDasharray={RING_LENGTH}
+            strokeDashoffset={RING_LENGTH * (1 - percent / 100)}
+          />
+        </svg>
+        <span className="side-ring-value">{percent}%</span>
+      </span>
+      <strong>Complétez votre profil</strong>
+      <span className="side-completion-sub">
+        Un profil complet améliore vos recommandations.
+      </span>
+    </Link>
+  )
+}
+
+/**
+ * Carte latérale flottante : identité, navigation du rôle, section
+ * « Compte ». Pour le candidat, une seconde carte indique le taux de
+ * complétion du profil tant qu'il n'est pas à 100 %.
  */
 export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
-  const {
-    currentUser,
-    currentMemberId,
-    recommendations,
-    providers,
-    members,
-    opportunities,
-    bookmarks,
-    unreadCount,
-  } = useApp()
+  const { currentUser, unreadCount } = useApp()
 
   const role = currentUser?.role ?? 'candidate'
-  const displayName =
-    currentUser?.candidateProfile?.fullName ??
-    currentUser?.recruiterProfile?.companyName ??
-    currentUser?.individualProfile?.fullName ??
-    currentUser?.email ??
-    'Membre'
-  const city =
-    currentUser?.candidateProfile?.city ??
-    currentUser?.recruiterProfile?.city ??
-    currentUser?.individualProfile?.city
+  const identity = getAccountIdentity(currentUser)
+  const links = getLinksByRole(role, unreadCount, currentUser?.canVerifyCv === true)
+  const mainLinks = links.filter((l) => !l.account)
+  const accountLinks = links.filter((l) => l.account)
 
-  const contributions = useMemo(
-    () => recommendations.filter((r) => r.authorMemberId === currentMemberId).length,
-    [recommendations, currentMemberId],
+  const completion =
+    role === 'candidate' && currentUser?.candidateProfile
+      ? candidateCompletion(currentUser.candidateProfile)
+      : null
+
+  const renderLink = (l: RoleLink) => (
+    <NavLink key={l.to} to={l.to} end={l.end} onClick={onNavigate} className="side-link">
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <motion.span
+              layoutId="sidebar-active-pill"
+              className="side-nav-pill"
+              transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+            />
+          )}
+          <l.icon size={18} strokeWidth={1.75} aria-hidden />
+          <span className="side-link-label">{l.label}</span>
+          {l.badge ? <span className="side-badge">{l.badge}</span> : null}
+        </>
+      )}
+    </NavLink>
   )
-
-  const mySector: Sector | undefined =
-    currentUser?.candidateProfile?.sector ?? currentUser?.recruiterProfile?.sector
-
-  /** Secteurs ciblés par OffRec, affichage contextuel : le secteur propre
-   *  au candidat/à l'entreprise en tête, puis les secteurs pilotes — pas la
-   *  même liste figée pour tout le monde. */
-  const sectorInsights = useMemo(() => {
-    const ordered = [mySector, ...ACTIVE_SECTORS, ...SECTORS].filter((s): s is Sector => Boolean(s))
-    const seen = new Set<Sector>()
-    const unique = ordered.filter((s) => (seen.has(s) ? false : (seen.add(s), true)))
-    return unique.slice(0, 5).map((sector) => ({
-      sector,
-      offersCount: opportunities.filter((o) => o.sector === sector).length,
-      providersCount: providers.filter((p) => TRADE_SECTOR[p.trade as keyof typeof TRADE_SECTOR] === sector).length,
-    }))
-  }, [mySector, opportunities, providers])
-
-  const [expandedSector, setExpandedSector] = useState<Sector | null>(null)
-
-  const links = getLinksByRole(role, unreadCount)
 
   return (
     <div className="side">
-      <div className="side-profile">
-        <span className="side-avatar" aria-hidden>
-          {displayName.charAt(0)}
-        </span>
-        <p className="side-name">{displayName}</p>
-        <p className="side-role">
-          {ROLE_LABELS[role]}
-          {city ? ` · ${city}` : ''}
-        </p>
-        <div className="side-stats">
-          <div>
-            <strong>{contributions}</strong>
-            <span>retours</span>
-          </div>
-          <div>
-            <strong>
-              {role === 'recruiter'
-                ? opportunities.length
-                : role === 'candidate'
-                  ? bookmarks.length
-                  : members.length}
-            </strong>
-            <span>
-              {role === 'recruiter' ? 'offres' : role === 'candidate' ? 'favoris' : 'membres'}
-            </span>
-          </div>
-          <div>
-            <strong>{providers.length}</strong>
-            <span>fiches</span>
+      <div className="side-card">
+        <div className="side-user">
+          <span className="side-avatar" aria-hidden>
+            {identity.initial}
+          </span>
+          <div className="side-user-text">
+            <p className="side-name" title={identity.name}>
+              {identity.name}
+            </p>
+            <p className="side-email" title={identity.email}>
+              {identity.email}
+            </p>
           </div>
         </div>
+
+        <hr className="side-sep" />
+
+        <p className="side-label">Mon espace</p>
+        <nav className="side-nav" aria-label="Navigation de l’espace">
+          {mainLinks.map(renderLink)}
+        </nav>
+
+        <hr className="side-sep" />
+
+        <p className="side-label">Compte</p>
+        <nav className="side-nav" aria-label="Compte">
+          {accountLinks.map(renderLink)}
+          <button type="button" className="side-link side-logout" onClick={onLogout}>
+            <LogOut size={18} strokeWidth={1.75} aria-hidden />
+            <span className="side-link-label">Déconnexion</span>
+          </button>
+        </nav>
       </div>
 
-      <nav className="side-nav">
-        {links.map((l) => (
-          <NavLink
-            key={l.to}
-            to={l.to}
-            end={'end' in l ? l.end : undefined}
-            onClick={onNavigate}
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <motion.span
-                    layoutId="sidebar-active-pill"
-                    className="side-nav-pill"
-                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-                  />
-                )}
-                <l.icon size={18} aria-hidden />
-                <span>{l.label}</span>
-                {'badge' in l && l.badge ? (
-                  <span className="side-badge">{l.badge}</span>
-                ) : null}
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
-
-      {sectorInsights.length > 0 && (
-        <div className="side-section">
-          <p className="side-section-title">Secteurs d’activité</p>
-          {sectorInsights.map(({ sector, offersCount, providersCount }) => (
-            <div key={sector}>
-              <button
-                type="button"
-                className="side-trade"
-                onClick={() => setExpandedSector((s) => (s === sector ? null : sector))}
-                aria-expanded={expandedSector === sector}
-              >
-                <Wrench size={14} aria-hidden />
-                <span>
-                  {SECTOR_LABELS[sector]}
-                  {sector === mySector ? ' · votre secteur' : ''}
-                </span>
-                <span className="side-trade-count">{offersCount + providersCount}</span>
-              </button>
-              {expandedSector === sector && (
-                <div className="side-sector-detail">
-                  <p>{SECTOR_DESCRIPTIONS[sector]}</p>
-                  <p className="side-sector-stats">
-                    {offersCount} offre{offersCount > 1 ? 's' : ''} · {providersCount} prestataire
-                    {providersCount > 1 ? 's' : ''} dans l’annuaire
-                  </p>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      {completion !== null && completion < 100 && (
+        <ProfileCompletionCard percent={completion} onNavigate={onNavigate} />
       )}
-
-      <button type="button" className="side-logout" onClick={onLogout}>
-        <LogOut size={16} aria-hidden />
-        Déconnexion
-      </button>
     </div>
   )
 }

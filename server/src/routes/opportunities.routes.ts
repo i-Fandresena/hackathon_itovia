@@ -5,6 +5,7 @@ import { opportunityInputSchema } from '../lib/validation.js'
 import { scoreOpportunity } from '../../../src/lib/recommendation.js'
 import type { CandidateProfile } from '../../../src/types/index.js'
 import { toDomainCandidateProfile, toDomainOpportunity } from '../lib/domain.js'
+import { scheduleOpportunityMatching } from '../lib/matching.js'
 
 const router = Router()
 
@@ -82,6 +83,8 @@ router.post('/', requireRole('recruiter'), async (req, res, next) => {
       },
     })
     res.status(201).json({ opportunity: toDomainOpportunity(opportunity) })
+    // Une offre est publiée dès sa création : le matching part après la réponse.
+    scheduleOpportunityMatching(opportunity.id, 'opportunity_created')
   } catch (err) {
     next(err)
   }
@@ -100,6 +103,7 @@ router.put('/:id', requireRole('recruiter'), async (req, res, next) => {
       data: { ...body, deadline: new Date(body.deadline) },
     })
     res.json({ opportunity: toDomainOpportunity(opportunity) })
+    scheduleOpportunityMatching(opportunity.id, 'opportunity_updated')
   } catch (err) {
     next(err)
   }
@@ -120,9 +124,9 @@ router.delete('/:id', requireRole('recruiter'), async (req, res, next) => {
 })
 
 /**
- * Shortlist entreprise : combine les candidats diplômés proposés par un
- * admin (`MatchSuggestion`, statut `proposee_recruteur` et au-delà — plus
- * de classement IA en direct, voir décision produit 2026-09-02) et les
+ * Shortlist entreprise : combine les candidats diplômés transmis par OffRec
+ * (`MatchSuggestion`, statut `proposee_recruteur` et au-delà — validés par
+ * un admin ou envoyés directement par le moteur, décision 2026-10-08) et les
  * talents non-diplômés proposés par un agent pour cette offre. Le badge
  * distinctif (§7.3 règle 17) part de la source des données, jamais fusionné.
  */

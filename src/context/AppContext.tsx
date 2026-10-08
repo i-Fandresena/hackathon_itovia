@@ -4,12 +4,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import {
   ApiError,
-  apiAddBookmark,
   apiConfirmRecommendation,
   apiCreateOpportunity,
   apiCreateProvider,
@@ -23,12 +23,10 @@ import {
   apiLogout,
   apiMarkNotificationRead,
   apiMe,
-  apiMyBookmarks,
   apiMyNotifications,
   apiMySuggestions,
   apiReceivedSuggestions,
   apiRegister,
-  apiRemoveBookmark,
   apiUpdateCandidateProfile,
   apiUpdateOpportunity,
   type ApiUser,
@@ -82,11 +80,11 @@ interface Result {
 interface AppContextValue {
   currentUser: User | null
   opportunities: Opportunity[]
-  /** Fil du candidat : uniquement ce qu'OffRec a choisi de lui proposer. */
+  /** Dossiers du candidat : uniquement ceux réellement transmis à une
+   *  entreprise (plus les lignes héritées de l'ancien parcours). */
   mySuggestions: MatchSuggestionWithOpportunity[]
   /** Côté recruteur : candidats transmis par OffRec sur ses offres. */
   receivedSuggestions: ReceivedSuggestion[]
-  bookmarks: string[]
   notifications: Notification[]
   members: Member[]
   providers: Provider[]
@@ -103,11 +101,13 @@ interface AppContextValue {
     verificationToken: string,
   ) => Promise<Result>
   updateCandidateProfile: (profile: CandidateProfile) => Promise<Result>
+  /** Reporte dans `currentUser` des champs du profil candidat déjà
+   *  enregistrés par le serveur (dépôt de CV, consentement de matching) —
+   *  aucun appel réseau. */
+  patchCandidateProfile: (patch: Partial<CandidateProfile>) => void
   addOpportunity: (opp: OpportunityInput) => Promise<Result & { opportunity?: Opportunity }>
   updateOpportunity: (id: string, data: OpportunityInput) => Promise<Result>
   deleteOpportunity: (id: string) => Promise<Result>
-  toggleBookmark: (opportunityId: string) => Promise<void>
-  isBookmarked: (opportunityId: string) => boolean
   /** Le candidat/recruteur ne fait jamais que signaler un intérêt — jamais
    *  de contact direct, c'est l'admin qui fait avancer la suite. */
   expressInterest: (suggestionId: string) => Promise<Result>
@@ -145,7 +145,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [mySuggestions, setMySuggestions] = useState<MatchSuggestionWithOpportunity[]>([])
   const [receivedSuggestions, setReceivedSuggestions] = useState<ReceivedSuggestion[]>([])
-  const [bookmarks, setBookmarks] = useState<string[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
@@ -163,31 +162,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!user) {
       setMySuggestions([])
       setReceivedSuggestions([])
-      setBookmarks([])
       setNotifications([])
       return
     }
     if (user.role === 'candidate') {
-      const [suggestions, marks, notifs] = await Promise.all([
-        apiMySuggestions(),
-        apiMyBookmarks(),
-        apiMyNotifications(),
-      ])
+      const [suggestions, notifs] = await Promise.all([apiMySuggestions(), apiMyNotifications()])
       setMySuggestions(suggestions)
       setReceivedSuggestions([])
-      setBookmarks(marks)
       setNotifications(notifs)
     } else if (user.role === 'recruiter') {
       const [suggestions, notifs] = await Promise.all([apiReceivedSuggestions(), apiMyNotifications()])
       setMySuggestions([])
       setReceivedSuggestions(suggestions)
-      setBookmarks([])
       setNotifications(notifs)
     } else {
       const notifs = await apiMyNotifications()
       setMySuggestions([])
       setReceivedSuggestions([])
-      setBookmarks([])
       setNotifications(notifs)
     }
   }, [])
@@ -213,6 +204,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [loadDirectory, loadRoleScopedData])
 
+  // Retour sur l'onglet : on recharge notifications et dossiers, pour qu'une
+  // mise en relation confirmée entre-temps apparaisse sans reconnexion. Pas
+  // de polling — au plus un rechargement toutes les 15 s.
+  const lastRefreshRef = useRef(0)
+  useEffect(() => {
+    if (!currentUser) return
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      const now = Date.now()
+      if (now - lastRefreshRef.current < 15_000) return
+      lastRefreshRef.current = now
+      loadRoleScopedData(currentUser).catch(() => undefined)
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [currentUser, loadRoleScopedData])
+
   const login = useCallback(
     async (email: string, password: string) => {
       try {
@@ -236,7 +248,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCurrentUser(null)
     setMySuggestions([])
     setReceivedSuggestions([])
-    setBookmarks([])
     setNotifications([])
   }, [])
 
@@ -282,6 +293,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const patchCandidateProfile = useCallback((patch: Partial<CandidateProfile>) => {
+    setCurrentUser((u) =>
+      u?.candidateProfile ? { ...u, candidateProfile: { ...u.candidateProfile, ...patch } } : u,
+    )
+  }, [])
+
   const addOpportunity = useCallback(async (data: OpportunityInput) => {
     try {
       const opportunity = await apiCreateOpportunity(data)
@@ -311,29 +328,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: errorMessage(err, 'Suppression impossible.') }
     }
   }, [])
-
-  const toggleBookmark = useCallback(
-    async (opportunityId: string) => {
-      const has = bookmarks.includes(opportunityId)
-      try {
-        if (has) {
-          await apiRemoveBookmark(opportunityId)
-          setBookmarks((b) => b.filter((id) => id !== opportunityId))
-        } else {
-          await apiAddBookmark(opportunityId)
-          setBookmarks((b) => [...b, opportunityId])
-        }
-      } catch (err) {
-        console.error('toggleBookmark', err)
-      }
-    },
-    [bookmarks],
-  )
-
-  const isBookmarked = useCallback(
-    (opportunityId: string) => bookmarks.includes(opportunityId),
-    [bookmarks],
-  )
 
   const expressInterest = useCallback(
     async (suggestionId: string) => {
@@ -485,7 +479,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     opportunities,
     mySuggestions,
     receivedSuggestions,
-    bookmarks,
     notifications,
     members,
     providers,
@@ -495,11 +488,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     logout,
     register,
     updateCandidateProfile,
+    patchCandidateProfile,
     addOpportunity,
     updateOpportunity,
     deleteOpportunity,
-    toggleBookmark,
-    isBookmarked,
     expressInterest,
     declineSuggestion,
     getSuggestionForOpportunity,

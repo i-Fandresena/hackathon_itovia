@@ -252,7 +252,7 @@ export function RecruiterOpportunityForm() {
                 ))}
               </div>
             </Field>
-            <Field label="Date limite de candidature">
+            <Field label="Date limite de l’offre">
               <Input
                 type="date"
                 required

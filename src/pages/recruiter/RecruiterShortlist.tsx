@@ -10,13 +10,13 @@ import { VerificationBadge } from '../../components/ui/VerificationBadge'
 import { apiCreatePlacement, apiDeclineSuggestion, apiExpressInterest, apiShortlist, type ShortlistMatched, type ShortlistProposed } from '../../lib/api'
 import type { MatchSuggestionStatus } from '../../types'
 
-const SUGGESTION_STATUS_LABELS: Record<MatchSuggestionStatus, string> = {
-  proposee_candidat: 'Proposé au candidat',
-  interet_candidat: 'Candidat intéressé',
-  proposee_recruteur: 'Proposé par OffRec',
-  interet_recruteur: 'Intérêt transmis à OffRec',
+/** Seuls statuts que le serveur transmet au recruteur — mêmes libellés que
+ *  « Candidats proposés ». Une suggestion en attente de validation
+ *  (`suggeree`) ne lui parvient jamais. */
+const SUGGESTION_STATUS_LABELS: Partial<Record<MatchSuggestionStatus, string>> = {
+  proposee_recruteur: 'Nouveau profil proposé',
+  interet_recruteur: 'Vous avez marqué un intérêt',
   mise_en_relation: 'Mis en relation',
-  ecartee: 'Écarté',
 }
 
 /**
@@ -84,6 +84,8 @@ export function RecruiterShortlist() {
     setFeedback('Placement enregistré. Suivez le success fee depuis « Placements ».')
   }
 
+  const matched = data.matched.filter((m) => SUGGESTION_STATUS_LABELS[m.status])
+
   const handlePlaceTalent = async (talentId: string) => {
     await apiCreatePlacement({
       opportunityId: id,
@@ -127,7 +129,7 @@ export function RecruiterShortlist() {
                       {p.trade}
                     </p>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' }}>
                     <div style={{ width: 130 }}>
                       <Input
                         type="number"
@@ -148,13 +150,13 @@ export function RecruiterShortlist() {
 
         <h2 style={{ fontSize: '1.05rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           <Sparkles size={18} />
-          Proposés par OffRec ({data.matched.length})
+          Proposés par OffRec ({matched.length})
         </h2>
-        {data.matched.length === 0 ? (
+        {matched.length === 0 ? (
           <p style={{ color: 'var(--color-ink-muted)' }}>Aucun candidat diplômé proposé pour l’instant.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {data.matched.map((m) => (
+            {matched.map((m) => (
               <Card key={m.candidateId}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -165,7 +167,7 @@ export function RecruiterShortlist() {
                     </p>
                     <Badge variant="muted">{SUGGESTION_STATUS_LABELS[m.status]}</Badge>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' }}>
                     <div style={{ width: 130 }}>
                       <Input
                         type="number"

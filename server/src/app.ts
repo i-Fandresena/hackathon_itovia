@@ -2,7 +2,6 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
-import path from 'node:path'
 import { attachSession } from './middleware/auth.js'
 import { errorHandler, notFound } from './middleware/errorHandler.js'
 import authRoutes from './routes/auth.routes.js'
@@ -22,6 +21,8 @@ import verificationRoutes from './routes/verification.routes.js'
 import talentAccountRoutes from './routes/talent-account.routes.js'
 import adminMatchingRoutes from './routes/admin-matching.routes.js'
 import matchSuggestionsRoutes from './routes/match-suggestions.routes.js'
+import cvVerificationRoutes from './routes/cv-verification.routes.js'
+import uploadsRoutes from './routes/uploads.routes.js'
 
 export function createApp() {
   const app = express()
@@ -37,7 +38,9 @@ export function createApp() {
   app.use(express.json({ limit: '1mb' }))
   app.use(cookieParser())
   app.use(attachSession)
-  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
+  // Plus de `express.static` public : les fichiers déposés (CV) ne sont
+  // servis qu'après contrôle d'accès — voir routes/uploads.routes.ts.
+  app.use('/uploads', uploadsRoutes)
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() })
@@ -60,6 +63,7 @@ export function createApp() {
   app.use('/api/talent-account', talentAccountRoutes)
   app.use('/api/admin/matching', adminMatchingRoutes)
   app.use('/api/match-suggestions', matchSuggestionsRoutes)
+  app.use('/api/cv-verification', cvVerificationRoutes)
 
   app.use(notFound)
   app.use(errorHandler)

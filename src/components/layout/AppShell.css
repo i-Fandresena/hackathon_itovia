@@ -11,9 +11,7 @@
   position: sticky;
   top: 0;
   z-index: 60;
-  background: var(--color-bg-translucent);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  background: var(--color-bg-elevated);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -21,10 +19,9 @@
   height: var(--header-h);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 1rem;
   padding: 0 1rem;
-  max-width: 1600px;
-  margin: 0 auto;
 }
 
 .shell-search {
@@ -37,7 +34,7 @@
   padding: 0 0.9rem;
   height: 42px;
   border-radius: var(--radius-full);
-  background: var(--color-bg-elevated);
+  background: var(--color-bg);
   border: 1px solid var(--color-border);
   color: var(--color-ink-muted);
   transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
@@ -45,6 +42,10 @@
 
 .shell-theme-toggle {
   margin-left: auto;
+}
+
+.shell-search svg {
+  flex-shrink: 0;
 }
 
 .shell-search:focus-within {
@@ -60,10 +61,27 @@
   outline: none;
   font-size: 0.875rem;
   color: var(--color-ink);
+  text-overflow: ellipsis;
 }
 
 .shell-search input::-webkit-search-cancel-button {
   -webkit-appearance: none;
+}
+
+/* Petits écrans : logo réduit pour laisser de la place à la recherche. */
+@media (max-width: 639px) {
+  .shell-top-inner {
+    gap: 0.6rem;
+  }
+
+  .shell-top .logo-brand {
+    padding: 0.3rem 0.5rem;
+  }
+
+  .shell-top .logo-full-img {
+    height: 24px;
+    width: auto;
+  }
 }
 
 /* -------------------------------------------------------------------- grille */
@@ -71,8 +89,6 @@
 .shell-body {
   flex: 1;
   width: 100%;
-  max-width: 1600px;
-  margin: 0 auto;
   padding: 1.25rem 1rem 2.5rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -85,20 +101,22 @@
 }
 
 /* Les pages gardent leurs classes `.page` / `.container`, mais dans la
-   coquille c'est la grille qui gère la largeur et les marges. */
+   coquille c'est la grille qui gère la largeur et les marges : le contenu
+   occupe toute la colonne. `!important` parce que plusieurs pages posent un
+   `maxWidth` en style inline sur leur `.container` (utile hors connexion,
+   ex. `/offres/:id`), qui recréerait des bandes vides ici. */
 .shell-main .page {
   padding: 0;
 }
 
 .shell-main .container {
-  max-width: none;
+  max-width: none !important;
   padding: 0;
 }
 
-/* ------------------------------------------------------------- rails latéraux */
+/* ------------------------------------------------------------ carte latérale */
 
-.shell-side,
-.shell-rail {
+.shell-side {
   min-width: 0;
 }
 
@@ -132,8 +150,7 @@
   cursor: pointer;
 }
 
-/* Mobile : le rail gauche devient un panneau coulissant, le rail droit
-   disparaît (son contenu reste accessible depuis les pages). */
+/* Mobile : la carte latérale devient un panneau coulissant. */
 @media (max-width: 1023px) {
   .shell-side {
     position: fixed;
@@ -155,10 +172,6 @@
     transform: translateX(0);
   }
 
-  .shell-rail {
-    display: none;
-  }
-
   /* La barre d'onglets remplace le hamburger : elle est fixe en bas, le
      contenu ne doit jamais passer dessous. */
   .shell-main {
@@ -170,10 +183,9 @@
   .tab-bar {
     display: none;
   }
-  .shell-top-inner,
-  .shell-body {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
+
+  .shell-top-inner {
+    padding: 0 1.5rem;
   }
 
   .shell-side-head,
@@ -182,37 +194,21 @@
   }
 
   .shell-body {
-    grid-template-columns: 264px minmax(0, 1fr);
+    grid-template-columns: 248px minmax(0, 1fr);
+    gap: 2rem;
+    padding: 2rem 1.5rem 3rem;
   }
 
+  /* La marge négative compensée par le padding laisse l'ombre des cartes
+     déborder sans être rognée par le défilement interne. */
   .shell-side {
     position: sticky;
-    top: calc(var(--header-h) + 1.25rem);
-    max-height: calc(100vh - var(--header-h) - 2.5rem);
+    top: calc(var(--header-h) + 0.75rem);
+    max-height: calc(100vh - var(--header-h) - 0.75rem);
+    margin: -1.25rem -1.5rem -3rem;
+    padding: 1.25rem 1.5rem 3rem;
     overflow-y: auto;
     overflow-x: hidden;
-    /* Espace entre le trait de défilement et le contenu du rail, pour ne
-       jamais le coller aux cartes. */
-    padding-right: 0.75rem;
-    scrollbar-width: thin;
-  }
-
-  .shell-rail {
-    display: none;
-  }
-}
-
-@media (min-width: 1320px) {
-  .shell-body {
-    grid-template-columns: 264px minmax(0, 1fr) 304px;
-  }
-
-  .shell-rail {
-    display: block;
-    position: sticky;
-    top: calc(var(--header-h) + 1.25rem);
-    max-height: calc(100vh - var(--header-h) - 2.5rem);
-    overflow-y: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
   }
 }

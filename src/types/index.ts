@@ -57,6 +57,18 @@ export type Sector =
  *  agent reprend la demande et crée lui-même le profil. */
 export type LeadStatus = 'nouveau' | 'contacte' | 'converti' | 'ignore'
 
+/** Point relevé automatiquement à l'analyse d'un CV — un indice à
+ *  contrôler par un humain, jamais une décision ni une accusation. */
+export interface CvFlag {
+  code: string
+  severity: 'info' | 'alerte'
+  message: string
+}
+
+/** Vérification humaine du CV par OffRec (admin ou rôle autorisé par
+ *  l'admin). Tout nouveau dépôt repart de `non_verifie`. */
+export type CvVerificationStatus = 'non_verifie' | 'verifie' | 'rejete'
+
 export interface CandidateProfile {
   fullName: string
   email: string
@@ -130,6 +142,18 @@ export interface CandidateProfile {
   cvAvailability?: string | null
   cvExtractionConfidence?: 'high' | 'medium' | 'low'
   cvExtractionDate?: string
+  // === Vérification humaine du CV (lecture seule côté candidat) ===
+  cvVerificationStatus?: CvVerificationStatus
+  cvFlags?: CvFlag[] | null
+  /** Note du vérificateur — renseignée notamment en cas de rejet. */
+  cvVerificationNote?: string | null
+  cvVerifiedAt?: string | null
+  /** Consentement global de matching (décision 2026-10-08) : date ISO à
+   *  laquelle le candidat a accepté qu'OffRec propose son profil aux
+   *  entreprises ; `null`/absent = jamais donné ou retiré. Lecture seule —
+   *  se donne et se retire par les endpoints dédiés, jamais par
+   *  l'enregistrement du profil. Jamais transmis au recruteur. */
+  matchingConsentAt?: string | null
 }
 
 export interface RecruiterProfile {
@@ -170,6 +194,9 @@ export interface User {
   individualProfile?: IndividualProfile
   agentProfile?: AgentProfile
   talentAccountProfile?: TalentAccountProfile
+  /** Calculé par le serveur : admin, ou rôle que l'admin a autorisé à
+   *  vérifier les CV. Sert uniquement à l'affichage — le serveur revalide. */
+  canVerifyCv?: boolean
   createdAt: string
 }
 
@@ -310,16 +337,26 @@ export interface Application {
   createdAt: string
 }
 
-/** OffRec est l'intermédiaire (décision produit 2026-09-02) : ni le
- *  candidat ni le recruteur n'agissent en direct l'un sur l'autre, tout
- *  passe par une décision admin. Jamais de saut d'étape. */
+/** OffRec est l'intermédiaire (décisions produit 2026-09-02 et 2026-10-08) :
+ *  ni le candidat ni le recruteur n'agissent en direct l'un sur l'autre.
+ *  Chaîne en vigueur : `suggeree` (file de validation admin) →
+ *  `proposee_recruteur` → `interet_recruteur` → `mise_en_relation`, ou
+ *  `ecartee`. Le moteur de matching peut créer directement en
+ *  `proposee_recruteur` (score élevé + CV vérifié).
+ *  `proposee_candidat` / `interet_candidat` sont des valeurs HÉRITÉES du
+ *  parcours « postuler offre par offre » : plus jamais produites, mais des
+ *  lignes existantes peuvent encore les porter. */
 export type MatchSuggestionStatus =
+  | 'suggeree'
   | 'proposee_candidat'
   | 'interet_candidat'
   | 'proposee_recruteur'
   | 'interet_recruteur'
   | 'mise_en_relation'
   | 'ecartee'
+
+/** Qui a créé la suggestion : le moteur de matching ou un admin. */
+export type MatchSuggestionOrigin = 'systeme' | 'admin'
 
 export interface MatchSuggestion {
   id: string
@@ -328,8 +365,167 @@ export interface MatchSuggestion {
   score: number
   reasons: string[]
   status: MatchSuggestionStatus
+  origin: MatchSuggestionOrigin
+  /** Rang dans la présélection ATS au moment de la transmission groupée par
+   *  un admin ; `null`/absent pour un envoi direct du moteur ou une
+   *  transmission unitaire. */
+  preselectionRank?: number | null
   createdAt: string
   updatedAt: string
+}
+
+/* -------------------------------------------------------------------------
+ * Présélection ATS par offre (couche au-dessus de `scoreOpportunity`)
+ * ---------------------------------------------------------------------- */
+
+/** Adéquation d'un profil avec une offre, critère par critère. Calcul
+ *  déterministe sur le profil CONFIRMÉ et les attributs de l'offre — jamais
+ *  sur les colonnes `cv*`. Ne contient que des données dérivées de champs
+ *  que le recruteur a déjà le droit de voir. */
+export interface MatchFit {
+  skills: {
+    /** Compétences requises par l'offre présentes au profil (libellés de l'offre). */
+    covered: string[]
+    /** Compétences requises par l'offre absentes du profil. */
+    missing: string[]
+  }
+  location: {
+    match: 'meme_ville' | 'meme_province' | 'autre'
+    /** Lieu de l'offre, rappelé pour l'affichage. */
+    province: string
+    city: string
+  }
+  level: {
+    required: ExperienceLevel
+    candidate: ExperienceLevel
+    /** Écart d'au plus un niveau — même définition que la raison « Niveau
+     *  d'expérience compatible » de `scoreOpportunity`. */
+    conforme: boolean
+  }
+  type: {
+    offered: OpportunityType
+    /** `sans_preference` : le candidat n'a déclaré aucun type recherché. */
+    match: 'souhaite' | 'sans_preference' | 'non_souhaite'
+  }
+}
+
+/** Motif d'élimination, dans l'ordre d'évaluation de l'entonnoir. Les quatre
+ *  derniers sont des filtres optionnels activés par l'admin. */
+export type PreselectionMotif =
+  | 'offre_fermee'
+  | 'compte_inactif'
+  | 'sans_consentement'
+  | 'sans_cv'
+  | 'deja_ecarte'
+  | 'aucune_competence_commune'
+  | 'score_insuffisant'
+  | 'cv_non_verifie'
+  | 'autre_province'
+  | 'niveau_non_conforme'
+  | 'type_non_souhaite'
+
+/** Filtres éliminatoires optionnels de la présélection. */
+export interface PreselectionFilters {
+  verifiedOnly: boolean
+  sameProvince: boolean
+  levelMatch: boolean
+  desiredType: boolean
+}
+
+export type PreselectionTop = 5 | 10
+
+/** État de la suggestion existante pour la paire (offre, candidat). */
+export interface PreselectionSuggestionState {
+  id: string
+  status: MatchSuggestionStatus
+  origin: MatchSuggestionOrigin
+}
+
+/** Candidat retenu dans la présélection (vue admin). */
+export interface PreselectionEntry {
+  rank: number
+  candidateId: string
+  fullName: string
+  email: string
+  score: number
+  reasons: string[]
+  fit: MatchFit
+  /** INDICE affiché, jamais décisionnel : compétences requises absentes du
+   *  profil mais détectées par l'IA dans le CV (`cvSkillsSuggested`). N'entre
+   *  ni dans le score, ni dans les filtres, ni dans le classement. Jamais
+   *  transmis au recruteur. */
+  cvHintSkills: string[]
+  /** Secteur d'intérêt du candidat comparé à celui de l'offre : information
+   *  seulement — le secteur est une étiquette, pas un critère. */
+  sectorMatch: 'identique' | 'different' | 'non_renseigne'
+  cvVerificationStatus: CvVerificationStatus
+  cvFlagCount: number
+  /** Date ISO du consentement de matching. */
+  consentAt: string
+  suggestion: PreselectionSuggestionState | null
+  /** `false` : déjà transmis ou dossier trop avancé — voir `blockedReason`. */
+  transmissible: boolean
+  blockedReason: string | null
+}
+
+/** Candidat éliminé, avec le premier motif rencontré dans l'entonnoir. */
+export interface PreselectionEliminated {
+  candidateId: string
+  fullName: string
+  motif: PreselectionMotif
+  motifLabel: string
+  /** Score `scoreOpportunity` à titre indicatif. */
+  score: number
+  suggestion: PreselectionSuggestionState | null
+}
+
+export interface PreselectionOpportunity {
+  id: string
+  title: string
+  companyName: string
+  category: string
+  sector: Sector
+  province: string
+  city: string
+  opportunityType: OpportunityType
+  requiredSkills: string[]
+  level: ExperienceLevel
+  deadline: string
+  /** `false` : date limite dépassée ou compte recruteur inactif. */
+  open: boolean
+  closedReason: string | null
+}
+
+export interface PreselectionResult {
+  opportunity: PreselectionOpportunity
+  top: PreselectionTop
+  filters: PreselectionFilters
+  /** Score minimum (`MATCH_THRESHOLD`) appliqué par le filtre « score insuffisant ». */
+  threshold: number
+  counts: {
+    /** Tous les comptes candidats évalués. */
+    evaluated: number
+    eliminated: number
+    /** Candidats ayant passé tous les filtres (avant coupe au top N). */
+    qualified: number
+    /** Candidats affichés : `min(top, qualified)`. */
+    retained: number
+    /** Éliminés par motif, dans l'ordre de l'entonnoir (motifs à zéro omis). */
+    byMotif: { motif: PreselectionMotif; label: string; count: number }[]
+  }
+  ranked: PreselectionEntry[]
+  eliminated: PreselectionEliminated[]
+}
+
+/** Compte rendu, par candidat, d'une transmission groupée au recruteur. */
+export interface PreselectionTransmitOutcome {
+  candidateId: string
+  fullName: string | null
+  transmitted: boolean
+  /** Raison du refus, `null` si transmis. */
+  reason: string | null
+  rank: number | null
+  suggestionId: string | null
 }
 
 export interface Notification {

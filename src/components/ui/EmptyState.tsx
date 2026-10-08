@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react'
+import { ArrowRight, type LucideIcon } from 'lucide-react'
 import { Button } from './Button'
 import './EmptyState.css'
 
@@ -20,12 +20,15 @@ export function EmptyState({
   return (
     <div className="empty-state">
       <div className="empty-icon">
-        <Icon size={32} strokeWidth={1.5} />
+        <Icon size={22} strokeWidth={1.75} />
       </div>
       <h3>{title}</h3>
       <p>{description}</p>
       {actionLabel && onAction && (
-        <Button onClick={onAction}>{actionLabel}</Button>
+        <Button variant="secondary" onClick={onAction}>
+          {actionLabel}
+          <ArrowRight size={16} aria-hidden />
+        </Button>
       )}
     </div>
   )

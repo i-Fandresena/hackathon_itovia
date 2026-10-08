@@ -96,7 +96,10 @@ export const applicationInputSchema = z.object({
   message: z.string().max(2000).optional(),
 })
 
+/** `proposee_candidat` / `interet_candidat` : valeurs héritées (avant la
+ *  décision 2026-10-08), plus jamais produites mais toujours valides. */
 export const matchSuggestionStatuses = [
+  'suggeree',
   'proposee_candidat',
   'interet_candidat',
   'proposee_recruteur',
@@ -105,6 +108,10 @@ export const matchSuggestionStatuses = [
   'ecartee',
 ] as const
 
+export const matchSuggestionQuerySchema = z.object({
+  status: z.enum(matchSuggestionStatuses, { errorMap: () => ({ message: 'Statut invalide.' }) }).optional(),
+})
+
 export const createMatchSuggestionSchema = z.object({
   opportunityId: z.string().uuid(),
   candidateId: z.string().uuid(),
@@ -112,6 +119,45 @@ export const createMatchSuggestionSchema = z.object({
 
 export const matchSuggestionStatusSchema = z.object({
   status: z.enum(matchSuggestionStatuses),
+})
+
+/* Présélection ATS par offre (lib/preselection.ts). */
+
+const TOP_MESSAGE = 'Le nombre de profils retenus doit être 5 ou 10.'
+const FLAG_MESSAGE = 'Valeur attendue : true ou false.'
+
+/** Filtre optionnel passé en paramètre de requête : `true` | `false`, absent = désactivé. */
+const queryFlag = z
+  .enum(['true', 'false'], { errorMap: () => ({ message: FLAG_MESSAGE }) })
+  .optional()
+  .transform((value) => value === 'true')
+
+export const preselectionQuerySchema = z.object({
+  top: z
+    .enum(['5', '10'], { errorMap: () => ({ message: TOP_MESSAGE }) })
+    .default('5')
+    .transform((value) => (value === '10' ? 10 : 5) as 5 | 10),
+  verifiedOnly: queryFlag,
+  sameProvince: queryFlag,
+  levelMatch: queryFlag,
+  desiredType: queryFlag,
+})
+
+export const preselectionTransmitSchema = z.object({
+  candidateIds: z
+    .array(z.string().uuid('Identifiant de candidat invalide.'))
+    .min(1, 'Sélectionnez au moins un candidat.')
+    .max(10, 'Dix candidats au plus par transmission.')
+    .refine((ids) => new Set(ids).size === ids.length, 'Un candidat ne peut être sélectionné qu’une fois.'),
+  top: z.union([z.literal(5), z.literal(10)], { errorMap: () => ({ message: TOP_MESSAGE }) }).default(5),
+  filters: z
+    .object({
+      verifiedOnly: z.boolean().default(false),
+      sameProvince: z.boolean().default(false),
+      levelMatch: z.boolean().default(false),
+      desiredType: z.boolean().default(false),
+    })
+    .default({}),
 })
 
 export const recommendationInputSchema = z.object({
@@ -159,6 +205,31 @@ export const reportInputSchema = z.object({
 export const moderationResolveSchema = z.object({
   action: z.enum(moderationActionTypes),
   note: z.string().max(1000).optional(),
+})
+
+// Vérification des CV candidats
+
+export const userRoles = ['candidate', 'recruiter', 'particulier', 'admin', 'agent', 'talent'] as const
+export const cvVerificationStatuses = ['non_verifie', 'verifie', 'rejete'] as const
+
+export const cvQueueQuerySchema = z.object({
+  status: z.enum(cvVerificationStatuses, { errorMap: () => ({ message: 'Statut invalide.' }) }).default('non_verifie'),
+})
+
+export const cvVerificationDecisionSchema = z
+  .object({
+    decision: z.enum(['verifie', 'rejete'], { errorMap: () => ({ message: 'Décision invalide.' }) }),
+    note: z.string().trim().max(1000, 'La note ne doit pas dépasser 1000 caractères.').optional(),
+    /** `cvUrl` du fichier lu par le vérificateur — refus (409) s'il a changé entre-temps. */
+    cvUrl: z.string().max(200).optional(),
+  })
+  .refine((v) => v.decision !== 'rejete' || Boolean(v.note && v.note.length > 0), {
+    message: 'Une note est obligatoire pour rejeter un CV.',
+    path: ['note'],
+  })
+
+export const cvVerifierRolesSchema = z.object({
+  roles: z.array(z.enum(userRoles, { errorMap: () => ({ message: 'Rôle invalide.' }) })),
 })
 
 export const talentProfileInputSchema = z.object({

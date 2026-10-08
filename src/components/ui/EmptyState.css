@@ -1,31 +1,38 @@
 .empty-state {
   text-align: center;
-  padding: 2.5rem 1rem;
-  background: var(--color-surface);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
+  padding: 3.5rem 1.25rem;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .empty-icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 1rem;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 1.1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-accent-muted);
-  color: var(--color-accent-hover);
-  border-radius: 50%;
+  color: var(--color-accent);
+  border-radius: var(--radius-md);
 }
 
 .empty-state h3 {
-  font-size: 1.1rem;
-  margin-bottom: 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.3rem;
 }
 
 .empty-state p {
-  color: var(--color-text-muted);
-  max-width: 360px;
-  margin: 0 auto 1rem;
-  font-size: 0.95rem;
+  color: var(--color-ink-muted);
+  max-width: 380px;
+  margin: 0 auto;
+  font-size: 0.875rem;
+}
+
+.empty-state .btn {
+  margin-top: 1.25rem;
 }

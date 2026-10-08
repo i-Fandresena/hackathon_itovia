@@ -1,0 +1,150 @@
+/* Adéquation profil / offre, critère par critère — partagé par la
+   présélection admin et « Candidats proposés » côté recruteur. */
+
+.fitd {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.fitd-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.fitd-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.fitd-ratio {
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.fitd-none {
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+}
+
+.fitd-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.35rem;
+}
+
+.fitd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.fitd-chip svg {
+  flex-shrink: 0;
+}
+
+.fitd-chip-ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.fitd-chip-ko {
+  border-color: var(--color-border-strong);
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+/* Indice CV : volontairement distinct (pointillé, couleur d'avertissement)
+   d'une compétence couverte — ce n'est pas une compétence confirmée. */
+.fitd-chip-hint {
+  border: 1px dashed var(--color-warning);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.fitd-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px dashed var(--color-warning);
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-bg);
+  color: var(--color-ink-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.fitd-hint svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  color: var(--color-warning);
+}
+
+.fitd-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+}
+
+.fitd-fact {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.fitd-fact svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.fitd-fact-ok svg {
+  color: var(--color-success);
+}
+
+.fitd-fact-partial svg {
+  color: var(--color-warning);
+}
+
+.fitd-fact-ko svg {
+  color: var(--color-danger);
+}
+
+.fitd-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

@@ -577,6 +577,17 @@ const RECOMMENDATIONS = [
   { key: 'rec-29', providerKey: 'prov-9', authorKey: 'member-3', rating: 4, wouldUseAgain: true, jobLabel: 'Décapage et nivellement', jobDate: '2026-05-02', pricePaid: 48000, priceUnit: 'par m³', comment: 'Correct. Le devis est au m³, faites mesurer avant de signer.', proof: 'aucune', confirmedBy: [] },
 ] as const
 
+/**
+ * Le moteur de matching ignore les offres expirées : une date limite de démo
+ * déjà passée au moment du seed est repoussée (45 à 90 jours selon l'offre)
+ * pour que les offres de démonstration restent ouvertes.
+ */
+function seedDeadline(raw: string, index: number): Date {
+  const deadline = new Date(raw)
+  if (deadline.getTime() > Date.now()) return deadline
+  return new Date(Date.now() + (45 + (index % 10) * 5) * 24 * 60 * 60 * 1000)
+}
+
 async function main() {
   const existing = await prisma.user.count()
   if (existing > 0) {
@@ -621,6 +632,11 @@ async function main() {
             experienceLevel: c.experienceLevel,
             desiredOpportunityTypes: [...c.desiredOpportunityTypes],
             availability: c.availability,
+            // Consentement global de matching (décision 2026-10-08) : les
+            // candidats de démo ont accepté qu'OffRec propose leur profil.
+            // Aucun CV n'est déposé par le seed : le moteur ne crée donc de
+            // nouvelles suggestions pour eux qu'après un vrai dépôt.
+            matchingConsentAt: new Date(),
           },
         },
       },
@@ -689,7 +705,7 @@ async function main() {
 
   console.log('Opportunités…')
   const opportunityIdByKey = new Map<string, string>()
-  for (const o of OPPORTUNITIES) {
+  for (const [index, o] of OPPORTUNITIES.entries()) {
     const company = COMPANIES.find((c) => c.key === o.companyKey)!
     const opportunity = await prisma.opportunity.create({
       data: {
@@ -704,17 +720,20 @@ async function main() {
         opportunityType: o.opportunityType,
         requiredSkills: [...o.requiredSkills],
         level: o.level,
-        deadline: new Date(o.deadline),
+        deadline: seedDeadline(o.deadline, index),
         featured: 'featured' in o ? Boolean(o.featured) : false,
       },
     })
     opportunityIdByKey.set(o.key, opportunity.id)
   }
 
-  // OffRec est l'intermédiaire (décision produit 2026-09-02) : plus de
-  // candidature directe — le récit de démo montre le pipeline à trois
-  // stades différents pour que candidat@demo.mg et recruteur@demo.mg
-  // racontent tous les deux une histoire cohérente dès la connexion.
+  // OffRec est l'intermédiaire (décisions produit 2026-09-02 et 2026-10-08) :
+  // plus de candidature offre par offre — le récit de démo montre le pipeline
+  // à trois stades de la chaîne en vigueur (file de validation admin, profil
+  // transmis au recruteur, mise en relation) pour que candidat@demo.mg,
+  // recruteur@demo.mg et admin@demo.mg racontent une histoire cohérente dès
+  // la connexion. Aucune ligne dans un statut hérité (`proposee_candidat`,
+  // `interet_candidat`).
   console.log('Suggestions de mise en relation de démonstration…')
   await prisma.matchSuggestion.create({
     data: {
@@ -723,6 +742,7 @@ async function main() {
       score: 92,
       reasons: ['Compétences réseaux sociaux/Canva alignées', 'Basée à Antananarivo, disponible immédiatement'],
       status: 'mise_en_relation',
+      origin: 'systeme',
     },
   })
   await prisma.matchSuggestion.create({
@@ -731,7 +751,8 @@ async function main() {
       candidateId: userIdByKey.get('candidat-2')!,
       score: 88,
       reasons: ['Trois ans d’expérience React', 'Disponibilité immédiate'],
-      status: 'interet_candidat',
+      status: 'proposee_recruteur',
+      origin: 'systeme',
     },
   })
   await prisma.matchSuggestion.create({
@@ -740,7 +761,8 @@ async function main() {
       candidateId: userIdByKey.get('candidat-3')!,
       score: 74,
       reasons: ['Expérience vente terrain à Toamasina', 'Mobile sur la région de Mahajanga'],
-      status: 'proposee_candidat',
+      status: 'suggeree',
+      origin: 'admin',
     },
   })
 

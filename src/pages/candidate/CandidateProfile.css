@@ -1,0 +1,241 @@
+/* Les cartes de la page s'empilent : CV, consentement, formulaire. */
+.profile-block,
+.consent-card {
+  margin-bottom: 1rem;
+}
+
+/* Carte « Mon CV » : CV déposé + statut de vérification, puis dépôt avec
+   attestation obligatoire. */
+.cv-current {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+
+.cv-current-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.cv-current-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cv-current-note {
+  font-size: 0.8rem;
+  color: var(--color-ink-muted);
+  line-height: 1.5;
+}
+
+.cv-points {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.cv-points-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cv-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.cv-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cv-upload-file {
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.cv-attestation {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.cv-attestation input {
+  margin-top: 0.25rem;
+  flex-shrink: 0;
+}
+
+.cv-deterrent {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--color-ink-secondary);
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid var(--color-warning);
+  background: var(--color-warning-bg);
+  border-radius: var(--radius-xs);
+}
+
+.cv-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--color-ink-secondary);
+}
+
+.cv-current .cv-alert {
+  margin-top: 0;
+}
+
+.cv-alert ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.cv-alert-danger {
+  background: var(--color-danger-bg);
+}
+
+.cv-alert-danger strong {
+  color: var(--color-danger);
+}
+
+.cv-alert-warning {
+  background: var(--color-warning-bg);
+}
+
+.cv-optional {
+  color: var(--color-ink-muted);
+}
+
+/* Compétences détectées dans le CV, à ajouter au profil. */
+.cv-suggested {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.cv-suggested-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+}
+
+.cv-suggested-head p {
+  flex: 1;
+  min-width: 14rem;
+}
+
+/* Carte « Proposition de mon profil aux entreprises » (consentement). */
+.consent-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.consent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  width: 100%;
+}
+
+.consent-head h2 {
+  font-size: 1rem;
+}
+
+.consent-tag {
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.consent-tag.is-on {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.consent-tag.is-off {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.consent-text {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+}
+
+.consent-card .consent-confirm {
+  margin-top: 0;
+  gap: 0.6rem;
+}
+
+.consent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.consent-result,
+.consent-error,
+.profile-unsaved {
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.consent-result {
+  color: var(--color-success);
+}
+
+.consent-error {
+  color: var(--color-danger);
+}
+
+.profile-unsaved {
+  color: var(--color-warning);
+  margin-bottom: 0.75rem;
+}
+
+.profile-help {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--color-ink-muted);
+  margin-bottom: 0.5rem;
+}

@@ -5,15 +5,15 @@ import { useApp } from '../../context/AppContext'
 import { PageMotion } from '../motion/Motion'
 import { Logo } from '../brand/Logo'
 import { ThemeToggle } from '../ui/ThemeToggle'
-import { RightRail } from './RightRail'
 import { Sidebar, getLinksByRole } from './Sidebar'
 import { TabBar, type TabBarItem } from './TabBar'
 import './AppShell.css'
 
 /**
- * Coquille de l'espace connecté : rail de navigation, colonne centrale, rail
- * contextuel. Sous 1320 px le rail droit disparaît, sous 1024 px le rail
- * gauche devient un panneau coulissant.
+ * Coquille de l'espace connecté : barre haute (logo, recherche, bascule de
+ * thème), puis un conteneur centré en deux colonnes — carte latérale de
+ * navigation et contenu. Sous 1024 px la carte latérale devient un panneau
+ * coulissant ouvert par l'onglet « Menu » de la barre d'onglets.
  */
 export function AppShell() {
   const { logout, currentUser, unreadCount } = useApp()
@@ -35,8 +35,9 @@ export function AppShell() {
   }
 
   const role = currentUser?.role ?? 'candidate'
+  const canVerifyCv = currentUser?.canVerifyCv === true
   const tabItems: TabBarItem[] = useMemo(() => {
-    const allLinks = getLinksByRole(role, unreadCount)
+    const allLinks = getLinksByRole(role, unreadCount, canVerifyCv)
     const primary = allLinks.slice(0, 4)
     const hiddenBadgeTotal = allLinks.slice(4).reduce((sum, l) => sum + (l.badge ?? 0), 0)
     return [
@@ -50,7 +51,7 @@ export function AppShell() {
         onClick: () => setMenuOpen(true),
       },
     ]
-  }, [role, unreadCount, menuOpen])
+  }, [role, unreadCount, menuOpen, canVerifyCv])
 
   return (
     <div className="shell">
@@ -102,10 +103,6 @@ export function AppShell() {
             <Outlet />
           </PageMotion>
         </main>
-
-        <div className="shell-rail">
-          <RightRail />
-        </div>
       </div>
 
       <TabBar items={tabItems} />

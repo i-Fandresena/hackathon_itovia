@@ -45,7 +45,7 @@ export function RecruiterOpportunityList() {
           <EmptyState
             icon={Briefcase}
             title="Aucune offre publiée"
-            description="Publiez votre première opportunité pour recevoir des candidatures."
+            description="Publiez votre première opportunité pour recevoir des profils proposés par OffRec."
             actionLabel="Publier une offre"
             onAction={() => navigate('/recruteur/publier')}
           />

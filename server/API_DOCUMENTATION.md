@@ -17,6 +17,7 @@
 7. [Directory (Annuaire)](#directory)
 8. [AI Assistant](#ai-assistant)
 9. [Admin](#admin)
+9b. [CV Verification](#cv-verification)
 10. [Agent](#agent)
 11. [Talent Account](#talent-account)
 12. [Match Suggestions](#match-suggestions)
@@ -244,27 +245,109 @@ Content-Type: multipart/form-data
 
 **Rôle requis** : `candidate`
 
-**Body** :
+**Body** (multipart) :
 ```
-cv: [binary PDF file]
+cv: [binary PDF file, 5 Mo max]
+attestation: "true"       (obligatoire — attestation sur l'honneur)
+matchingConsent: "true"   (optionnel — case « j'accepte qu'OffRec propose mon profil aux entreprises »)
 ```
 
 **Description** : 
-- Télécharge un CV et extrait les compétences suggérées par mots-clés
-- Retourne les compétences détectées (non appliquées automatiquement)
-- Support format : PDF uniquement
+- Extrait le texte (pdf-parse) puis les données structurées (Gemini) ; rien n'est appliqué automatiquement au profil
+- Attestation obligatoire (`cvAttestedAt` enregistré)
+- Identité graduée : nom du CV incompatible avec le profil = rejet ; email ou téléphone différent = simple drapeau
+- Contrôles automatiques **non décisionnels** (`flags`) : aucun rejet ni sanction n'en découle
+- Le fichier n'est écrit sur disque qu'après les validations bloquantes
+- Chaque dépôt accepté crée une ligne `CvSubmission`, remet la vérification à `non_verifie` et écrit un `AuditLog` (`cv_upload`)
+- `matchingConsent=true` pose `matchingConsentAt` s'il ne l'est pas déjà (`AuditLog` `matching_consent_given`, `source: "cv_upload"`). L'absence du champ ne retire **jamais** un consentement existant
+- Après la réponse, le moteur de matching est relancé pour ce candidat (voir [Admin Matching](#admin-matching) — règle hybride). Le score reste calculé sur le profil confirmé, jamais sur les données extraites du CV
 
 **Response** (200) :
 ```json
 {
   "cvUrl": "/uploads/cv/uuid.pdf",
-  "suggestedSkills": ["JavaScript", "React", "Node.js", "Git"]
+  "suggestedSkills": ["JavaScript", "React", "Node.js", "Git"],
+  "extractedData": { "candidateInfo": {}, "experiences": [], "education": [], "...": "..." },
+  "validationWarnings": ["L'email du CV (x@y.mg) est différent de l'email du compte."],
+  "flags": [
+    { "code": "email_different", "severity": "info", "message": "L'email du CV (x@y.mg) est différent de l'email du compte." }
+  ],
+  "verificationStatus": "non_verifie",
+  "matchingConsentAt": "2026-10-08T10:00:00.000Z"
 }
 ```
 
+`matchingConsentAt` : consentement de matching en vigueur après ce dépôt (date ISO), ou `null`.
+
+`validationWarnings` = messages de `flags`. `extractedData` vaut `{}` si l'extraction IA est indisponible.
+
+**Drapeaux** (`{ code, severity: "info" | "alerte", message }`) :
+
+| Code | Gravité | Déclencheur |
+|------|---------|-------------|
+| `email_different` | info | Email du CV différent de celui du compte |
+| `telephone_different` | info | Téléphone du CV différent de celui du profil |
+| `doublon_fichier` | alerte | Même fichier (sha256) déjà déposé par un autre compte |
+| `dates_chevauchement` | alerte | Deux postes à temps plein, dans deux structures, se recouvrant d'au moins 6 mois |
+| `experience_incoherente` | alerte / info | Années couvertes par le CV en dessous (alerte) ou au-dessus (info) du `experienceLevel` déclaré |
+| `formation_incoherente` | alerte / info | Diplôme le plus élevé du CV inférieur au `educationLevel` déclaré (alerte), ou aucune formation listée (info) |
+| `extraction_ia_indisponible` | info | Extraction IA indisponible : contrôles de cohérence non effectués |
+
+**Erreurs** (toutes `400`, `{ "error": "..." }`) :
+- Fichier absent, non-PDF, signature PDF invalide, ou supérieur à 5 Mo
+- `attestation` absent ou différent de `"true"`
+- Texte du PDF non extractible
+- Nom du CV incompatible avec le profil : `{ "error", "validationErrors": ["..."], "message" }`
+
+---
+
+### 6b. Matching Consent (Consentement de matching)
+
+Décision produit 2026-10-08 : le candidat ne postule plus offre par offre. Il donne **un consentement global** (« j'accepte qu'OffRec propose mon profil aux entreprises »), horodaté et révocable. Le serveur le revérifie avant toute transmission d'un profil à un recruteur.
+
+**Donner** : `POST /auth/profile/candidate/matching-consent` — rôle `candidate`, pas de corps.
+
+- Idempotent : si le consentement est déjà actif, sa date d'origine est conservée
+- `AuditLog` `matching_consent_given` (`source: "profile"`)
+- Relance le moteur de matching après la réponse (sans effet tant qu'aucun CV n'est déposé)
+
+**Response** (200) : `{ "candidateProfile": { "...": "...", "matchingConsentAt": "2026-10-08T10:00:00.000Z" } }`
+
+**Retirer** : `DELETE /auth/profile/candidate/matching-consent` — rôle `candidate`, pas de corps.
+
+- `matchingConsentAt` repasse à `null` : plus aucune nouvelle proposition
+- Les suggestions encore en file de validation (`suggeree`) de ce candidat passent à `ecartee`
+- Les dossiers déjà transmis à un recruteur (`proposee_recruteur`, `interet_recruteur`) ne sont **pas** retirés : le candidat s'en retire un par un via `POST /match-suggestions/{id}/decline`
+- `AuditLog` `matching_consent_withdrawn` (`withdrawnSuggestions`)
+- Redonner son consentement plus tard ne réactive pas les lignes écartées
+
+**Response** (200) : `{ "candidateProfile": { "...": "...", "matchingConsentAt": null }, "withdrawnSuggestions": 2 }`
+
+**Erreurs** : `401` non authentifié · `403` autre rôle ou compte suspendu/banni · `404` profil candidat introuvable.
+
+`matchingConsentAt` figure dans `user.candidateProfile` (`/auth/login`, `/auth/me`, `PUT /auth/profile/candidate`). `PUT /auth/profile/candidate` ne permet ni de le poser ni de le retirer (champ ignoré) ; il relance simplement le matching après la réponse. Ce champ n'est jamais transmis à un recruteur.
+
+---
+
+### 7. Download CV (Fichier CV protégé)
+
+**Endpoint** : `GET /uploads/cv/{uuid}.pdf` (hors préfixe `/api`)
+
+**Description** : 
+- Remplace l'ancien accès statique public à `/uploads`
+- Autorisé au candidat propriétaire (son `cvUrl` ou une de ses `CvSubmission`), à un admin, ou à un vérificateur de CV habilité
+- Authentification par cookie de session ; nom de fichier validé strictement (UUID + `.pdf`)
+
 **Erreurs** :
-- `400` : Fichier requis
-- `422` : Format invalide (non-PDF)
+- `401` : Non authentifié
+- `403` : Fichier d'un autre candidat, ou compte suspendu/banni
+- `404` : Nom invalide ou fichier absent
+
+---
+
+### Champ `canVerifyCv`
+
+L'objet `user` renvoyé par `POST /auth/register`, `POST /auth/login` et `GET /auth/me` porte `canVerifyCv: boolean` — vrai pour un admin ou pour un rôle habilité par l'admin (voir [CV Verification](#cv-verification)).
 
 ---
 
@@ -1600,6 +1683,154 @@ Content-Type: application/json
 
 ---
 
+### 5. Get CV Verifier Roles (Rôles habilités à vérifier les CV)
+
+**Endpoint** : `GET /admin/cv-verifier-roles`
+
+**Rôle requis** : `admin`
+
+**Response** (200) :
+```json
+{
+  "roles": ["agent"],
+  "grantable": ["agent", "particulier"]
+}
+```
+
+`roles` = rôles actuellement habilités (l'admin peut toujours vérifier, il n'y figure pas). `grantable` = rôles habilitables. `candidate` et `talent` sont exclus (conflit d'intérêts), `recruiter` aussi (OffRec reste l'intermédiaire : un recruteur n'accède pas aux coordonnées d'un candidat).
+
+---
+
+### 6. Set CV Verifier Roles (Définir les rôles habilités)
+
+**Endpoint** : `PUT /admin/cv-verifier-roles`
+
+**Rôle requis** : `admin`
+
+**Body** (remplace la liste entière) :
+```json
+{
+  "roles": ["agent", "particulier"]
+}
+```
+
+**Response** (200) : même forme que le `GET`.
+
+**Erreurs** :
+- `400` : Un rôle n'est pas dans `grantable`, ou rôle inconnu
+
+Journalisé (`AuditLog` : `admin:cv_verifier_roles`). L'effet est immédiat : l'habilitation est relue en base à chaque requête.
+
+---
+
+## 📄 CV Verification
+
+Base path: `/cv-verification`
+
+**Accès** : `admin`, ou rôle habilité par l'admin (`canVerifyCv`). Sinon `401` / `403`.
+
+Les drapeaux automatiques n'éclairent que la lecture : la décision est toujours humaine, et chaque décision est ajoutée à l'historique (jamais écrasée).
+
+### 1. Get Queue (File de vérification)
+
+**Endpoint** : `GET /cv-verification/queue?status=non_verifie|verifie|rejete`
+
+`status` vaut `non_verifie` par défaut. Seuls les candidats ayant un `cvUrl` sont listés, du dépôt le plus ancien au plus récent.
+
+**Response** (200) :
+```json
+{
+  "candidates": [
+    {
+      "candidateId": "uuid",
+      "fullName": "Jean Dupont",
+      "email": "jean@example.mg",
+      "cvUrl": "/uploads/cv/uuid.pdf",
+      "submittedAt": "2026-10-01T10:00:00.000Z",
+      "verificationStatus": "non_verifie",
+      "flags": [{ "code": "doublon_fichier", "severity": "alerte", "message": "..." }]
+    }
+  ]
+}
+```
+
+`submittedAt` peut être `null` pour un CV déposé avant la mise en place de l'historique.
+
+---
+
+### 2. Get Candidate (Fiche de vérification)
+
+**Endpoint** : `GET /cv-verification/candidates/{id}`
+
+**Response** (200) :
+```json
+{
+  "candidate": {
+    "candidateId": "uuid",
+    "fullName": "Jean Dupont",
+    "email": "jean@example.mg",
+    "phone": "+261 32 12 345 67",
+    "province": "Antananarivo",
+    "city": "Antananarivo",
+    "educationLevel": "licence",
+    "experienceLevel": "junior",
+    "skills": ["React"],
+    "cvUrl": "/uploads/cv/uuid.pdf",
+    "cvProfessionalTitle": "Développeur web",
+    "cvExperiences": [],
+    "cvEducation": [],
+    "cvCertifications": [],
+    "cvYearsOfExperience": 2,
+    "flags": [],
+    "verificationStatus": "rejete",
+    "verifiedAt": "2026-10-01T11:00:00.000Z",
+    "verificationNote": "Diplôme non justifié",
+    "history": [
+      { "decision": "rejete", "note": "Diplôme non justifié", "verifierName": "Équipe OffRec", "createdAt": "2026-10-01T11:00:00.000Z" }
+    ]
+  }
+}
+```
+
+`history` est trié du plus récent au plus ancien. `verifierName` est le nom du profil agent/particulier, ou « Équipe OffRec » pour un admin (jamais son email).
+
+**Erreurs** : `404` Candidat introuvable
+
+---
+
+### 3. Decide (Décision de vérification)
+
+**Endpoint** : `POST /cv-verification/candidates/{id}/decision`
+
+**Body** :
+```json
+{
+  "decision": "verifie|rejete",
+  "note": "Obligatoire si rejete (1000 caractères max)",
+  "cvUrl": "/uploads/cv/uuid.pdf (optionnel : fichier lu par le vérificateur)"
+}
+```
+
+**Response** (200) :
+```json
+{
+  "verificationStatus": "verifie"
+}
+```
+
+**Description** : 
+- Ajoute une ligne `CvVerification`, met à jour le profil (`cvVerificationStatus`, `cvVerifiedAt`, `cvVerifiedById`, `cvVerificationNote`)
+- `AuditLog` (`cv_verification`) + `Notification` au candidat (`link: "/candidat/profil"`)
+- Un nouveau dépôt de CV remet le statut à `non_verifie`
+
+**Erreurs** :
+- `400` : Décision invalide, note manquante pour un rejet, ou candidat sans CV
+- `403` : Décision sur son propre compte
+- `409` : `cvUrl` fourni différent du CV actuel (le candidat a déposé un nouveau fichier entre-temps)
+- `404` : Candidat introuvable
+
+---
+
 ## 👥 Agent (Terrain)
 
 Base path: `/agent`
@@ -2075,16 +2306,29 @@ Content-Type: application/json
 
 Base path: `/match-suggestions`
 
-### 1. Get My Suggestions (Mes suggestions - Candidat)
+OffRec est l'intermédiaire : candidat et recruteur ne se contactent jamais directement. Depuis la décision du 2026-10-08, le candidat ne postule plus : les suggestions sont créées par le moteur de matching (`origin: "systeme"`) ou par un admin (`origin: "admin"`).
+
+**Statuts** (`MatchSuggestionStatus`) :
+
+| Statut | Sens |
+|--------|------|
+| `suggeree` | En file de validation admin — invisible du candidat et du recruteur |
+| `proposee_recruteur` | Profil transmis au recruteur (par l'admin, ou directement par le moteur si score ≥ seuil haut et CV vérifié) |
+| `interet_recruteur` | Le recruteur a marqué son intérêt — l'admin décide de la suite |
+| `mise_en_relation` | Mise en relation confirmée par l'admin (terminal) — seul moment où le candidat est notifié |
+| `ecartee` | Écartée par l'admin, déclinée par le recruteur, ou retrait du candidat (terminal) |
+| `proposee_candidat`, `interet_candidat` | **Hérités** (parcours « postuler offre par offre ») : plus jamais produits, mais les lignes existantes restent valides et peuvent avancer |
+
+### 1. Get My Suggestions (Mes dossiers - Candidat)
 
 **Endpoint** : `GET /match-suggestions/mine`
 
-**Headers** :
-```
-Authorization: Bearer {token}
-```
-
 **Rôle requis** : `candidate`
+
+**Description** :
+- Uniquement les dossiers à partir de `proposee_recruteur` (`proposee_recruteur`, `interet_recruteur`, `mise_en_relation`), plus les lignes héritées `proposee_candidat` / `interet_candidat` encore actives
+- Jamais les lignes `suggeree` ni `ecartee`
+- `opportunity` est une liste blanche : pas de `recruiterId`, et `companyName` vaut `null` tant que le statut n'est pas `mise_en_relation`
 
 **Response** (200) :
 ```json
@@ -2093,30 +2337,46 @@ Authorization: Bearer {token}
     {
       "id": "uuid",
       "opportunityId": "uuid",
-      "opportunityTitle": "Développeur React",
-      "companyName": "Tech Solutions Madagascar",
+      "candidateId": "uuid",
       "score": 87,
-      "reasons": ["Compétences React", "Disponibilité immédiate"],
-      "status": "proposee_candidat|interet_candidat|decline",
-      "createdAt": "2026-09-30T10:00:00Z"
+      "reasons": ["Compétences alignées : React, Git", "Même province : Antananarivo"],
+      "status": "proposee_recruteur",
+      "origin": "systeme",
+      "createdAt": "2026-10-08T10:00:00.000Z",
+      "updatedAt": "2026-10-08T10:00:00.000Z",
+      "opportunity": {
+        "id": "uuid",
+        "title": "Développeur React",
+        "category": "Informatique",
+        "sector": "digital",
+        "sectorDetails": {},
+        "description": "...",
+        "province": "Antananarivo",
+        "city": "Antananarivo",
+        "opportunityType": "emploi",
+        "requiredSkills": ["React", "Git"],
+        "level": "junior",
+        "deadline": "2026-12-31T00:00:00.000Z",
+        "createdAt": "2026-10-01T10:00:00.000Z",
+        "featured": false,
+        "companyName": null
+      }
     }
-  ],
-  "total": 5
+  ]
 }
 ```
 
 ---
 
-### 2. Get Received Suggestions (Suggestions reçues - Recruteur)
+### 2. Get Received Suggestions (Profils reçus - Recruteur)
 
 **Endpoint** : `GET /match-suggestions/received`
 
-**Headers** :
-```
-Authorization: Bearer {token}
-```
-
 **Rôle requis** : `recruiter`
+
+**Description** : profils transmis par OffRec (validation admin ou envoi direct du moteur) pour les offres de ce recruteur — statuts `proposee_recruteur`, `interet_recruteur`, `mise_en_relation`. Le profil candidat est une liste blanche : ni téléphone, ni CV, ni vérification du CV, ni consentement.
+
+Triés par offre (titre) puis par score décroissant. Chaque profil porte `fit`, son adéquation critère par critère avec l'offre du recruteur (même calcul que la présélection admin, uniquement dérivé des champs de la liste blanche et de sa propre offre ; `null` si le profil est introuvable), et `preselectionRank`, son rang dans la présélection au moment de la transmission groupée (`null` pour un envoi direct du moteur ou une transmission unitaire). Ne sont jamais transmis : l'origine de la suggestion, l'indice « présent dans le CV », le statut de vérification et les points relevés sur le CV.
 
 **Response** (200) :
 ```json
@@ -2124,66 +2384,66 @@ Authorization: Bearer {token}
   "suggestions": [
     {
       "id": "uuid",
-      "candidateName": "Jean Dupont",
       "opportunityId": "uuid",
+      "candidateId": "uuid",
       "score": 87,
-      "reasons": ["Compétences React alignées"],
-      "status": "proposee_recruteur|interet_recruteur",
-      "createdAt": "2026-09-30T10:00:00Z"
+      "reasons": ["Compétences alignées : React, Git"],
+      "status": "proposee_recruteur",
+      "preselectionRank": 2,
+      "createdAt": "2026-10-08T10:00:00.000Z",
+      "updatedAt": "2026-10-08T10:00:00.000Z",
+      "opportunity": { "id": "uuid", "title": "Développeur React" },
+      "fit": {
+        "skills": { "covered": ["React", "Git"], "missing": ["TypeScript"] },
+        "location": { "match": "meme_ville", "province": "Antananarivo", "city": "Antananarivo" },
+        "level": { "required": "junior", "candidate": "junior", "conforme": true },
+        "type": { "offered": "emploi", "match": "souhaite" }
+      },
+      "candidate": {
+        "id": "uuid",
+        "email": "candidat@example.mg",
+        "candidateProfile": {
+          "fullName": "…", "province": "…", "city": "…", "educationLevel": "licence",
+          "experienceLevel": "junior", "skills": ["React"], "desiredOpportunityTypes": ["emploi"],
+          "availability": "immediate", "sector": "digital"
+        }
+      }
     }
-  ],
-  "total": 3
+  ]
 }
 ```
 
 ---
 
-### 3. Express Interest (Exprimer intérêt)
+### 3. Express Interest (Exprimer un intérêt)
 
 **Endpoint** : `POST /match-suggestions/{id}/interest`
 
-**Headers** :
-```
-Authorization: Bearer {token}
-```
+**Rôles** : `recruiter`, `candidate` (hérité uniquement)
 
-**Description** : 
-- Journalisé dans auditLog
-- Transition de statut
-- Déclenche notification
+**Description** :
+- **Recruteur** : `proposee_recruteur` → `interet_recruteur`. `AuditLog` `recruiter_interested`. **Aucune notification n'est envoyée au candidat** à ce stade
+- **Candidat** : accepté uniquement pour une ligne héritée `proposee_candidat` (→ `interet_candidat`). Pour tout autre statut : `400` explicite — le consentement global remplace l'intérêt par offre
 
-**Response** (200) :
-```json
-{
-  "suggestion": {
-    "id": "uuid",
-    "status": "interet_candidat|interet_recruteur",
-    "updatedAt": "2026-09-30T11:00:00Z"
-  }
-}
-```
+**Response** (200) : `{ "suggestion": { "id": "uuid", "status": "interet_recruteur", "...": "..." } }`
+
+**Erreurs** : `400` statut incompatible · `403` autre rôle · `404` suggestion introuvable ou appartenant à un autre compte.
 
 ---
 
-### 4. Decline Suggestion (Decliner)
+### 4. Decline Suggestion (Décliner / se retirer)
 
 **Endpoint** : `POST /match-suggestions/{id}/decline`
 
-**Headers** :
-```
-Authorization: Bearer {token}
-```
+**Rôles** : `candidate`, `recruiter`
 
-**Response** (200) :
-```json
-{
-  "suggestion": {
-    "id": "uuid",
-    "status": "decline",
-    "updatedAt": "2026-09-30T11:00:00Z"
-  }
-}
-```
+**Description** :
+- **Candidat** : se retire d'un dossier, à tout moment avant `mise_en_relation` → `ecartee`. `AuditLog` `candidate_declined`. Une ligne retirée n'est jamais réactivée par le moteur
+- **Recruteur** : écarte un profil `proposee_recruteur` ou `interet_recruteur` → `ecartee`. `AuditLog` `recruiter_declined`
+
+**Response** (200) : `{ "suggestion": { "id": "uuid", "status": "ecartee", "...": "..." } }`
+
+**Erreurs** : `400` dossier déjà en `mise_en_relation` / `ecartee` (candidat) ou statut incompatible (recruteur) · `403` · `404`.
 
 ---
 
@@ -2578,44 +2838,132 @@ Base path: `/talent-leads`
 
 ## 📊 Admin Matching
 
-Base path: `/admin/matching`
+Base path: `/admin/matching` — **rôle requis : `admin`** pour tous les endpoints.
 
-### 1. Get Candidate Pool (Vivier candidats)
+### Moteur de matching (règle hybride, décision 2026-10-08)
 
-**Endpoint** : `GET /admin/matching/opportunities/{id}/candidate-pool`
+`server/src/lib/matching.ts` crée les `MatchSuggestion` automatiquement :
 
-**Headers** :
-```
-Authorization: Bearer {token}
-```
+- **Candidats éligibles** : rôle `candidate`, compte actif (`active` ou `warned`), consentement donné (`matchingConsentAt`), CV déposé (`cvUrl`)
+- **Offres éligibles** : date limite non dépassée, compte recruteur actif
+- **Score** : `scoreOpportunity()` inchangé, calculé sur le profil confirmé par le candidat (jamais sur les colonnes `cv*`) — fonctionne à l'identique sans `GEMINI_API_KEY`. Il faut en plus **au moins une compétence en commun** avec l'offre
+- Score ≥ `MATCH_AUTO_THRESHOLD` (défaut 80) **et** CV `verifie` → créée directement en `proposee_recruteur` (le recruteur est notifié)
+- Sinon score ≥ `MATCH_THRESHOLD` (défaut 60) → créée en `suggeree` (file de validation admin)
+- Au plus `MATCH_MAX_PER_RUN` (défaut 10) créations par exécution, meilleurs scores d'abord
+- Idempotent : seules les lignes encore `suggeree` sont rafraîchies (score) ou promues en `proposee_recruteur` ; une ligne `ecartee` n'est jamais réactivée par le moteur ; une ligne avancée ou héritée n'est jamais touchée
+- **Déclencheurs** (après la réponse HTTP, sans jamais faire échouer la requête) : dépôt de CV, enregistrement du profil candidat, don du consentement, CV validé par un vérificateur, création ou modification d'une offre
+- `AuditLog` `matching_run` : `{ scope, trigger, opportunityId?, evaluated, queued, sentDirect, promoted, refreshed, ignored }` — compteurs uniquement
 
-**Rôle requis** : `admin`
+### 1. Get Preselection (Présélection ATS d'une offre)
+
+**Endpoint** : `GET /admin/matching/opportunities/{id}/preselection`
+
+Remplace l'ancien `GET …/candidate-pool` (supprimé). Lecture seule : rien n'est créé ni transmis. Aucun appel IA — fonctionne à l'identique sans `GEMINI_API_KEY`.
 
 **Query Parameters** :
 ```
-?limit=50
+?top=5|10                 (défaut 5)
+&verifiedOnly=true|false  CV vérifié uniquement
+&sameProvince=true|false  même province que l'offre
+&levelMatch=true|false    niveau conforme (écart d'au plus un niveau)
+&desiredType=true|false   type d'opportunité déclaré comme recherché par le candidat
 ```
 
-**Description** : 
-- Vivier de candidats diplômés + talents non-diplômés
-- Classés par score de compatibilité
+**Description** (logique pure dans `server/src/lib/preselection.ts`, couche au-dessus de `scoreOpportunity()` dont ni la formule ni les poids ne changent) :
+
+1. **Filtres éliminatoires**, évalués dans cet ordre — un candidat éliminé porte le premier motif rencontré :
+   `offre_fermee` (date limite dépassée ou compte recruteur inactif) → `compte_inactif` → `sans_consentement` → `sans_cv` → `deja_ecarte` (suggestion `ecartee` pour cette offre) → `aucune_competence_commune` → `score_insuffisant` (score < `MATCH_THRESHOLD`) → filtres optionnels `cv_non_verifie`, `autre_province`, `niveau_non_conforme`, `type_non_souhaite`.
+2. **Classement** des candidats restants : score décroissant, puis nombre de compétences requises couvertes, puis proximité (même ville, même province, autre), puis CV vérifié avant non vérifié avant rejeté, puis moins de points relevés sur le CV, puis consentement le plus ancien, puis identifiant du candidat.
+3. **Top N** : les `top` premiers (`ranked`). `counts.qualified` compte tous ceux qui ont passé les filtres.
+
+Tous les comptes candidats sont évalués ; les profils déjà transmis (par un admin ou par l'envoi direct du moteur) restent dans le classement avec l'état de leur suggestion et `transmissible: false`.
+
+`cvHintSkills` : compétences requises absentes du profil mais détectées par l'IA dans le CV (`cvSkillsSuggested`). **Indice affiché uniquement** : il n'entre ni dans le score, ni dans les filtres, ni dans le classement, et n'est jamais transmis au recruteur. `sectorMatch` est une information (le secteur n'est pas un critère).
 
 **Response** (200) :
 ```json
 {
-  "candidates": [
-    {
-      "id": "uuid",
-      "name": "Jean Dupont",
-      "score": 92,
-      "type": "candidate|talent",
-      "skills": ["React", "TypeScript"],
-      "reasons": ["Compétences alignées"]
-    }
-  ],
-  "total": 15
+  "preselection": {
+    "opportunity": {
+      "id": "uuid", "title": "Développeur React", "companyName": "…", "category": "Informatique", "sector": "digital",
+      "province": "Antananarivo", "city": "Antananarivo", "opportunityType": "emploi",
+      "requiredSkills": ["React", "TypeScript", "Git"], "level": "junior",
+      "deadline": "2026-12-31T00:00:00.000Z", "open": true, "closedReason": null
+    },
+    "top": 5,
+    "filters": { "verifiedOnly": false, "sameProvince": false, "levelMatch": false, "desiredType": false },
+    "threshold": 60,
+    "counts": {
+      "evaluated": 12, "eliminated": 5, "qualified": 7, "retained": 5,
+      "byMotif": [{ "motif": "sans_consentement", "label": "Accord de matching non donné ou retiré", "count": 3 }]
+    },
+    "ranked": [
+      {
+        "rank": 1,
+        "candidateId": "uuid", "fullName": "…", "email": "candidat@example.mg",
+        "score": 89, "reasons": ["Compétences alignées : React, TypeScript"],
+        "fit": {
+          "skills": { "covered": ["React", "TypeScript"], "missing": ["Git"] },
+          "location": { "match": "meme_ville", "province": "Antananarivo", "city": "Antananarivo" },
+          "level": { "required": "junior", "candidate": "junior", "conforme": true },
+          "type": { "offered": "emploi", "match": "souhaite" }
+        },
+        "cvHintSkills": ["Git"],
+        "sectorMatch": "identique",
+        "cvVerificationStatus": "verifie", "cvFlagCount": 0,
+        "consentAt": "2026-10-08T10:00:00.000Z",
+        "suggestion": { "id": "uuid", "status": "suggeree", "origin": "systeme" },
+        "transmissible": true, "blockedReason": null
+      }
+    ],
+    "eliminated": [
+      { "candidateId": "uuid", "fullName": "…", "motif": "sans_cv", "motifLabel": "Aucun CV déposé", "score": 74, "suggestion": null }
+    ]
+  }
 }
 ```
+
+`fit.location.match` : `meme_ville` | `meme_province` | `autre`. `fit.type.match` : `souhaite` | `sans_preference` | `non_souhaite`. `suggestion` vaut `null` si aucune ligne n'existe pour la paire.
+
+**Erreurs** : `400` `top` différent de 5 ou 10, ou filtre différent de `true`/`false` · `404` offre introuvable.
+
+---
+
+### 1 bis. Transmit Preselection (Transmission groupée au recruteur)
+
+**Endpoint** : `POST /admin/matching/opportunities/{id}/preselection/transmit`
+
+**Body** :
+```json
+{
+  "candidateIds": ["uuid", "uuid"],
+  "top": 5,
+  "filters": { "verifiedOnly": false, "sameProvince": false, "levelMatch": false, "desiredType": false }
+}
+```
+
+`candidateIds` : 1 à 10 identifiants distincts. `top` (défaut 5) et `filters` (défaut : aucun) doivent être ceux de la présélection affichée.
+
+**Description** :
+- Le serveur **recalcule** la présélection avec ces options : seul un candidat retenu (top N) et `transmissible` part chez le recruteur
+- Pour chacun : la suggestion est créée si elle n'existe pas (`origin: "admin"`, `AuditLog` `match_suggestion_created`), puis passe à `proposee_recruteur` par **la même transition que le PATCH unitaire** (§5) : consentement relu en base, transitions autorisées, notification in-app au recruteur, `AuditLog` `match_suggestion_status` (avec `source: "preselection"`, `preselectionRank`, `preselectionTop`)
+- Le score et les raisons sont rafraîchis, et le rang est enregistré dans `MatchSuggestion.preselectionRank`
+- Une ligne `ecartee` n'est **jamais** réactivée ici : le candidat est refusé (« déjà écarté pour cette offre »). La réactivation reste une action explicite par candidat (`POST /admin/matching/match-suggestions`)
+- Un refus n'annule pas les autres envois ; aucune notification n'est envoyée aux candidats
+
+**Response** (200) :
+```json
+{
+  "outcomes": [
+    { "candidateId": "uuid", "fullName": "…", "transmitted": true, "reason": null, "rank": 2, "suggestionId": "uuid" },
+    { "candidateId": "uuid", "fullName": "…", "transmitted": false, "reason": "Déjà transmis au recruteur.", "rank": 1, "suggestionId": "uuid" }
+  ],
+  "transmitted": 1,
+  "refused": 1
+}
+```
+
+**Erreurs** : `400` corps invalide (liste vide, plus de 10 identifiants, doublon, identifiant non UUID, `top` invalide) · `404` offre introuvable.
 
 ---
 
@@ -2623,80 +2971,75 @@ Authorization: Bearer {token}
 
 **Endpoint** : `GET /admin/matching/candidates/{id}`
 
-**Headers** :
-```
-Authorization: Bearer {token}
-```
-
-**Rôle requis** : `admin`
-
 **Response** (200) :
 ```json
 {
   "candidate": {
-    "id": "uuid",
-    "fullName": "Jean Dupont",
-    "email": "jean@example.mg",
-    "phone": "+261 32 12 345 67",
-    "skills": ["React", "TypeScript", "Node.js"],
+    "fullName": "…",
+    "email": "candidat@example.mg",
+    "phone": "+261 …",
+    "province": "Antananarivo",
+    "city": "Antananarivo",
+    "gender": "femme",
+    "educationLevel": "licence",
+    "skills": ["React", "TypeScript"],
     "experienceLevel": "junior",
+    "desiredOpportunityTypes": ["emploi"],
     "availability": "immediate",
-    "applications": 5,
-    "placements": 1
+    "cvUrl": "/uploads/cv/uuid.pdf",
+    "cvVerificationStatus": "non_verifie",
+    "cvFlags": [],
+    "sector": "digital",
+    "matchingConsentAt": "2026-10-08T10:00:00.000Z",
+    "memberSince": "2026-09-01T10:00:00.000Z"
   }
 }
 ```
 
 ---
 
-### 3. Create Match Suggestion (Créer suggestion)
+### 3. Create Match Suggestion (« Proposer » manuel)
 
 **Endpoint** : `POST /admin/matching/match-suggestions`
 
-**Headers** :
-```
-Authorization: Bearer {token}
-Content-Type: application/json
-```
-
-**Rôle requis** : `admin`
+Mise en file manuelle d'un candidat (depuis la liste des éliminés de la présélection). C'est la seule façon de réactiver un candidat écarté pour une offre.
 
 **Body** :
 ```json
-{
-  "opportunityId": "uuid",
-  "candidateId": "uuid"
-}
+{ "opportunityId": "uuid", "candidateId": "uuid" }
 ```
+
+**Description** :
+- Crée la suggestion en `suggeree`, `origin: "admin"` — l'admin la transmet ensuite au recruteur par le PATCH (§5)
+- Si une ligne `ecartee` existe pour cette paire, elle est réactivée en `suggeree` (seul un admin peut le faire)
+- **Aucune notification** n'est envoyée au candidat (la notification « Nouvelle offre recommandée » est supprimée)
+- `AuditLog` `match_suggestion_created`
 
 **Response** (201) :
 ```json
 {
   "suggestion": {
-    "id": "uuid",
-    "status": "proposee_candidat",
-    "createdAt": "2026-09-30T10:00:00Z"
+    "id": "uuid", "opportunityId": "uuid", "candidateId": "uuid",
+    "score": 79, "reasons": ["…"], "status": "suggeree", "origin": "admin",
+    "createdAt": "2026-10-08T10:00:00.000Z", "updatedAt": "2026-10-08T10:00:00.000Z"
   }
 }
 ```
 
+**Erreurs** : `400` corps invalide · `404` offre ou candidat introuvable · `409` une suggestion active existe déjà pour cette paire.
+
 ---
 
-### 4. Get Match Suggestions (Suggestions)
+### 4. Get Match Suggestions (Suivi et file de validation)
 
 **Endpoint** : `GET /admin/matching/match-suggestions`
 
-**Headers** :
-```
-Authorization: Bearer {token}
-```
-
-**Rôle requis** : `admin`
-
 **Query Parameters** :
 ```
-?status=proposee_candidat|interet_candidat|proposee_recruteur
+?status=suggeree|proposee_recruteur|interet_recruteur|mise_en_relation|ecartee|proposee_candidat|interet_candidat
 ```
+
+**Description** : sans `status`, toutes les suggestions (mise à jour la plus récente d'abord). `?status=suggeree` = **file de validation**, triée par score décroissant.
 
 **Response** (200) :
 ```json
@@ -2704,47 +3047,86 @@ Authorization: Bearer {token}
   "suggestions": [
     {
       "id": "uuid",
-      "opportunityTitle": "Développeur React",
-      "candidateName": "Jean Dupont",
-      "score": 87,
-      "status": "proposee_candidat"
+      "opportunityId": "uuid",
+      "candidateId": "uuid",
+      "score": 79,
+      "reasons": ["Même province : Antananarivo", "Niveau d’expérience compatible"],
+      "status": "suggeree",
+      "origin": "systeme",
+      "createdAt": "2026-10-08T10:00:00.000Z",
+      "updatedAt": "2026-10-08T10:00:00.000Z",
+      "opportunity": { "id": "uuid", "title": "Développeur React", "companyName": "…" },
+      "candidate": { "id": "uuid", "email": "candidat@example.mg", "candidateProfile": { "fullName": "…" } },
+      "cvVerificationStatus": "non_verifie",
+      "cvFlagCount": 0,
+      "matchingConsent": true
     }
-  ],
-  "total": 45
+  ]
 }
 ```
+
+**Erreurs** : `400` statut inconnu.
 
 ---
 
-### 5. Update Suggestion Status (Mettre à jour statut)
+### 5. Update Suggestion Status (Transmettre / écarter / mettre en relation)
 
 **Endpoint** : `PATCH /admin/matching/match-suggestions/{id}`
 
-**Headers** :
-```
-Authorization: Bearer {token}
-Content-Type: application/json
-```
-
-**Rôle requis** : `admin`
-
 **Body** :
 ```json
-{
-  "status": "proposee_candidat|interet_candidat|proposee_recruteur|interet_recruteur|mise_en_relation|decline"
-}
+{ "status": "proposee_recruteur" }
 ```
+
+**Transitions autorisées** :
+
+| Depuis | Vers |
+|--------|------|
+| `suggeree` | `proposee_recruteur`, `ecartee` |
+| `proposee_recruteur` | `ecartee` |
+| `interet_recruteur` | `mise_en_relation`, `ecartee` |
+| `proposee_candidat` (hérité) | `proposee_recruteur`, `ecartee` |
+| `interet_candidat` (hérité) | `proposee_recruteur`, `ecartee` |
+| `mise_en_relation`, `ecartee` | — (terminaux) |
+
+**Description** :
+- Tout passage à `proposee_recruteur` exige le consentement en vigueur du candidat, sinon `409`
+- `proposee_recruteur` : notification in-app au recruteur (« Nouveau candidat proposé »)
+- `mise_en_relation` : notification in-app au recruteur, et **notification in-app + email au candidat** (nom de l'entreprise, lien vers son espace) via `notifyUser()` — c'est le seul moment où le candidat est notifié. Sans `RESEND_API_KEY`, l'email n'est pas envoyé mais la notification in-app est créée. Chaque tentative écrit un `AuditLog` `notification_dispatch` `{ event, channel, status, reason }` sans donnée personnelle
+- `AuditLog` `match_suggestion_status` (`from`, `to`)
+
+**Response** (200) : `{ "suggestion": { "id": "uuid", "status": "proposee_recruteur", "...": "..." } }`
+
+**Erreurs** : `400` transition non autorisée ou corps invalide · `404` suggestion introuvable · `409` consentement du candidat absent ou retiré.
+
+---
+
+### 6. Run Matching (Relancer le matching d'une offre)
+
+**Endpoint** : `POST /admin/matching/opportunities/{id}/run-matching`
+
+**Description** : exécute le moteur pour cette offre, de façon synchrone, avec la même règle hybride que les déclencheurs automatiques.
 
 **Response** (200) :
 ```json
 {
-  "suggestion": {
-    "id": "uuid",
-    "status": "interet_candidat",
-    "updatedAt": "2026-09-30T11:00:00Z"
-  }
+  "result": {
+    "scope": "opportunity",
+    "eligible": true,
+    "evaluated": 12,
+    "queued": 3,
+    "sentDirect": 1,
+    "promoted": 0,
+    "refreshed": 2,
+    "ignored": 6
+  },
+  "config": { "threshold": 60, "autoThreshold": 80, "maxPerRun": 10 }
 }
 ```
+
+`queued` = créées en `suggeree` ; `sentDirect` = créées en `proposee_recruteur` ; `promoted` = `suggeree` → `proposee_recruteur` ; `refreshed` = score mis à jour ; `ignored` = sans effet (sous le seuil, sans compétence commune, déjà traitée, écartée, plafond atteint).
+
+**Erreurs** : `404` offre introuvable · `409` offre expirée ou compte recruteur inactif.
 
 ---
 

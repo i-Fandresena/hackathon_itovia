@@ -5,12 +5,6 @@
   height: 100%;
 }
 
-.opp-card-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
 .opp-card h3 {
   font-size: 1.0625rem;
   font-weight: 650;
@@ -29,49 +23,10 @@
   color: var(--color-accent);
 }
 
-.opp-rec-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--color-accent-hover);
-  margin-bottom: 0.35rem;
-}
-
 .opp-company {
   font-size: 0.875rem;
   color: var(--color-ink-muted);
   font-weight: 500;
-}
-
-.opp-bookmark {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-ink-muted);
-  cursor: pointer;
-  padding: 0.4rem;
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background 0.2s var(--ease-out),
-    border-color 0.2s var(--ease-out),
-    color 0.2s var(--ease-out);
-}
-
-.opp-bookmark:hover {
-  border-color: var(--color-border-strong);
-  color: var(--color-ink);
-}
-
-.opp-bookmark.active {
-  background: var(--color-accent-muted);
-  border-color: transparent;
-  color: var(--color-accent-hover);
 }
 
 .opp-meta {

@@ -41,10 +41,16 @@ export function RecruiterDashboard() {
             </Card>
           </FadeUp>
           <FadeUp eager index={2}>
-            <Card className="stat-card">
-              <strong>{unread}</strong>
-              <span>Notifications non lues</span>
-            </Card>
+            <Link
+              to="/recruteur/notifications"
+              style={{ display: 'block' }}
+              aria-label={`Notifications non lues : ${unread}. Voir les notifications`}
+            >
+              <Card className="stat-card card-hover">
+                <strong>{unread}</strong>
+                <span>Notifications non lues</span>
+              </Card>
+            </Link>
           </FadeUp>
         </div>
 

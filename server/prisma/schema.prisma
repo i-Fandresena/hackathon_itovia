@@ -114,6 +114,16 @@ enum Availability {
   flexible
 }
 
+/// Vérification humaine du CV d'un candidat diplômé : les contrôles
+/// automatiques ne produisent que des drapeaux (`cvFlags`), seule une
+/// personne habilitée (admin ou rôle ouvert par l'admin) passe le statut à
+/// `verifie` ou `rejete`.
+enum CvVerificationStatus {
+  non_verifie
+  verifie
+  rejete
+}
+
 enum ProofType {
   facture
   photo
@@ -206,6 +216,10 @@ model User {
   reportsAgainst    Report[]           @relation("ReportsAgainst")
   moderationActions ModerationAction[] @relation("ModerationActionsTaken")
   moderationTargets ModerationAction[] @relation("ModerationActionsReceived")
+
+  cvSubmissions        CvSubmission[]
+  cvVerifications      CvVerification[] @relation("CvVerificationsReceived")
+  cvVerificationsGiven CvVerification[] @relation("CvVerificationsGiven")
 }
 
 model CandidateProfile {
@@ -255,6 +269,71 @@ model CandidateProfile {
   cvExtractionConfidence  String            @default("low")
   /// Date d'extraction du CV
   cvExtractionDate        DateTime?
+
+  // === Lutte contre les faux CV ===
+  /// Empreinte sha256 du dernier fichier accepté (détection de doublons).
+  cvFileHash              String?
+  /// Date de l'attestation sur l'honneur cochée au dépôt.
+  cvAttestedAt            DateTime?
+  /// Drapeaux des contrôles automatiques (`{ code, severity, message }[]`) —
+  /// jamais décisionnels : ils éclairent la vérification humaine.
+  cvFlags                 Json?
+  /// Remis à `non_verifie` à chaque nouveau dépôt.
+  cvVerificationStatus    CvVerificationStatus @default(non_verifie)
+  cvVerifiedAt            DateTime?
+  cvVerifiedById          String?
+  cvVerificationNote      String?
+
+  // === Consentement de matching (décision produit 2026-10-08) ===
+  /// Date à laquelle le candidat a accepté qu'OffRec propose son profil aux
+  /// entreprises. `null` = jamais donné, ou retiré. Vérifié côté serveur avant
+  /// toute transmission à un recruteur ; jamais exposé au recruteur.
+  matchingConsentAt       DateTime?
+}
+
+/// Historique append-only de chaque dépôt de CV accepté — jamais modifié ni
+/// supprimé : sert à la détection de doublons entre comptes (`fileHash`) et
+/// à garder l'accès du candidat à ses anciens fichiers.
+model CvSubmission {
+  id          String   @id @default(uuid())
+  candidateId String
+  candidate   User     @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  fileUrl     String
+  fileHash    String
+  flags       Json
+  attestedAt  DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([candidateId])
+  @@index([fileHash])
+}
+
+/// Historique append-only des décisions de vérification de CV (même logique
+/// que TalentVerification : une ligne par événement, jamais écrasée).
+model CvVerification {
+  id          String               @id @default(uuid())
+  candidateId String
+  candidate   User                 @relation("CvVerificationsReceived", fields: [candidateId], references: [id], onDelete: Cascade)
+  /// Optionnel + SetNull : supprimer le compte d'un vérificateur ne doit
+  /// jamais effacer ses décisions (historique append-only).
+  verifierId  String?
+  verifier    User?                @relation("CvVerificationsGiven", fields: [verifierId], references: [id], onDelete: SetNull)
+  /// Uniquement `verifie` ou `rejete` (validé par Zod).
+  decision    CvVerificationStatus
+  note        String?
+  createdAt   DateTime             @default(now())
+
+  @@index([candidateId])
+}
+
+/// Rôles autorisés par l'admin à vérifier les CV, en plus de l'admin lui-même.
+/// Jamais `candidate`/`talent` (conflit d'intérêts) ni `recruiter` (OffRec
+/// reste l'intermédiaire : un recruteur n'accède pas aux coordonnées d'un
+/// candidat) — voir GRANTABLE_CV_VERIFIER_ROLES.
+model CvVerifierRole {
+  role        UserRole @id
+  grantedById String
+  grantedAt   DateTime @default(now())
 }
 
 model RecruiterProfile {
@@ -321,11 +400,19 @@ model Opportunity {
   @@index([opportunityType])
 }
 
-/// Statut de mise en relation piloté par l'admin (diplômés) — jamais un
-/// saut d'étape : candidat et recruteur ne font qu'exprimer un intérêt,
-/// c'est toujours l'admin qui fait avancer vers `mise_en_relation`.
+/// Statut de mise en relation (diplômés). Chaîne en vigueur depuis la
+/// décision produit 2026-10-08 : `suggeree` (file de validation admin) →
+/// `proposee_recruteur` → `interet_recruteur` → `mise_en_relation`, ou
+/// `ecartee`. C'est toujours l'admin qui fait avancer vers
+/// `mise_en_relation`.
 enum MatchSuggestionStatus {
+  /// Créée par le moteur ou par l'admin, en attente de validation admin.
+  suggeree
+  /// HÉRITÉ (parcours « postuler offre par offre », avant 2026-10-08) :
+  /// plus jamais produit, conservé pour que les lignes existantes restent
+  /// valides et puissent avancer.
   proposee_candidat
+  /// HÉRITÉ — voir `proposee_candidat`.
   interet_candidat
   proposee_recruteur
   interet_recruteur
@@ -333,11 +420,20 @@ enum MatchSuggestionStatus {
   ecartee
 }
 
-/// OffRec comme intermédiaire (décision produit 2026-09-02) : ni le
-/// candidat ni le recruteur ne se contactent en direct — cette table est
-/// le pendant, pour les diplômés, de TalentOpportunityProposal (non-
-/// diplômés, inchangé). Créée uniquement par un admin, jamais par un
-/// candidat ou un recruteur (cohérent avec §7.3.14 côté non-diplômés).
+/// Qui a créé la suggestion : le moteur de matching (`lib/matching.ts`) ou
+/// un admin depuis le vivier de candidats.
+enum MatchSuggestionOrigin {
+  systeme
+  admin
+}
+
+/// OffRec comme intermédiaire (décisions produit 2026-09-02 et 2026-10-08) :
+/// ni le candidat ni le recruteur ne se contactent en direct — cette table
+/// est le pendant, pour les diplômés, de TalentOpportunityProposal (non-
+/// diplômés, inchangé). Créée par le moteur de matching ou par un admin,
+/// jamais par un candidat ou un recruteur ; le candidat donne un
+/// consentement global (`CandidateProfile.matchingConsentAt`) au lieu de
+/// postuler offre par offre.
 model MatchSuggestion {
   id            String                @id @default(uuid())
   opportunityId String
@@ -346,7 +442,14 @@ model MatchSuggestion {
   candidate     User                  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   score         Int
   reasons       String[]
-  status        MatchSuggestionStatus @default(proposee_candidat)
+  status        MatchSuggestionStatus @default(suggeree)
+  /// Les lignes antérieures à 2026-10-08 ont toutes été créées par un admin.
+  origin        MatchSuggestionOrigin @default(admin)
+  /// Rang du candidat dans la présélection ATS de l'offre au moment où un
+  /// admin l'a transmis au recruteur depuis cette présélection
+  /// (`lib/preselection.ts`). `null` pour un envoi direct du moteur ou une
+  /// transmission unitaire. Instantané : jamais recalculé ensuite.
+  preselectionRank Int?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 

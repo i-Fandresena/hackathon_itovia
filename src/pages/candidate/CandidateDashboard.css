@@ -1,0 +1,204 @@
+/* Tableau de bord candidat : préparation du profil + suivi des dossiers. */
+.dash-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dash-block-head h2 {
+  font-size: 1.1rem;
+}
+
+.dash-readiness {
+  margin-bottom: 1rem;
+}
+
+.dash-readiness-tag {
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dash-readiness-tag.is-ready {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.dash-readiness-tag.is-missing {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.dash-readiness-summary {
+  margin: 0.5rem 0 1rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+}
+
+.dash-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.dash-step {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.7rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.dash-step-icon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.dash-step-ok .dash-step-icon {
+  color: var(--color-success);
+}
+
+.dash-step-pending .dash-step-icon {
+  color: var(--color-ink-muted);
+}
+
+.dash-step-missing .dash-step-icon {
+  color: var(--color-warning);
+}
+
+.dash-step-body {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.dash-step-body strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.dash-step-body p {
+  margin-top: 0.15rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.dash-step-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dash-stats {
+  margin-bottom: 1.75rem;
+}
+
+.dash-dossiers-head {
+  margin-bottom: 1rem;
+}
+
+.dash-feedback {
+  margin-bottom: 1rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dash-dossiers {
+  display: grid;
+  gap: 1rem;
+}
+
+.dossier-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.dossier-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.dossier-title {
+  min-width: 0;
+}
+
+.dossier-title h3 {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  line-height: 1.3;
+  margin-bottom: 0.25rem;
+  overflow-wrap: anywhere;
+}
+
+.dossier-title h3 a {
+  color: var(--color-ink);
+}
+
+.dossier-title h3 a:hover {
+  color: var(--color-accent);
+}
+
+.dossier-company,
+.dossier-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+}
+
+.dossier-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+
+.dossier-status-text {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--color-ink-secondary);
+}
+
+.dossier-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .dash-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1100px) {
+  .dash-dossiers {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+  }
+}

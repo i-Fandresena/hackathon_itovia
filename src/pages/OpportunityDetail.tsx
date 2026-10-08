@@ -1,142 +1,183 @@
-import { ArrowLeft, Bookmark, MapPin, Sparkles } from 'lucide-react'
+import { ArrowLeft, Building2, FolderX, MapPin, Send } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { WithdrawDossierButton } from '../components/candidate/WithdrawDossierButton'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { EmptyState } from '../components/ui/EmptyState'
 import { MatchScore } from '../components/ui/MatchScore'
+import { ReportButton } from '../components/ui/ReportButton'
 import {
   EXPERIENCE_LABELS,
   OPPORTUNITY_TYPE_LABELS,
   SECTOR_DETAIL_LABELS,
 } from '../data/constants'
 import { useApp } from '../context/AppContext'
-import { ReportButton } from '../components/ui/ReportButton'
+import { toDisplayOpportunity } from '../lib/api'
+import { canWithdrawFromDossier, dossierStatusInfo } from '../lib/candidateDossier'
 import { formatDate } from '../lib/format'
+import './OpportunityDetail.css'
 
 interface OpportunityDetailProps {
-  basePath: string
   backLabel: string
   backTo: string
-  canApply?: boolean
-  canBookmark?: boolean
-  /** Espace candidat : jamais l'identité de l'entreprise avant une mise en
-   *  relation confirmée par OffRec (décision produit 2026-09-02). */
-  hideCompany?: boolean
+  /**
+   * Espace candidat (`/candidat/offres/:id`) : la page affiche un DOSSIER,
+   * lu exclusivement dans `mySuggestions` — jamais dans la liste publique
+   * `opportunities`, qui porte le nom de l'entreprise. Ce nom n'apparaît
+   * qu'une fois la mise en relation confirmée par OffRec.
+   */
+  candidate?: boolean
 }
 
-export function OpportunityDetail({
-  basePath: _basePath,
-  backLabel,
-  backTo,
-  canApply,
-  canBookmark,
-  hideCompany,
-}: OpportunityDetailProps) {
+export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityDetailProps) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const {
-    opportunities,
-    currentUser,
-    isBookmarked,
-    toggleBookmark,
-    getSuggestionForOpportunity,
-    expressInterest,
-    declineSuggestion,
-  } = useApp()
-  const [feedback, setFeedback] = useState('')
+  const { opportunities, getSuggestionForOpportunity, expressInterest } = useApp()
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null)
+  const [withdrawnTitle, setWithdrawnTitle] = useState('')
 
-  const opportunity = opportunities.find((o) => o.id === id)
-  const suggestion = opportunity ? getSuggestionForOpportunity(opportunity.id) : undefined
-  const match = suggestion ? { score: suggestion.score, reasons: suggestion.reasons } : null
+  const suggestion = candidate && id ? getSuggestionForOpportunity(id) : undefined
+  const opportunity = candidate
+    ? suggestion && toDisplayOpportunity(suggestion.opportunity)
+    : opportunities.find((o) => o.id === id)
+
+  const backLink = (
+    <button type="button" className="back-link" onClick={() => navigate(backTo)}>
+      <ArrowLeft size={18} />
+      {backLabel}
+    </button>
+  )
 
   if (!opportunity) {
     return (
       <div className="page">
-        <div className="container">
-          <p>Offre introuvable.</p>
-          <Link to={backTo}>{backLabel}</Link>
+        <div className="container" style={{ maxWidth: 720 }}>
+          {backLink}
+          <div className="detail-missing">
+            {candidate ? (
+              <EmptyState
+                icon={withdrawnTitle ? Send : FolderX}
+                title={withdrawnTitle ? 'Vous vous êtes retiré·e de ce dossier' : 'Dossier introuvable'}
+                description={
+                  withdrawnTitle
+                    ? `Le dossier « ${withdrawnTitle} » est clos. Votre profil reste proposé pour les autres offres qui vous correspondent.`
+                    : 'Ce dossier n’est plus en cours : il a pu être clos par OffRec, par l’entreprise ou par vous-même.'
+                }
+                actionLabel="Voir mes dossiers"
+                onAction={() => navigate(backTo)}
+              />
+            ) : (
+              <p>Offre introuvable.</p>
+            )}
+          </div>
         </div>
       </div>
     )
   }
 
-  const handleApply = async () => {
+  const status = suggestion ? dossierStatusInfo(suggestion.status) : null
+  // Le nom de l'entreprise n'est affiché au candidat qu'à la mise en relation.
+  const showCompany = !candidate || suggestion?.status === 'mise_en_relation'
+
+  // Ligne héritée de l'ancien parcours : seul cas où le candidat signale
+  // encore son intérêt (le serveur refuse tous les autres statuts).
+  const handleLegacyInterest = async () => {
     if (!suggestion) return
     const result = await expressInterest(suggestion.id)
-    setFeedback(result.ok ? 'Votre candidature a été transmise à OffRec.' : result.error ?? 'Erreur')
-  }
-
-  const handleCancel = async () => {
-    if (!suggestion) return
-    const result = await declineSuggestion(suggestion.id)
-    setFeedback(result.ok ? 'Votre candidature a été annulée.' : result.error ?? 'Erreur')
+    setFeedback(
+      result.ok
+        ? { ok: true, text: 'Votre intérêt a été transmis à OffRec.' }
+        : { ok: false, text: result.error ?? 'Envoi impossible.' },
+    )
   }
 
   return (
     <div className="page">
       <div className="container" style={{ maxWidth: 720 }}>
-        <button type="button" className="back-link" onClick={() => navigate(backTo)}>
-          <ArrowLeft size={18} />
-          {backLabel}
-        </button>
+        {backLink}
 
-        <header className="page-header" style={{ marginTop: '1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-            <div>
-              <h1>{opportunity.title}</h1>
-              {!hideCompany && <p>{opportunity.companyName}</p>}
-            </div>
-            {canBookmark && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => toggleBookmark(opportunity.id)}
-              >
-                <Bookmark
-                  size={16}
-                  fill={isBookmarked(opportunity.id) ? 'currentColor' : 'none'}
-                />
-                {isBookmarked(opportunity.id) ? 'Enregistré' : 'Favoris'}
-              </Button>
-            )}
-          </div>
+        <header className="page-header detail-header">
+          <h1>{opportunity.title}</h1>
+          {showCompany && opportunity.companyName && (
+            <p className="detail-company">
+              {candidate && <Building2 size={16} aria-hidden />}
+              {opportunity.companyName}
+            </p>
+          )}
+          {!showCompany && <p>Le nom de l’entreprise vous est communiqué à la mise en relation.</p>}
         </header>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '1rem' }}>
+        <div className="detail-badges">
           <Badge variant="primary">{opportunity.category}</Badge>
-          <Badge variant="muted">
-            {OPPORTUNITY_TYPE_LABELS[opportunity.opportunityType]}
-          </Badge>
-          <Badge variant="muted">
-            {EXPERIENCE_LABELS[opportunity.level]}
-          </Badge>
+          <Badge variant="muted">{OPPORTUNITY_TYPE_LABELS[opportunity.opportunityType]}</Badge>
+          <Badge variant="muted">{EXPERIENCE_LABELS[opportunity.level]}</Badge>
         </div>
 
-        <p className="opp-location" style={{ marginBottom: '1rem' }}>
+        <p className="opp-location detail-location">
           <MapPin size={16} />
-          {opportunity.city}, {opportunity.province} · Date limite :{' '}
-          {formatDate(opportunity.deadline)}
+          {opportunity.city}, {opportunity.province} · Date limite : {formatDate(opportunity.deadline)}
         </p>
 
-        <div style={{ marginBottom: '1rem' }}>
+        <div className="detail-report">
           <ReportButton targetType="opportunity" targetId={opportunity.id} />
         </div>
 
-        {match && canApply && (
-          <div style={{ marginBottom: '1.25rem' }}>
-            <p className="detail-rec-label">Recommandé pour votre profil</p>
-            <MatchScore match={match} />
+        {suggestion && status && (
+          <Card className="detail-dossier">
+            <div className="detail-dossier-head">
+              <h2>État de votre dossier</h2>
+              <Badge variant={status.variant}>{status.label}</Badge>
+            </div>
+            <p className="detail-dossier-text">{status.description}</p>
+
+            <div className="detail-dossier-actions">
+              {suggestion.status === 'proposee_candidat' && (
+                <Button size="sm" onClick={handleLegacyInterest}>
+                  Cette offre m’intéresse
+                </Button>
+              )}
+              {canWithdrawFromDossier(suggestion.status) && (
+                <WithdrawDossierButton
+                  suggestionId={suggestion.id}
+                  opportunityTitle={opportunity.title}
+                  onWithdrawn={setWithdrawnTitle}
+                />
+              )}
+            </div>
+            {suggestion.status === 'proposee_candidat' && (
+              <p className="detail-dossier-note">
+                Si vous signalez votre intérêt, OffRec étudie la transmission de votre profil à
+                l’entreprise — pas de message à rédiger.
+              </p>
+            )}
+            {suggestion.status === 'mise_en_relation' && (
+              <p className="detail-dossier-note">
+                Une fois la mise en relation confirmée, vous ne pouvez plus vous retirer de ce
+                dossier depuis la plateforme.
+              </p>
+            )}
+            {feedback && (
+              <p className={`detail-feedback ${feedback.ok ? 'is-ok' : 'is-error'}`} role="status">
+                {feedback.text}
+              </p>
+            )}
+          </Card>
+        )}
+
+        {suggestion && (
+          <div className="detail-match">
+            <p className="detail-rec-label">Pourquoi votre profil a été proposé</p>
+            <MatchScore match={{ score: suggestion.score, reasons: suggestion.reasons }} />
           </div>
         )}
 
-        <Card style={{ marginBottom: '1.25rem' }}>
-          <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Description</h2>
-          <p style={{ lineHeight: 1.6, color: 'var(--color-text-muted)' }}>
-            {opportunity.description}
-          </p>
-          <h3 style={{ fontSize: '1rem', margin: '1rem 0 0.5rem' }}>Compétences recherchées</h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+        <Card className="detail-description">
+          <h2>Description</h2>
+          <p className="detail-description-text">{opportunity.description}</p>
+          <h3>Compétences recherchées</h3>
+          <div className="detail-badges">
             {opportunity.requiredSkills.map((s) => (
               <Badge key={s} variant="primary">
                 {s}
@@ -145,16 +186,14 @@ export function OpportunityDetail({
           </div>
           {opportunity.sectorDetails && Object.keys(opportunity.sectorDetails).length > 0 && (
             <>
-              <h3 style={{ fontSize: '1rem', margin: '1rem 0 0.5rem' }}>Détails</h3>
-              <dl style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <h3>Détails</h3>
+              <dl className="detail-facts">
                 {Object.entries(opportunity.sectorDetails).map(([key, value]) => {
                   if (value === '' || value === false) return null
                   return (
-                    <div key={key} style={{ display: 'flex', gap: '0.5rem', fontSize: '0.9rem' }}>
-                      <dt style={{ color: 'var(--color-ink-muted)', minWidth: 160 }}>
-                        {SECTOR_DETAIL_LABELS[key] ?? key}
-                      </dt>
-                      <dd style={{ margin: 0 }}>{value === true ? 'Oui' : value}</dd>
+                    <div key={key}>
+                      <dt>{SECTOR_DETAIL_LABELS[key] ?? key}</dt>
+                      <dd>{value === true ? 'Oui' : value}</dd>
                     </div>
                   )
                 })}
@@ -163,61 +202,12 @@ export function OpportunityDetail({
           )}
         </Card>
 
-        {canApply && currentUser?.role === 'candidate' && suggestion && (
-          <Card>
-            <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Sparkles size={18} />
-              {suggestion.status === 'proposee_candidat' ? 'Postuler à cette offre' : 'Votre candidature'}
-            </h2>
-            {suggestion.status === 'proposee_candidat' ? (
-              <>
-                <p style={{ color: 'var(--color-ink-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
-                  OffRec s’occupe de la mise en relation si l’entreprise est
-                  intéressée elle aussi — pas de message à rédiger.
-                </p>
-                <Button onClick={handleApply}>Postuler</Button>
-              </>
-            ) : (
-              <>
-                <p style={{ color: 'var(--color-accent)', fontWeight: 600, marginBottom: suggestion.status !== 'mise_en_relation' && suggestion.status !== 'ecartee' ? '0.75rem' : 0 }}>
-                  {suggestion.status === 'interet_candidat' && 'Votre candidature a été transmise à OffRec.'}
-                  {suggestion.status === 'proposee_recruteur' && 'OffRec a transmis votre candidature à l’entreprise.'}
-                  {suggestion.status === 'interet_recruteur' && "L'entreprise est intéressée — OffRec finalise la mise en relation."}
-                  {suggestion.status === 'mise_en_relation' && 'Vous êtes mis en relation — OffRec vous recontacte avec les prochaines étapes.'}
-                  {suggestion.status === 'ecartee' && 'Cette candidature a été annulée.'}
-                </p>
-                {suggestion.status !== 'mise_en_relation' && suggestion.status !== 'ecartee' && (
-                  <Button variant="outline" onClick={handleCancel}>
-                    Annuler ma candidature
-                  </Button>
-                )}
-              </>
-            )}
-            {feedback && (
-              <p style={{ marginTop: '0.75rem', fontSize: '0.9rem' }}>{feedback}</p>
-            )}
-          </Card>
-        )}
-
-        {!canApply && (
+        {!candidate && (
           <Link to="/inscription">
             <Button>Créer un compte pour être recommandé·e</Button>
           </Link>
         )}
       </div>
-      <style>{`
-        .back-link {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.35rem;
-          background: none;
-          border: none;
-          color: var(--color-accent-hover);
-          font-weight: 600;
-          cursor: pointer;
-          padding: 0;
-        }
-      `}</style>
     </div>
   )
 }

@@ -10,8 +10,6 @@ import { TalentAccountSignup } from './pages/auth/TalentAccountSignup'
 import { TalentSpace } from './pages/talent/TalentSpace'
 import { CandidateDashboard } from './pages/candidate/CandidateDashboard'
 import { CandidateProfile } from './pages/candidate/CandidateProfile'
-import { CandidateOpportunities } from './pages/candidate/CandidateOpportunities'
-import { CandidateSaved } from './pages/candidate/CandidateSaved'
 import { CandidateNotifications } from './pages/candidate/CandidateNotifications'
 import { OpportunityDetail } from './pages/OpportunityDetail'
 import { Directory } from './pages/directory/Directory'
@@ -31,11 +29,13 @@ import { Messages } from './pages/messages/Messages'
 import { RecruiterBilling } from './pages/recruiter/RecruiterBilling'
 import { RecruiterShortlist } from './pages/recruiter/RecruiterShortlist'
 import { RecruiterPlacements } from './pages/recruiter/RecruiterPlacements'
+import { RecruiterNotifications } from './pages/recruiter/RecruiterNotifications'
 import { AgentDashboard } from './pages/agent/AgentDashboard'
 import { TalentForm } from './pages/agent/TalentForm'
 import { TalentDetail } from './pages/agent/TalentDetail'
 import { Leads } from './pages/agent/Leads'
 import { Sourcing } from './pages/agent/Sourcing'
+import { CvVerification } from './pages/verification/CvVerification'
 
 export default function App() {
   return (
@@ -62,12 +62,7 @@ export default function App() {
             <Route
               path="offres/:id"
               element={
-                <OpportunityDetail
-                  basePath="/offres"
-                  backLabel="Retour à l’accueil"
-                  backTo="/"
-                  canBookmark={false}
-                />
+                <OpportunityDetail backLabel="Retour à l’accueil" backTo="/" />
               }
             />
 
@@ -100,34 +95,15 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="candidat/offres"
-              element={
-                <ProtectedRoute role="candidate">
-                  <CandidateOpportunities />
-                </ProtectedRoute>
-              }
-            />
+            {/* Anciennes pages du parcours « postuler offre par offre » : le
+                candidat suit désormais ses dossiers depuis le tableau de bord. */}
+            <Route path="candidat/offres" element={<Navigate to="/candidat" replace />} />
+            <Route path="candidat/favoris" element={<Navigate to="/candidat" replace />} />
             <Route
               path="candidat/offres/:id"
               element={
                 <ProtectedRoute role="candidate">
-                  <OpportunityDetail
-                    basePath="/candidat/offres"
-                    backLabel="Retour aux offres"
-                    backTo="/candidat/offres"
-                    canApply
-                    canBookmark
-                    hideCompany
-                  />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="candidat/favoris"
-              element={
-                <ProtectedRoute role="candidate">
-                  <CandidateSaved />
+                  <OpportunityDetail backLabel="Retour au tableau de bord" backTo="/candidat" candidate />
                 </ProtectedRoute>
               }
             />
@@ -197,6 +173,14 @@ export default function App() {
               }
             />
             <Route
+              path="recruteur/notifications"
+              element={
+                <ProtectedRoute role="recruiter">
+                  <RecruiterNotifications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="recruteur/placements"
               element={
                 <ProtectedRoute role="recruiter">
@@ -260,6 +244,17 @@ export default function App() {
               element={
                 <ProtectedRoute role="admin">
                   <AdminPlacements />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Vérification humaine des CV : ouverte à l'admin et aux rôles
+                qu'il autorise — garde par capacité, pas par rôle. */}
+            <Route
+              path="verification-cv"
+              element={
+                <ProtectedRoute allow={(user) => user.canVerifyCv === true}>
+                  <CvVerification />
                 </ProtectedRoute>
               }
             />

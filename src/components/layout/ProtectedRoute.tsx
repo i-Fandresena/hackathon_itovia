@@ -2,14 +2,18 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import { Loading } from '../ui/Loading'
 import { homePathForRole } from '../../lib/roles'
-import type { UserRole } from '../../types'
+import type { User, UserRole } from '../../types'
 
 interface ProtectedRouteProps {
   role?: UserRole | UserRole[]
+  /** Garde par capacité plutôt que par rôle (ex. `canVerifyCv`, que l'admin
+   *  peut accorder à plusieurs rôles). Cumulée avec `role` si les deux sont
+   *  fournis. Confort d'interface uniquement : le serveur revalide. */
+  allow?: (user: User) => boolean
   children: React.ReactNode
 }
 
-export function ProtectedRoute({ role, children }: ProtectedRouteProps) {
+export function ProtectedRoute({ role, allow, children }: ProtectedRouteProps) {
   const { currentUser, hydrated } = useApp()
   const location = useLocation()
 
@@ -28,7 +32,7 @@ export function ProtectedRoute({ role, children }: ProtectedRouteProps) {
   }
 
   const allowedRoles = Array.isArray(role) ? role : role ? [role] : null
-  if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
+  if ((allowedRoles && !allowedRoles.includes(currentUser.role)) || (allow && !allow(currentUser))) {
     return <Navigate to={homePathForRole(currentUser.role)} replace />
   }
 

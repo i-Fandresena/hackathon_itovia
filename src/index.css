@@ -7,9 +7,8 @@
  *            OpportunityCard, Footer, MatchScore/badges)
  *   768px  — tablette (Auth, Messages, OpportunityFilters, Landing)
  *   900px  — bascule nav desktop (Header.css)
- *   1024px — sidebar fixe au lieu du tiroir mobile (AppShell.css)
+ *   1024px — carte latérale fixe au lieu du tiroir mobile (AppShell.css)
  *   1100px — cartes en disposition large (ProviderCard, OpportunityCard)
- *   1320px — rail droit visible (AppShell.css)
  */
 :root {
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -23,9 +22,11 @@
   --color-ink-muted: #6b7280;
   --color-ink-faint: #9ca3af;
 
-  --color-bg: #f4f5f7;
+  /* Fond de page : gris très clair tiré vers le bleu de l'accent, pour que
+     les cartes blanches « flottent » dessus. */
+  --color-bg: #f3f5fa;
   --color-bg-elevated: #ffffff;
-  --color-bg-subtle: #ebedf0;
+  --color-bg-subtle: #e9ecf3;
 
   --color-accent: #1a56ff;
   --color-accent-hover: #1244d4;
@@ -47,7 +48,7 @@
   /* Fonds translucides avec `backdrop-filter` (barres de tête sticky/pastille
      flottante) : une couleur `rgba` fixe ne peut pas lire `--color-bg`, donc
      ce sont des jetons à part, redéfinis dans le bloc thème sombre. */
-  --color-bg-translucent: rgba(244, 245, 247, 0.85);
+  --color-bg-translucent: rgba(243, 245, 250, 0.85);
   --color-surface-translucent: rgba(255, 255, 255, 0.94);
 
   --color-border: rgba(12, 14, 18, 0.08);
@@ -78,6 +79,9 @@
   --shadow-md: 0 8px 24px rgba(12, 14, 18, 0.08);
   --shadow-lg: 0 20px 48px rgba(12, 14, 18, 0.1);
   --shadow-glow: 0 0 0 1px var(--color-border), 0 12px 40px rgba(26, 86, 255, 0.12);
+  /* Ombre douce et diffuse des cartes posées sur le fond de page (Card,
+     carte latérale, états vides). */
+  --shadow-card: 0 1px 2px rgba(16, 24, 64, 0.03), 0 10px 30px rgba(16, 24, 64, 0.06);
 
   --header-h: 72px;
   --max-w: 1140px;
@@ -130,6 +134,7 @@
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
   --shadow-glow: 0 0 0 1px var(--color-border), 0 12px 40px rgba(91, 140, 255, 0.2);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.32);
 
   --color-solid: #f2f3f5;
   --color-solid-hover: #dde0e5;
@@ -244,13 +249,14 @@ textarea {
 }
 
 .page-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.75rem;
 }
 
 .page-header h1 {
-  font-size: clamp(1.5rem, 3vw, 1.875rem);
+  font-size: clamp(1.625rem, 3vw, 2rem);
   margin-bottom: 0.5rem;
   font-weight: 700;
+  letter-spacing: -0.035em;
 }
 
 .page-header p {
@@ -343,11 +349,6 @@ textarea {
   .container {
     padding: 0 2rem;
   }
-}
-
-.dash-icon {
-  color: var(--color-accent);
-  flex-shrink: 0;
 }
 
 .detail-rec-label {

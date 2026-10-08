@@ -2,7 +2,8 @@ import bcrypt from 'bcryptjs'
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
-import { createAgentSchema, moderationResolveSchema } from '../lib/validation.js'
+import { createAgentSchema, cvVerifierRolesSchema, moderationResolveSchema } from '../lib/validation.js'
+import { GRANTABLE_CV_VERIFIER_ROLES, listCvVerifierRoles } from '../lib/cv-access.js'
 
 const ACTION_TO_STATUS = {
   warning: 'warned',
@@ -44,7 +45,8 @@ router.get('/stats', async (_req, res, next) => {
       // réelles (intérêt/déclin) dans la liste — comptées à part, affichées
       // de façon minimale (voir `recentLoginCount`).
       prisma.auditLog.findMany({
-        where: { action: { notIn: ['login', 'logout'] } },
+        // Idem pour les journaux techniques du matching et des notifications.
+        where: { action: { notIn: ['login', 'logout', 'matching_run', 'notification_dispatch'] } },
         orderBy: { createdAt: 'desc' },
         take: 15,
         include: { user: { select: { email: true, role: true } } },
@@ -233,6 +235,57 @@ router.post('/reports/:id/resolve', async (req, res, next) => {
     })
 
     res.status(204).end()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Rôles habilités à vérifier les CV candidats en plus de l'admin. Seuls les
+ * rôles de `GRANTABLE_CV_VERIFIER_ROLES` peuvent l'être (jamais candidat,
+ * talent ni recruteur — voir lib/cv-access.ts).
+ */
+router.get('/cv-verifier-roles', async (_req, res, next) => {
+  try {
+    res.json({ roles: await listCvVerifierRoles(), grantable: GRANTABLE_CV_VERIFIER_ROLES })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.put('/cv-verifier-roles', async (req, res, next) => {
+  try {
+    const body = cvVerifierRolesSchema.parse(req.body)
+    const roles = Array.from(new Set(body.roles))
+    const refused = roles.filter((role) => !GRANTABLE_CV_VERIFIER_ROLES.includes(role))
+    if (refused.length > 0) {
+      res.status(400).json({
+        error: `Ce rôle ne peut pas être habilité à vérifier les CV : ${refused.join(', ')}.`,
+      })
+      return
+    }
+
+    const previous = await listCvVerifierRoles()
+    await prisma.$transaction([
+      prisma.cvVerifierRole.deleteMany({ where: { role: { notIn: roles } } }),
+      // `upsert` sans mise à jour : un rôle déjà habilité garde sa date et son auteur d'origine.
+      ...roles.map((role) =>
+        prisma.cvVerifierRole.upsert({
+          where: { role },
+          create: { role, grantedById: req.session!.sub },
+          update: {},
+        }),
+      ),
+      prisma.auditLog.create({
+        data: {
+          userId: req.session!.sub,
+          action: 'admin:cv_verifier_roles',
+          metadata: { previous, roles },
+        },
+      }),
+    ])
+
+    res.json({ roles: await listCvVerifierRoles(), grantable: GRANTABLE_CV_VERIFIER_ROLES })
   } catch (err) {
     next(err)
   }

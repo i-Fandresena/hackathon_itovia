@@ -1,0 +1,269 @@
+.cvv-muted {
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+  line-height: 1.5;
+}
+
+.cvv-error {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-danger);
+}
+
+/* --- File ------------------------------------------------------------ */
+
+.cvv-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.cvv-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.cvv-queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.cvv-queue-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cvv-queue-side {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  color: var(--color-ink-faint);
+}
+
+/* --- Fiche détaillée -------------------------------------------------- */
+
+.cvv-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.cvv-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.cvv-name {
+  font-size: 1.15rem;
+  margin-bottom: 0.2rem;
+  overflow-wrap: anywhere;
+}
+
+.cvv-section-title {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.cvv-note {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-ink-secondary);
+  margin-top: 0.4rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cvv-pdf-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Comparaison profil déclaré / CV : deux colonnes alignées ligne à ligne,
+   empilées sur mobile (chaque cellule porte alors son propre libellé). */
+.cvv-compare {
+  display: flex;
+  flex-direction: column;
+}
+
+.cvv-compare-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.cvv-compare-heads {
+  display: none;
+}
+
+.cvv-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.cvv-cell-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.cvv-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cvv-items li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.cvv-items li span {
+  font-size: 0.8rem;
+  color: var(--color-ink-muted);
+}
+
+.cvv-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+@media (min-width: 720px) {
+  .cvv-compare-row {
+    grid-template-columns: 1fr 1.4fr;
+    gap: 1.5rem;
+  }
+
+  .cvv-compare-heads {
+    display: grid;
+    border-top: none;
+    padding: 0 0 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-ink);
+  }
+}
+
+/* --- Décision --------------------------------------------------------- */
+
+.cvv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cvv-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.cvv-confirm-verifie {
+  background: var(--color-success-bg);
+}
+
+.cvv-confirm-rejete {
+  background: var(--color-danger-bg);
+}
+
+.cvv-confirm-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.cvv-note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* --- Historique ------------------------------------------------------- */
+
+.cvv-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cvv-history li {
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.cvv-history li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.cvv-history-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* --- Réglage admin ---------------------------------------------------- */
+
+.cvv-settings {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cvv-settings-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1.05rem;
+}
+
+.cvv-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cvv-role {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
