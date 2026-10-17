@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, Briefcase, Check, Hammer, Search } from 'lucide-react'
+import { ArrowRight, Briefcase, Building2, Check, Hammer, Search, ShieldCheck } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import dashboardPreview from '../assets/dashboard-preview.png'
 import { FadeUp, Stagger } from '../components/motion/Motion'
@@ -238,6 +238,54 @@ export function Landing() {
               </FadeUp>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Vitrine des talents du secteur informel : appel sobre vers /talents. */}
+      <section className="section landing-talents">
+        <div className="container">
+          <FadeUp>
+            <div className="landing-talents-band">
+              <span className="landing-talents-icon" aria-hidden>
+                <ShieldCheck size={26} />
+              </span>
+              <div className="landing-talents-copy">
+                <p className="eyebrow">Talents recommandés</p>
+                <h2 className="landing-talents-title">Des savoir-faire sans diplôme, vérifiés sur le terrain</h2>
+                <p className="landing-talents-text">
+                  Couturières, électriciens, cuisinières… recommandés par leurs clients, rencontrés par un agent
+                  OffRec. Leurs coordonnées restent privées : OffRec organise le contact.
+                </p>
+              </div>
+              <Link to="/annuaire/talents" className="landing-talents-link">
+                <Button variant="outline">
+                  Découvrir les talents
+                  <ArrowRight size={16} />
+                </Button>
+              </Link>
+            </div>
+          </FadeUp>
+          <FadeUp>
+            <div className="landing-talents-band landing-companies-band">
+              <span className="landing-talents-icon" aria-hidden>
+                <Building2 size={26} />
+              </span>
+              <div className="landing-talents-copy">
+                <p className="eyebrow">Entreprises recommandées</p>
+                <h2 className="landing-talents-title">Choisir son employeur grâce à ceux qui y ont travaillé</h2>
+                <p className="landing-talents-text">
+                  Paie à l’heure, contrat respecté… recommandées par d’anciens salariés, stagiaires et prestataires.
+                  Leurs noms ne sont jamais affichés.
+                </p>
+              </div>
+              <Link to="/annuaire/entreprises" className="landing-talents-link">
+                <Button variant="outline">
+                  Voir les entreprises
+                  <ArrowRight size={16} />
+                </Button>
+              </Link>
+            </div>
+          </FadeUp>
         </div>
       </section>
 

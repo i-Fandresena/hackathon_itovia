@@ -24,3 +24,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export function homePathForRole(role: UserRole): string {
   return HOME_PATH[role]
 }
+
+/** Rôles qui peuvent recommander un talent (garde serveur identique dans
+ *  `endorsements.routes.ts` : jamais l'agent ni l'admin). Ils ont aussi
+ *  l'onglet « Mes recommandations » de l'Annuaire. */
+export const TALENT_RECOMMENDER_ROLES: UserRole[] = ['candidate', 'particulier', 'recruiter', 'talent']

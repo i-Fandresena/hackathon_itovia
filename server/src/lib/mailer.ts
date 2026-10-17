@@ -25,6 +25,26 @@ export interface SendResult {
 const NOT_CONFIGURED_REASON = 'Service email non configuré (RESEND_API_KEY manquante).'
 const SEND_FAILED_REASON = 'Envoi impossible pour le moment.'
 
+/*
+ * Garde-fou d'envoi. Aucun email ne part vers un domaine réservé `.invalid`
+ * (RFC 2606, utilisé pour les comptes de test), ni du tout quand
+ * `EMAIL_SENDING_DISABLED=true`. Le résultat est le même « non envoyé » que
+ * sans clé Resend : la raison contient volontairement « RESEND_API_KEY » pour
+ * que `notify.ts` journalise l'envoi en `skipped` (canal coupé) et non en
+ * `failed` (panne).
+ */
+const BLOCKED_TEST_DOMAIN_REASON =
+  'Email non envoyé : domaine de test .invalid (envoi bloqué, traité comme sans RESEND_API_KEY).'
+const SENDING_DISABLED_REASON =
+  'Email non envoyé : EMAIL_SENDING_DISABLED=true (envoi coupé, traité comme sans RESEND_API_KEY).'
+
+function sendingBlockedReason(to: string): string | null {
+  if (process.env.EMAIL_SENDING_DISABLED?.trim().toLowerCase() === 'true') return SENDING_DISABLED_REASON
+  const domain = to.trim().toLowerCase().split('@').pop() ?? ''
+  if (domain === 'invalid' || domain.endsWith('.invalid')) return BLOCKED_TEST_DOMAIN_REASON
+  return null
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -166,6 +186,11 @@ function buildText(code: string, confirmUrl: string): string {
 }
 
 export async function sendVerificationEmail(email: string, code: string, confirmToken: string): Promise<SendResult> {
+  const blocked = sendingBlockedReason(email)
+  if (blocked) {
+    console.warn(`[mailer] ${blocked}`)
+    return { ok: false, reason: blocked }
+  }
   if (!client) {
     // Le code ne doit jamais apparaître en clair dans des logs de
     // production — seulement utile pour tester le flux en local/dev tant
@@ -215,6 +240,11 @@ export interface TransactionalEmail {
  * jamais écrite dans les logs.
  */
 export async function sendTransactionalEmail(email: TransactionalEmail): Promise<SendResult> {
+  const blocked = sendingBlockedReason(email.to)
+  if (blocked) {
+    console.warn(`[mailer] ${blocked} (« ${email.subject} »)`)
+    return { ok: false, reason: blocked }
+  }
   if (!client) {
     console.warn(`[mailer] RESEND_API_KEY non configurée — email « ${email.subject} » non envoyé.`)
     return { ok: false, reason: NOT_CONFIGURED_REASON }

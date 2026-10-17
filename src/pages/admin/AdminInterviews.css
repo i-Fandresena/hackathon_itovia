@@ -1,0 +1,46 @@
+/* Onglet « Entretiens » de l'admin (/admin/entretiens). Les briques
+   communes (filtres, compteurs, groupes, lignes) sont dans
+   components/interview/InterviewList.css (préfixe `ivl-`). */
+
+.aint-groups[aria-busy='true'] {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.aint-calendar-error {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.aint-more-error {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.aint-modal-offer {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.aint-modal-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-accent-hover);
+  text-decoration: none;
+}
+
+.aint-modal-link:hover {
+  text-decoration: underline;
+}
+
+.aint-modal-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}

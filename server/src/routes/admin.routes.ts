@@ -2,8 +2,13 @@ import bcrypt from 'bcryptjs'
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
-import { createAgentSchema, cvVerifierRolesSchema, moderationResolveSchema } from '../lib/validation.js'
+import { adminPublicVisibilitySchema, createAgentSchema, cvVerifierRolesSchema, moderationResolveSchema } from '../lib/validation.js'
+import { PUBLIC_TALENT_WHERE } from '../lib/public-talents.js'
+import { clip, notifyUser } from '../lib/notify.js'
 import { GRANTABLE_CV_VERIFIER_ROLES, listCvVerifierRoles } from '../lib/cv-access.js'
+import { loadSignalTrust, loadTalentTrust, verificationSummary } from '../lib/talent-trust.js'
+import { purgeExpiredSignalsLazily } from '../lib/talent-signals.js'
+import { loadAdminDashboard } from '../lib/admin-dashboard.js'
 
 const ACTION_TO_STATUS = {
   warning: 'warned',
@@ -16,7 +21,7 @@ const router = Router()
 
 router.use(requireRole('admin'))
 
-router.get('/stats', async (_req, res, next) => {
+router.get('/stats', async (req, res, next) => {
   try {
     const [
       candidateCount,
@@ -29,7 +34,6 @@ router.get('/stats', async (_req, res, next) => {
       recommendationCount,
       memberCount,
       openReportCount,
-      recentAuditLogs,
     ] = await Promise.all([
       prisma.user.count({ where: { role: 'candidate' } }),
       prisma.user.count({ where: { role: 'recruiter' } }),
@@ -41,21 +45,9 @@ router.get('/stats', async (_req, res, next) => {
       prisma.recommendation.count(),
       prisma.member.count(),
       prisma.report.count({ where: { status: 'open' } }),
-      // Connexions/déconnexions exclues : elles noieraient les décisions
-      // réelles (intérêt/déclin) dans la liste — comptées à part, affichées
-      // de façon minimale (voir `recentLoginCount`).
-      prisma.auditLog.findMany({
-        // Idem pour les journaux techniques du matching et des notifications.
-        where: { action: { notIn: ['login', 'logout', 'matching_run', 'notification_dispatch'] } },
-        orderBy: { createdAt: 'desc' },
-        take: 15,
-        include: { user: { select: { email: true, role: true } } },
-      }),
     ])
-
-    const recentLoginCount = await prisma.auditLog.count({
-      where: { action: { in: ['login', 'logout'] }, createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
-    })
+    // Le journal d'activité n'est plus sur le tableau de bord : il a sa page
+    // dédiée (`GET /admin/activity`, écran « Activité »).
 
     const [payingSubscriptions, revenueAgg] = await Promise.all([
       prisma.subscription.count({ where: { planCode: { not: 'FREE' } } }),
@@ -90,7 +82,12 @@ router.get('/stats', async (_req, res, next) => {
         : 0
     const placementCount = placementsByStage.reduce((sum, p) => sum + p._count, 0)
 
+    // Indicateurs du tableau de bord (séries 30 jours, tendances 7 jours,
+    // files à traiter…) : ajoutés à côté des champs historiques, inchangés.
+    const dashboard = await loadAdminDashboard(req.session!.sub)
+
     res.json({
+      ...dashboard,
       users: {
         candidates: candidateCount,
         recruiters: recruiterCount,
@@ -115,17 +112,6 @@ router.get('/stats', async (_req, res, next) => {
         placementsByStage: Object.fromEntries(placementsByStage.map((p) => [p.stage, p._count])),
         activePartnerCompanies: activeRecruiters.length,
       },
-      recentActivity: recentAuditLogs.map((log) => ({
-        id: log.id,
-        action: log.action,
-        userEmail: log.user?.email ?? null,
-        userRole: log.user?.role ?? null,
-        metadata: log.metadata ?? null,
-        createdAt: log.createdAt.toISOString(),
-      })),
-      // Connexions/déconnexions des 7 derniers jours — affichées en résumé,
-      // pas en liste, pour ne pas noyer les décisions réelles ci-dessus.
-      recentLoginCount,
     })
   } catch (err) {
     next(err)
@@ -166,6 +152,145 @@ router.post('/agents', async (req, res, next) => {
   }
 })
 
+/**
+ * Talents (lecture seule — seul l'agent qui suit un talent le crée et le
+ * modifie, §7.3.14) : statut, agent, accord, dernière vérification et
+ * confiance calculée côté serveur. Ni téléphone ni empreinte.
+ */
+router.get('/talents', async (_req, res, next) => {
+  try {
+    const talents = await prisma.talentProfile.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        agent: { select: { id: true, email: true, agentProfile: { select: { fullName: true } } } },
+        verifications: { orderBy: { verifiedAt: 'desc' }, take: 1 },
+        _count: { select: { verifications: true, proposals: true, placements: true } },
+      },
+    })
+    const [trust, visible, openRequests] = await Promise.all([
+      loadTalentTrust(talents.map((t) => t.id)),
+      prisma.talentProfile.findMany({ where: PUBLIC_TALENT_WHERE, select: { id: true } }),
+      prisma.talentContactRequest.groupBy({ by: ['talentId'], where: { status: { in: ['nouvelle', 'transmise'] } }, _count: { _all: true } }),
+    ])
+    const visibleIds = new Set(visible.map((v) => v.id))
+    const openByTalent = new Map(openRequests.map((g) => [g.talentId, g._count._all]))
+    res.json({
+      talents: talents.map((t) => ({
+        id: t.id,
+        fullName: t.fullName,
+        trade: t.trade,
+        sector: t.sector,
+        province: t.province,
+        city: t.city,
+        district: t.district,
+        status: t.status,
+        createdAt: t.createdAt.toISOString(),
+        consentAt: t.consentAt?.toISOString() ?? null,
+        // Accord de visibilité publique (vitrine) : donné, et réellement en
+        // ligne (toutes les conditions de `PUBLIC_TALENT_WHERE` réunies).
+        publicConsentAt: t.publicConsentAt?.toISOString() ?? null,
+        publicRef: t.publicRef,
+        publicVisible: visibleIds.has(t.id),
+        openContactRequests: openByTalent.get(t.id) ?? 0,
+        agent: { id: t.agent.id, name: t.agent.agentProfile?.fullName ?? t.agent.email },
+        verification: verificationSummary(t.verifications[0]),
+        verificationCount: t._count.verifications,
+        proposalCount: t._count.proposals,
+        placementCount: t._count.placements,
+        trust: trust.get(t.id)!.trust,
+      })),
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Modération : l'admin peut RETIRER une fiche publique (jamais la donner —
+ * l'accord se recueille auprès de la personne, par son agent). Même effet
+ * qu'un retrait par l'agent : accord et `publicRef` effacés, ancien lien mort.
+ */
+router.put('/talents/:id/public-visibility', async (req, res, next) => {
+  try {
+    adminPublicVisibilitySchema.parse(req.body)
+    const talent = await prisma.talentProfile.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, agentId: true, trade: true, city: true, publicConsentAt: true },
+    })
+    if (!talent) {
+      res.status(404).json({ error: 'Talent introuvable.' })
+      return
+    }
+    if (talent.publicConsentAt) {
+      const me = req.session!.sub
+      await prisma.$transaction([
+        prisma.talentProfile.update({ where: { id: talent.id }, data: { publicConsentAt: null, publicRef: null } }),
+        prisma.auditLog.create({ data: { userId: me, action: 'talent_consent_public_revoked', metadata: { talentId: talent.id } } }),
+      ])
+      void notifyUser({
+        userId: talent.agentId,
+        event: 'talent_public_revoked_by_admin',
+        title: 'Fiche publique retirée',
+        message: `Un administrateur a retiré la fiche publique d’un de vos talents (${clip(talent.trade, 40)}, ${clip(talent.city, 40)}). Un nouvel accord de la personne est nécessaire pour la republier.`,
+        link: `/agent/talents/${talent.id}`,
+      })
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Vue d'ensemble des signaux « talent recommandé » (toutes files, tous
+ * agents), contact compris : l'admin le voit, il n'est jamais public. Purge
+ * paresseuse des signaux expirés comme pour la file des agents.
+ */
+router.get('/talent-signals', async (req, res, next) => {
+  try {
+    await purgeExpiredSignalsLazily()
+    const status = typeof req.query.status === 'string' && req.query.status ? req.query.status : undefined
+    const [signals, grouped] = await Promise.all([
+      prisma.talentSignal.findMany({
+        where: status ? { status: status as never } : undefined,
+        orderBy: { createdAt: 'desc' },
+        take: 300,
+        include: { agent: { select: { email: true, agentProfile: { select: { fullName: true } } } } },
+      }),
+      prisma.talentSignal.groupBy({ by: ['status'], _count: { _all: true } }),
+    ])
+    const trust = await loadSignalTrust(signals.map((s) => s.id))
+    res.json({
+      counts: Object.fromEntries(grouped.map((g) => [g.status, g._count._all])),
+      signals: signals.map((s) => {
+        const t = trust.get(s.id)!
+        return {
+          id: s.id,
+          trade: s.trade,
+          sector: s.sector,
+          province: s.province,
+          city: s.city,
+          district: s.district,
+          status: s.status,
+          createdAt: s.createdAt.toISOString(),
+          expiresAt: s.expiresAt.toISOString(),
+          contactPurged: s.contactPurgedAt !== null,
+          subjectName: s.subjectName,
+          contactPhone: s.contactPhone,
+          contactHint: s.contactHint,
+          agentName: s.agent ? (s.agent.agentProfile?.fullName ?? s.agent.email) : null,
+          talentId: s.talentId,
+          mergedIntoId: s.mergedIntoId,
+          endorsementCount: t.trust.recommendationCount,
+          trust: t.trust,
+        }
+      }),
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
 router.get('/reports', async (_req, res, next) => {
   try {
     const reports = await prisma.report.findMany({
@@ -176,11 +301,42 @@ router.get('/reports', async (_req, res, next) => {
         targetUser: { select: { email: true, role: true, status: true } },
       },
     })
+    // Fiche publique de talent : libellé lisible (métier, lieu, état public).
+    const talentIds = reports.filter((r) => r.targetType === 'talent').map((r) => r.targetId)
+    const talents = talentIds.length
+      ? await prisma.talentProfile.findMany({
+          where: { id: { in: talentIds } },
+          select: { id: true, trade: true, city: true, district: true, publicConsentAt: true },
+        })
+      : []
+    const talentLabel = new Map(
+      talents.map((t) => [
+        t.id,
+        `${t.trade} · ${t.district ? `${t.district}, ` : ''}${t.city}${t.publicConsentAt ? '' : ' (fiche déjà retirée)'}`,
+      ]),
+    )
+    // Fiche entreprise : nom et ville (masquée ou non).
+    const companyIds = reports.filter((r) => r.targetType === 'company').map((r) => r.targetId)
+    const companies = companyIds.length
+      ? await prisma.company.findMany({
+          where: { id: { in: companyIds } },
+          select: { id: true, name: true, city: true, hiddenAt: true },
+        })
+      : []
+    const companyLabel = new Map(
+      companies.map((c) => [c.id, `${c.name} · ${c.city}${c.hiddenAt ? ' (fiche déjà masquée)' : ''}`]),
+    )
     res.json({
       reports: reports.map((r) => ({
         id: r.id,
         targetType: r.targetType,
         targetId: r.targetId,
+        targetLabel:
+          r.targetType === 'talent'
+            ? (talentLabel.get(r.targetId) ?? null)
+            : r.targetType === 'company'
+              ? (companyLabel.get(r.targetId) ?? null)
+              : null,
         reason: r.reason,
         createdAt: r.createdAt.toISOString(),
         reporterEmail: r.reporter.email,

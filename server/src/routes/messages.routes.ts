@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js'
 import { requireAuth } from '../middleware/auth.js'
 import { contactOffrecSchema, sendMessageSchema, startConversationSchema } from '../lib/validation.js'
 import { safeGenerate } from '../lib/gemini.js'
+import type { NotificationCategory } from '../../../src/types/index.js'
 
 const router = Router()
 
@@ -64,6 +65,18 @@ function displayNameOf(user: {
     user.agentProfile?.fullName ??
     user.email
   )
+}
+
+/**
+ * Catégorie d'un « Nouveau message » reçu par un admin, d'après le rôle de
+ * l'expéditeur — pour le filtre de `/admin/notifications`. La notification
+ * elle-même existait déjà : un seul destinataire (l'admin de la conversation).
+ */
+const MESSAGE_CATEGORY_BY_ROLE: Record<string, NotificationCategory> = {
+  recruiter: 'recruteur',
+  agent: 'agent',
+  talent: 'agent',
+  particulier: 'annuaire',
 }
 
 const PARTICIPANT_INCLUDE = {
@@ -265,6 +278,7 @@ router.post('/contact-offrec', requireAuth, async (req, res, next) => {
       prisma.notification.create({
         data: {
           userId: admin.id,
+          category: MESSAGE_CATEGORY_BY_ROLE[myRole] ?? null,
           title: 'Nouveau message',
           message: 'Vous avez reçu un nouveau message.',
           link: `/messages?c=${conversation.id}`,
@@ -312,6 +326,8 @@ router.post('/conversations/:id/messages', requireAuth, async (req, res, next) =
         ? prisma.notification.create({
             data: {
               userId: otherId,
+              // Catégorie uniquement pour un destinataire admin (filtre de sa page).
+              category: other.role === 'admin' ? (MESSAGE_CATEGORY_BY_ROLE[myRole] ?? null) : null,
               title: 'Nouveau message',
               message: 'Vous avez reçu un nouveau message.',
               link: `/messages?c=${conversation.id}`,

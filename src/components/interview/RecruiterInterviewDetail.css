@@ -1,0 +1,43 @@
+/* Détail d'un entretien côté recruteur (modale partagée par « Candidats
+   proposés » et « Entretiens »). */
+
+.rivd-offer {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.rivd-feedback {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rivd-feedback.is-ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.rivd-feedback.is-error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.rivd-text {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+}
+
+.rivd-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}

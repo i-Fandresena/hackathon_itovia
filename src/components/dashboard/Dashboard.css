@@ -1,0 +1,628 @@
+/*
+ * Tableaux de bord (admin, recruteur) — briques communes, préfixe `odash-`
+ * (composants de `DashboardParts.tsx`). La largeur de la grille suit la
+ * colonne de contenu (requêtes de conteneur sur la racine `.odash`), pas la
+ * fenêtre : la carte latérale de la coquille change la place disponible
+ * selon l'écran.
+ */
+.odash {
+  --odash-violet: #6250d6;
+  --odash-violet-bg: rgba(98, 80, 214, 0.1);
+  --odash-up: #047857;
+  --odash-up-bg: #e7f8f0;
+  --odash-down: #b91c1c;
+  --odash-down-bg: #fdecec;
+  --odash-warn: #a35a00;
+  --odash-warn-bg: #fff4dc;
+
+  container-type: inline-size;
+  container-name: odash;
+}
+
+:root[data-theme='dark'] .odash {
+  --odash-violet: #a69cf0;
+  --odash-violet-bg: rgba(144, 133, 233, 0.18);
+  --odash-up: #4ade9b;
+  --odash-up-bg: rgba(5, 150, 105, 0.2);
+  --odash-down: #fb8a8a;
+  --odash-down-bg: rgba(220, 38, 38, 0.2);
+  --odash-warn: #fbbf24;
+  --odash-warn-bg: rgba(217, 119, 6, 0.2);
+}
+
+.odash-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------ en-tête */
+
+.odash-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.odash-head-text {
+  min-width: 0;
+  flex: 1 1 22rem;
+}
+
+.odash-head h1 {
+  font-size: clamp(1.625rem, 3vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  margin: 0 0 0.4rem;
+}
+
+.odash-computed {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  max-width: 48rem;
+}
+
+.odash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.odash-actions .btn {
+  gap: 0.45rem;
+}
+
+.odash-spin {
+  animation: odash-spin 0.9s linear infinite;
+}
+
+@keyframes odash-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ------------------------------------------------------------ erreurs */
+
+.odash-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.odash-error-text {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-ink);
+}
+
+.odash-error-text svg {
+  flex-shrink: 0;
+  color: var(--color-danger);
+}
+
+.odash-refresh-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: var(--odash-down-bg);
+  color: var(--color-ink);
+  font-size: 0.875rem;
+}
+
+.odash-refresh-error svg {
+  color: var(--color-danger);
+  flex-shrink: 0;
+}
+
+.odash-refresh-error button {
+  margin-left: auto;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-accent-hover);
+  cursor: pointer;
+  padding: 0.15rem 0.25rem;
+  border-radius: var(--radius-xs);
+}
+
+/* ------------------------------------------------------------ grilles */
+
+.odash-body {
+  display: grid;
+  gap: 1.25rem;
+  transition: opacity 0.2s var(--ease-out);
+}
+
+.odash-body.is-refreshing {
+  opacity: 0.6;
+}
+
+.odash-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.odash-charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@container odash (min-width: 440px) {
+  .odash-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container odash (min-width: 700px) {
+  .odash-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container odash (min-width: 900px) {
+  .odash-charts {
+    grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
+  }
+}
+
+/* Six cartes par ligne seulement quand chacune garde ~200 px : en dessous
+   (ex. 1440 px avec la carte latérale), trois cartes larges et lisibles. */
+@container odash (min-width: 1240px) {
+  .odash-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* ------------------------------------------------------------ cartes indicateurs */
+
+.odash-kpi-link,
+.odash-kpi-static {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-lg);
+}
+
+.odash-kpi-link:hover {
+  color: inherit;
+}
+
+.odash-kpi-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.odash-kpi {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.15rem 1.15rem 1.1rem;
+  min-width: 0;
+}
+
+.odash-kpi-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.odash-pastille {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-accent-muted);
+  color: var(--color-accent);
+}
+
+.odash-tone-success .odash-pastille {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.odash-tone-warning .odash-pastille {
+  background: var(--odash-warn-bg);
+  color: var(--odash-warn);
+}
+
+.odash-tone-danger .odash-pastille {
+  background: var(--odash-down-bg);
+  color: var(--odash-down);
+}
+
+.odash-tone-violet .odash-pastille {
+  background: var(--odash-violet-bg);
+  color: var(--odash-violet);
+}
+
+.odash-tone-neutral .odash-pastille {
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+}
+
+.odash-kpi-label {
+  min-width: 0;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-ink-secondary);
+}
+
+.odash-kpi-main {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.odash-kpi-value {
+  font-size: clamp(1.6rem, 2.4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+/* Montants (« 350 000 Ar ») : plus longs qu'un effectif. */
+.odash-kpi-value.is-long {
+  font-size: clamp(1.35rem, 1.9vw, 1.6rem);
+  letter-spacing: -0.03em;
+}
+
+.odash-kpi-spark {
+  flex: 0 1 46%;
+  max-width: 7.5rem;
+  min-width: 3.5rem;
+}
+
+.odash-kpi-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+}
+
+.odash-kpi-sub {
+  margin: auto 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-ink-muted);
+}
+
+/* Puces : tendance (hausse / baisse / stable) ou information. */
+.odash-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.odash-chip-up {
+  background: var(--odash-up-bg);
+  color: var(--odash-up);
+}
+
+.odash-chip-down {
+  background: var(--odash-down-bg);
+  color: var(--odash-down);
+}
+
+.odash-chip-flat,
+.odash-chip-info {
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+}
+
+.odash-chip-warning {
+  background: var(--odash-warn-bg);
+  color: var(--odash-warn);
+}
+
+.odash-trend {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.odash-trend-text {
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+}
+
+/* ------------------------------------------------------------ panneaux graphiques */
+
+.odash-panel {
+  min-width: 0;
+  padding: 1.35rem 1.5rem 1.4rem;
+}
+
+.odash-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1.25rem;
+  margin-bottom: 1.1rem;
+  scroll-margin-top: calc(var(--header-h) + 1rem);
+}
+
+.odash-panel-head h2 {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.2rem;
+}
+
+.odash-panel-head p {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+}
+
+.odash-panel-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  text-align: right;
+}
+
+.odash-panel-figure strong {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.odash-panel-figure .odash-trend {
+  justify-content: flex-end;
+}
+
+.odash-panel-figure-note {
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+}
+
+/* Second bloc d'un panneau (sous un trait). */
+.odash-panel-split {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ------------------------------------------------------------ à traiter */
+
+.odash-todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.odash-todo-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.55rem;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.2s var(--ease-out);
+}
+
+a.odash-todo-row:hover {
+  background: var(--color-bg-subtle);
+  color: inherit;
+}
+
+a.odash-todo-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.odash-todo-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--odash-up-bg);
+  color: var(--odash-up);
+}
+
+.odash-todo-icon.is-pending {
+  background: var(--odash-warn-bg);
+  color: var(--odash-warn);
+}
+
+.odash-todo-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.odash-todo-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  line-height: 1.35;
+}
+
+.odash-todo-hint {
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+  line-height: 1.35;
+}
+
+.odash-todo-count {
+  min-width: 2rem;
+  text-align: right;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.odash-todo-count.is-pending {
+  color: var(--color-ink);
+}
+
+.odash-todo-arrow {
+  color: var(--color-ink-faint);
+}
+
+.odash-todo-sub {
+  margin: 1rem 0 0.35rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+/* ------------------------------------------------------------ sections */
+
+.odash-section {
+  margin-top: 0.75rem;
+}
+
+.odash-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.odash-section-head h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.odash-section-head p {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+  max-width: 52rem;
+}
+
+/* ------------------------------------------------------------ squelettes */
+
+.odash-skeleton {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.odash-skel {
+  border-radius: var(--radius-lg);
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-subtle) 0%,
+    var(--color-bg-elevated) 50%,
+    var(--color-bg-subtle) 100%
+  );
+  background-size: 200% 100%;
+  animation: odash-shimmer 1.4s ease-in-out infinite;
+}
+
+.odash-skel-card {
+  height: 9.5rem;
+}
+
+.odash-skel-title {
+  width: 14rem;
+  max-width: 60%;
+  height: 1.25rem;
+  border-radius: var(--radius-xs);
+}
+
+.odash-skel-chart {
+  height: 20rem;
+}
+
+@keyframes odash-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odash-skel,
+  .odash-spin {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------ petits écrans */
+
+@container odash (max-width: 439px) {
+  .odash-actions {
+    width: 100%;
+  }
+
+  .odash-actions .btn {
+    flex: 1 1 0;
+  }
+
+  .odash-panel {
+    padding: 1.15rem 1.1rem 1.2rem;
+  }
+
+  .odash-panel-figure {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .odash-panel-figure .odash-trend {
+    justify-content: flex-start;
+  }
+}

@@ -35,3 +35,22 @@
   font-size: 0.8rem;
   color: var(--color-text-muted);
 }
+
+/* Titre + badge de catégorie (espace admin) : le badge passe à la ligne
+   plutôt que de comprimer le titre sur mobile. */
+.notif-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+}
+
+.notif-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notif-head .badge {
+  flex-shrink: 0;
+}

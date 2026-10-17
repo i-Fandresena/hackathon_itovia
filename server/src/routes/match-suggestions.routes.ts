@@ -4,6 +4,27 @@ import { requireRole } from '../middleware/rbac.js'
 import { requireAuth } from '../middleware/auth.js'
 import { toDomainOpportunity, type DbOpportunity } from '../lib/domain.js'
 import { computeMatchFit } from '../lib/preselection.js'
+import { clip, scheduleAdminNotification } from '../lib/notify.js'
+import {
+  cancelInterview,
+  confirmInterview,
+  loadInterviewsBySuggestion,
+  reportInterviewUnavailable,
+  rescheduleInterview,
+  scheduleInterview,
+  toInterviewView,
+  type InterviewOutcome,
+} from '../lib/interviews.js'
+import { listRecruiterInterviews } from '../lib/interview-list.js'
+import { STALE_SUGGESTION_ERROR, commitMatchTransition } from '../lib/preselection-service.js'
+import type { MatchSuggestion as DbMatchSuggestion } from '@prisma/client'
+import {
+  interviewRescheduleSchema,
+  interviewScheduleSchema,
+  interviewUnavailableSchema,
+  recruiterInterviewQuerySchema,
+} from '../lib/validation.js'
+import type { Response } from 'express'
 import type { CandidateProfile, Opportunity } from '../../../src/types/index.js'
 
 const router = Router()
@@ -41,6 +62,9 @@ function toCandidateVisibleOpportunity(opportunity: DbOpportunity, revealCompany
     city: o.city,
     opportunityType: o.opportunityType,
     requiredSkills: o.requiredSkills,
+    // Rédigées par le recruteur sans nom d'entreprise ni coordonnées
+    // (aide du formulaire + refus serveur des emails, téléphones et sites).
+    missions: o.missions,
     level: o.level,
     deadline: o.deadline,
     createdAt: o.createdAt,
@@ -66,10 +90,19 @@ router.get('/mine', requireRole('candidate'), async (req, res, next) => {
       include: { opportunity: true },
       orderBy: { updatedAt: 'desc' },
     })
-    const suggestions = rows.map(({ opportunity, ...suggestion }) => ({
-      ...suggestion,
-      opportunity: toCandidateVisibleOpportunity(opportunity, suggestion.status === 'mise_en_relation'),
-    }))
+    // L'entretien n'existe qu'à partir de la mise en relation ; on ne le
+    // renvoie au candidat que pour un dossier dans cet état (défense).
+    const interviews = await loadInterviewsBySuggestion(
+      rows.filter((row) => row.status === 'mise_en_relation').map((row) => row.id),
+    )
+    const suggestions = rows.map(({ opportunity, ...suggestion }) => {
+      const interview = suggestion.status === 'mise_en_relation' ? interviews.get(suggestion.id) : undefined
+      return {
+        ...suggestion,
+        opportunity: toCandidateVisibleOpportunity(opportunity, suggestion.status === 'mise_en_relation'),
+        interview: interview ? toInterviewView(interview) : null,
+      }
+    })
     res.json({ suggestions })
   } catch (err) {
     next(err)
@@ -86,7 +119,9 @@ router.get('/mine', requireRole('candidate'), async (req, res, next) => {
  * du recruteur (`computeMatchFit`) : uniquement des données dérivées des
  * champs de la liste blanche ci-dessus et de sa propre offre. Jamais
  * l'origine de la suggestion, l'indice « présent dans le CV », ni rien de la
- * vérification du CV. Tri : par offre, puis score décroissant.
+ * vérification du CV. Tri : par offre, de la plus récemment publiée
+ * (`Opportunity.createdAt`) à la plus ancienne, id de l'offre en départage,
+ * puis score décroissant et id du dossier.
  */
 router.get('/received', requireRole('recruiter'), async (req, res, next) => {
   try {
@@ -119,17 +154,25 @@ router.get('/received', requireRole('recruiter'), async (req, res, next) => {
             city: true,
             level: true,
             opportunityType: true,
+            // Date de publication de l'offre (ordre d'affichage, plus récente d'abord).
+            createdAt: true,
           },
         },
-        candidate: { select: { id: true, email: true, candidateProfile: { select: RECRUITER_VISIBLE_PROFILE } } },
+        // Ni l'email ni le téléphone : OffRec reste l'intermédiaire.
+        candidate: { select: { id: true, candidateProfile: { select: RECRUITER_VISIBLE_PROFILE } } },
       },
     })
+    const interviews = await loadInterviewsBySuggestion(
+      rows.filter((row) => row.status === 'mise_en_relation').map((row) => row.id),
+    )
     const suggestions = rows
       .map(({ opportunity, ...suggestion }) => {
         const profile = suggestion.candidate.candidateProfile
+        const interview = interviews.get(suggestion.id)
         return {
           ...suggestion,
-          opportunity: { id: opportunity.id, title: opportunity.title },
+          opportunity: { id: opportunity.id, title: opportunity.title, createdAt: opportunity.createdAt },
+          interview: interview ? toInterviewView(interview) : null,
           fit: profile
             ? computeMatchFit(
                 {
@@ -152,7 +195,7 @@ router.get('/received', requireRole('recruiter'), async (req, res, next) => {
       })
       .sort(
         (a, b) =>
-          a.opportunity.title.localeCompare(b.opportunity.title, 'fr') ||
+          b.opportunity.createdAt.getTime() - a.opportunity.createdAt.getTime() ||
           a.opportunity.id.localeCompare(b.opportunity.id) ||
           b.score - a.score ||
           a.id.localeCompare(b.id),
@@ -164,16 +207,35 @@ router.get('/received', requireRole('recruiter'), async (req, res, next) => {
 })
 
 /**
- * Exprimer un intérêt — jamais un contact direct : ça notifie l'admin,
- * qui décide seul de la suite (§7.3, même esprit que le volet non-diplômé).
- * Journalisé (AuditLog) pour le suivi des décisions prises par les
- * entreprises, visible depuis l'activité récente du tableau de bord admin.
+ * Onglet « Entretiens » du recruteur : les entretiens de SES offres
+ * (dossiers `mise_en_relation`), filtrés par `?period=a_venir|passes|annules|tous`
+ * (défaut `a_venir`), `?status=` et `?opportunityId=`, avec des compteurs par
+ * offre et globaux. Liste blanche (lib/interview-list.ts) : le nom du
+ * candidat et l'entretien, jamais son email ni son téléphone.
+ */
+router.get('/interviews', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const query = recruiterInterviewQuerySchema.parse(req.query)
+    sendOutcome(res, await listRecruiterInterviews(req.session!.sub, query))
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Intérêt sans date — ancien parcours.
  *
- * Côté candidat, l'intérêt par offre n'existe plus (décision 2026-10-08) : le
- * consentement global le remplace. Seule une ligne héritée encore en
- * `proposee_candidat` peut être marquée intéressée. Aucune notification ne
- * part au candidat quand le recruteur exprime son intérêt : il n'est prévenu
- * qu'à la mise en relation.
+ * Recruteur : RETIRÉ depuis la décision 2026-10-14. « Ce profil
+ * m'intéresse » exige désormais une date d'entretien et met directement en
+ * relation (`POST /:id/interview`) ; garder un intérêt sans date laisserait
+ * des dossiers en `interet_recruteur` attendre un admin qui n'est plus
+ * qu'informé. Réponse 400 avec la marche à suivre. Les lignes déjà en
+ * `interet_recruteur` reçoivent un entretien par `/interview` (ou sont
+ * confirmées par un admin).
+ *
+ * Candidat : l'intérêt par offre n'existe plus (décision 2026-10-08) ; seule
+ * une ligne héritée encore en `proposee_candidat` peut être marquée
+ * intéressée.
  */
 router.post('/:id/interest', async (req, res, next) => {
   try {
@@ -184,7 +246,7 @@ router.post('/:id/interest', async (req, res, next) => {
     }
     const suggestion = await prisma.matchSuggestion.findUnique({
       where: { id: req.params.id },
-      include: { opportunity: true },
+      include: { opportunity: true, candidate: { select: { candidateProfile: { select: { fullName: true } } } } },
     })
     if (!suggestion) {
       res.status(404).json({ error: 'Suggestion introuvable.' })
@@ -223,22 +285,10 @@ router.post('/:id/interest', async (req, res, next) => {
       res.status(404).json({ error: 'Suggestion introuvable.' })
       return
     }
-    if (suggestion.status !== 'proposee_recruteur') {
-      res.status(400).json({ error: 'Cette suggestion ne peut plus être marquée intéressée.' })
-      return
-    }
-    const updated = await prisma.matchSuggestion.update({
-      where: { id: suggestion.id },
-      data: { status: 'interet_recruteur' },
+    res.status(400).json({
+      error:
+        'Pour donner suite à ce profil, proposez une date d’entretien : la mise en relation est faite en même temps et le candidat est prévenu.',
     })
-    await prisma.auditLog.create({
-      data: {
-        userId: req.session!.sub,
-        action: 'recruiter_interested',
-        metadata: { opportunityTitle: suggestion.opportunity.title, suggestionId: suggestion.id },
-      },
-    })
-    res.json({ suggestion: updated })
   } catch (err) {
     next(err)
   }
@@ -254,6 +304,22 @@ router.post('/:id/interest', async (req, res, next) => {
  * `/interest`. Le candidat/recruteur ne fait que décider, jamais l'admin
  * qui seul fait ensuite avancer le dossier.
  */
+/** Dossier renvoyé après un retrait : liste blanche, sans l'origine de la
+ *  suggestion (interne à OffRec). */
+function declinedView(row: DbMatchSuggestion) {
+  return {
+    id: row.id,
+    opportunityId: row.opportunityId,
+    candidateId: row.candidateId,
+    score: row.score,
+    reasons: row.reasons,
+    status: row.status,
+    preselectionRank: row.preselectionRank,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
 router.post('/:id/decline', async (req, res, next) => {
   try {
     const role = req.session!.role
@@ -279,18 +345,33 @@ router.post('/:id/decline', async (req, res, next) => {
         res.status(400).json({ error: 'Vous ne pouvez plus vous retirer de ce dossier.' })
         return
       }
-      const updated = await prisma.matchSuggestion.update({
-        where: { id: suggestion.id },
-        data: { status: 'ecartee' },
-      })
+      // Écriture conditionnelle : si le recruteur a fixé un entretien (ou un
+      // admin a fait avancer le dossier) entre la lecture et l'écriture, le
+      // retrait n'écrase rien et répond 409.
+      const updated = await commitMatchTransition(prisma, { id: suggestion.id, from: suggestion.status, to: 'ecartee' })
+      if (!updated) {
+        res.status(409).json({ error: STALE_SUGGESTION_ERROR })
+        return
+      }
       await prisma.auditLog.create({
         data: {
           userId: req.session!.sub,
           action: 'candidate_declined',
-          metadata: { opportunityTitle: suggestion.opportunity.title, suggestionId: suggestion.id },
+          // `from` : statut quitté (le tableau de bord recruteur ne compte
+          // un retrait que s'il suit une transmission au recruteur).
+          metadata: { opportunityTitle: suggestion.opportunity.title, suggestionId: suggestion.id, from: suggestion.status },
         },
       })
-      res.json({ suggestion: updated })
+      res.json({ suggestion: declinedView(updated) })
+      scheduleAdminNotification({
+        event: 'candidate_declined',
+        category: 'candidat',
+        title: 'Candidat retiré d’un dossier',
+        message:
+          `${clip(suggestion.candidate.candidateProfile?.fullName, 60) || 'Un candidat'} s’est retiré du dossier ` +
+          `« ${clip(suggestion.opportunity.title)} » (${clip(suggestion.opportunity.companyName, 60)}).`,
+        link: '/admin/mise-en-relation',
+      })
       return
     }
 
@@ -303,10 +384,14 @@ router.post('/:id/decline', async (req, res, next) => {
       res.status(400).json({ error: 'Cette suggestion ne peut plus être déclinée.' })
       return
     }
-    const updated = await prisma.matchSuggestion.update({
-      where: { id: suggestion.id },
-      data: { status: 'ecartee' },
-    })
+    // Même écriture conditionnelle que le retrait du candidat : un retrait
+    // simultané du candidat ou une transition admin donne 409, jamais un
+    // double effet.
+    const updated = await commitMatchTransition(prisma, { id: suggestion.id, from: suggestion.status, to: 'ecartee' })
+    if (!updated) {
+      res.status(409).json({ error: STALE_SUGGESTION_ERROR })
+      return
+    }
     await prisma.auditLog.create({
       data: {
         userId: req.session!.sub,
@@ -318,7 +403,99 @@ router.post('/:id/decline', async (req, res, next) => {
         },
       },
     })
-    res.json({ suggestion: updated })
+    res.json({ suggestion: declinedView(updated) })
+    const hadInterest = suggestion.status === 'interet_recruteur'
+    scheduleAdminNotification({
+      event: 'recruiter_declined',
+      category: 'recruteur',
+      title: 'Profil décliné par le recruteur',
+      message:
+        `${clip(suggestion.opportunity.companyName, 60)} a décliné le profil de ` +
+        `${clip(suggestion.candidate.candidateProfile?.fullName, 60) || 'un candidat'} pour « ${clip(suggestion.opportunity.title)} »` +
+        (hadInterest ? ', après avoir marqué son intérêt.' : '.'),
+      link: '/admin/mise-en-relation',
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ------------------------------------------------------------------ */
+/* Entretiens (décision produit 2026-10-14) — voir lib/interviews.ts   */
+/* ------------------------------------------------------------------ */
+
+function sendOutcome<T>(res: Response, outcome: InterviewOutcome<T>): void {
+  if (outcome.ok) res.status(outcome.httpStatus).json(outcome.body)
+  else res.status(outcome.httpStatus).json({ error: outcome.error })
+}
+
+/**
+ * « Ce profil m'intéresse » : le recruteur propriétaire de l'offre fixe un
+ * entretien (`{ scheduledAt, durationMinutes: 30|45|60, message? }`). Depuis
+ * `proposee_recruteur` ou `interet_recruteur`, le dossier passe en
+ * `mise_en_relation` ; le candidat est notifié (plateforme + email), les
+ * admins informés. 403 hors de ses offres, 409 sans accord du candidat,
+ * compte candidat inactif ou entretien déjà fixé.
+ */
+router.post('/:id/interview', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const body = interviewScheduleSchema.parse(req.body)
+    const outcome = await scheduleInterview({
+      suggestionId: req.params.id,
+      recruiterId: req.session!.sub,
+      scheduledAt: body.scheduledAt,
+      durationMinutes: body.durationMinutes,
+      message: body.message,
+    })
+    sendOutcome(res, outcome)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Reprogrammer (après un empêchement, une annulation, ou pour changer la date). */
+router.patch('/:id/interview', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const body = interviewRescheduleSchema.parse(req.body)
+    const outcome = await rescheduleInterview({
+      suggestionId: req.params.id,
+      recruiterId: req.session!.sub,
+      scheduledAt: body.scheduledAt,
+      durationMinutes: body.durationMinutes,
+      message: body.message,
+    })
+    sendOutcome(res, outcome)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Annuler l'entretien — la mise en relation reste acquise. */
+router.post('/:id/interview/cancel', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    sendOutcome(res, await cancelInterview({ suggestionId: req.params.id, recruiterId: req.session!.sub }))
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Le candidat confirme sa présence. */
+router.post('/:id/interview/confirm', requireRole('candidate'), async (req, res, next) => {
+  try {
+    sendOutcome(res, await confirmInterview({ suggestionId: req.params.id, candidateId: req.session!.sub }))
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Le candidat signale un empêchement (`{ reason }`, court, sans coordonnées). */
+router.post('/:id/interview/unavailable', requireRole('candidate'), async (req, res, next) => {
+  try {
+    const body = interviewUnavailableSchema.parse(req.body)
+    sendOutcome(
+      res,
+      await reportInterviewUnavailable({ suggestionId: req.params.id, candidateId: req.session!.sub, reason: body.reason }),
+    )
   } catch (err) {
     next(err)
   }

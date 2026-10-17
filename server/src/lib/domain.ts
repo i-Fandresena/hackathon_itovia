@@ -1,4 +1,5 @@
 import type { CandidateProfile, Opportunity } from '../../../src/types/index.js'
+import { missionsOf } from './opportunity-missions.js'
 
 export interface DbOpportunity {
   id: string
@@ -13,6 +14,8 @@ export interface DbOpportunity {
   city: string
   opportunityType: string
   requiredSkills: string[]
+  /** Absent tant que le client Prisma n'est pas régénéré (voir opportunity-missions.ts). */
+  missions?: string[]
   level: string
   deadline: Date
   createdAt: Date
@@ -33,6 +36,7 @@ export function toDomainOpportunity(o: DbOpportunity): Opportunity {
     city: o.city,
     opportunityType: o.opportunityType as Opportunity['opportunityType'],
     requiredSkills: o.requiredSkills,
+    missions: missionsOf(o),
     level: o.level as Opportunity['level'],
     deadline: o.deadline.toISOString(),
     createdAt: o.createdAt.toISOString(),

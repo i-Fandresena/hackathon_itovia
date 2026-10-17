@@ -38,7 +38,6 @@
 }
 
 .detail-dossier,
-.detail-match,
 .detail-description {
   margin-bottom: 1.25rem;
 }
@@ -130,4 +129,11 @@
 
 .detail-facts dd {
   margin: 0;
+}
+
+.detail-interview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
 }

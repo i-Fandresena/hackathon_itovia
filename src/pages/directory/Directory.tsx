@@ -14,6 +14,7 @@ import { rankProviders } from '../../lib/trust'
 import './Directory.css'
 
 /**
+ * Onglet « Professionnels » de l'Annuaire (`DirectoryTabs`).
  * L'annuaire est public : chercher ne demande pas de compte, seul le fait de
  * contribuer en demande un. C'est la porte d'entrée du produit.
  */
@@ -44,53 +45,43 @@ export function Directory() {
     [providers, recommendations, membersById, filters],
   )
 
-  if (!hydrated) {
-    return (
-      <div className="page">
-        <div className="container">
-          <Loading />
-        </div>
-      </div>
-    )
-  }
+  if (!hydrated) return <Loading />
 
   const sourced = list.filter((p) => p.trust.recommendationCount > 0).length
 
   return (
-    <div className="page">
-      <div className="container">
-        <header className="page-header">
-          <h1>Annuaire de confiance — construction, Antananarivo</h1>
-          <p>
-            Des prestataires recommandés par des membres qui ont réellement
-            travaillé avec eux, avec le prix qu’ils ont payé et la date du
-            chantier. Classés par qualité <strong>et</strong> par solidité de
-            l’information.
+    <section aria-labelledby="dir-title">
+      <header className="page-header dir-head">
+        <h2 id="dir-title">Professionnels de la construction — Antananarivo</h2>
+        <p>
+          Des prestataires recommandés par des membres qui ont réellement
+          travaillé avec eux, avec le prix qu’ils ont payé et la date du
+          chantier. Classés par qualité <strong>et</strong> par solidité de
+          l’information.
+        </p>
+      </header>
+
+      <ProviderFilters filters={filters} onChange={setFilters} />
+
+      {list.length === 0 ? (
+        <EmptyState
+          icon={SearchX}
+          title="Aucun prestataire trouvé"
+          description="Élargissez votre recherche, ou ajoutez la fiche d’un prestataire que vous connaissez."
+        />
+      ) : (
+        <>
+          <p className="dir-count">
+            {list.length} prestataire{list.length > 1 ? 's' : ''} · {sourced}{' '}
+            avec au moins une recommandation
           </p>
-        </header>
-
-        <ProviderFilters filters={filters} onChange={setFilters} />
-
-        {list.length === 0 ? (
-          <EmptyState
-            icon={SearchX}
-            title="Aucun prestataire trouvé"
-            description="Élargissez votre recherche, ou ajoutez la fiche d’un prestataire que vous connaissez."
-          />
-        ) : (
-          <>
-            <p className="dir-count">
-              {list.length} prestataire{list.length > 1 ? 's' : ''} · {sourced}{' '}
-              avec au moins une recommandation
-            </p>
-            <div className="prov-list">
-              {list.map((scored) => (
-                <ProviderCard key={scored.provider.id} {...scored} />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+          <div className="prov-list">
+            {list.map((scored) => (
+              <ProviderCard key={scored.provider.id} {...scored} />
+            ))}
+          </div>
+        </>
+      )}
+    </section>
   )
 }

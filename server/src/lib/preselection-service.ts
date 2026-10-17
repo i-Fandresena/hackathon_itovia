@@ -12,7 +12,7 @@ import { toDomainCandidateProfile, toDomainOpportunity } from './domain.js'
 import { parseCvFlags } from './cv-flags.js'
 import { getMatchingConfig, notifyRecruiterOfProposal } from './matching.js'
 import { notifyUser } from './notify.js'
-import { ADMIN_ALLOWED_TRANSITIONS, preselect } from './preselection.js'
+import { ADMIN_ALLOWED_TRANSITIONS, RECRUITER_ALLOWED_TRANSITIONS, preselect } from './preselection.js'
 
 /**
  * Accès base de la présélection ATS et des transitions admin. La logique de
@@ -79,11 +79,148 @@ export async function loadPreselection(
 }
 
 /* ------------------------------------------------------------------ */
-/* Transition admin — unique implémentation                            */
+/* Transitions du dossier — unique implémentation                      */
 /* ------------------------------------------------------------------ */
 
 export const NO_CONSENT_ERROR =
   'Ce candidat n’a pas donné (ou a retiré) son accord pour que son profil soit proposé aux entreprises. Transmission impossible.'
+
+export const NO_CONSENT_CONNECT_ERROR =
+  'Ce candidat a retiré son accord pour que son profil soit proposé aux entreprises : la mise en relation est impossible.'
+
+export const CANDIDATE_INACTIVE_ERROR =
+  'Le compte de ce candidat n’est plus actif : la mise en relation est impossible pour le moment.'
+
+export const STALE_SUGGESTION_ERROR = 'Ce dossier a changé entre-temps. Rechargez la page.'
+
+export type TransitionCheck = { ok: true } | { ok: false; httpStatus: 400 | 409; error: string }
+
+/**
+ * Règles communes à toute transition d'un dossier, qu'elle vienne d'un
+ * admin (`ADMIN_ALLOWED_TRANSITIONS`) ou du recruteur qui fixe un entretien
+ * (`RECRUITER_ALLOWED_TRANSITIONS`, décision 2026-10-14) :
+ * - la transition doit figurer dans la table de l'acteur ;
+ * - aucun profil ne part chez un recruteur, ni n'est mis en relation, sans
+ *   le consentement en vigueur du candidat (relu en base par l'appelant) ;
+ * - pas de mise en relation avec un compte candidat suspendu ou banni.
+ */
+export function checkMatchTransition(input: {
+  actor: 'admin' | 'recruiter'
+  from: MatchSuggestionStatus
+  to: MatchSuggestionStatus
+  hasConsent: boolean
+  /** Compte candidat suspendu ou banni (même définition que `isAccountBlocked`). */
+  candidateBlocked?: boolean
+}): TransitionCheck {
+  const table = input.actor === 'admin' ? ADMIN_ALLOWED_TRANSITIONS : RECRUITER_ALLOWED_TRANSITIONS
+  const allowed = table[input.from] ?? []
+  if (!allowed.includes(input.to)) {
+    return { ok: false, httpStatus: 400, error: `Transition ${input.from} → ${input.to} non autorisée.` }
+  }
+  if (input.to === 'proposee_recruteur' && !input.hasConsent) {
+    return { ok: false, httpStatus: 409, error: NO_CONSENT_ERROR }
+  }
+  if (input.to === 'mise_en_relation') return connectionCheck(input.hasConsent, input.candidateBlocked)
+  return { ok: true }
+}
+
+/**
+ * Conditions d'une mise en relation, y compris quand un entretien est
+ * ajouté à un dossier déjà en `mise_en_relation` : compte candidat actif et
+ * consentement en vigueur.
+ */
+export function connectionCheck(hasConsent: boolean, candidateBlocked = false): TransitionCheck {
+  if (candidateBlocked) return { ok: false, httpStatus: 409, error: CANDIDATE_INACTIVE_ERROR }
+  if (!hasConsent) return { ok: false, httpStatus: 409, error: NO_CONSENT_CONNECT_ERROR }
+  return { ok: true }
+}
+
+type TxClient = Prisma.TransactionClient | typeof prisma
+
+/**
+ * Écrit la transition SEULEMENT si le dossier est toujours dans le statut lu
+ * (`updateMany` conditionnel) : deux requêtes concurrentes (double clic,
+ * deux admins) ne font jamais avancer deux fois le même dossier. `null` si
+ * le dossier a changé entre-temps.
+ */
+export async function commitMatchTransition(
+  client: TxClient,
+  input: {
+    id: string
+    from: MatchSuggestionStatus
+    to: MatchSuggestionStatus
+    extraData?: Pick<Prisma.MatchSuggestionUncheckedUpdateInput, 'score' | 'reasons' | 'preselectionRank'>
+  },
+): Promise<DbMatchSuggestion | null> {
+  const { count } = await client.matchSuggestion.updateMany({
+    where: { id: input.id, status: input.from },
+    data: { ...input.extraData, status: input.to },
+  })
+  if (count === 0) return null
+  return client.matchSuggestion.findUnique({ where: { id: input.id } })
+}
+
+export interface MiseEnRelationNotice {
+  candidate: {
+    event: string
+    title: string
+    message: string
+    email: { subject: string; body: string[]; actionLabel: string }
+  }
+  recruiter: { title: string; message: string }
+}
+
+/**
+ * Seul moment où le candidat est notifié (plateforme + email) : il est
+ * retenu, et c'est aussi le seul moment où il apprend le nom de
+ * l'entreprise. Le recruteur reçoit une notification dans la plateforme.
+ * `notice` remplace le texte par défaut (entretien fixé par le recruteur,
+ * lib/interviews.ts). Ne lève jamais.
+ */
+export async function notifyMiseEnRelation(
+  suggestion: Pick<DbMatchSuggestion, 'candidateId' | 'opportunityId'>,
+  opportunity: Pick<DbOpportunityRow, 'recruiterId' | 'title' | 'companyName'>,
+  notice?: MiseEnRelationNotice,
+): Promise<void> {
+  const { companyName, title } = opportunity
+  const candidate = notice?.candidate ?? {
+    event: 'mise_en_relation',
+    title: 'Mise en relation confirmée',
+    message: `OffRec vous met en relation avec ${companyName} pour « ${title} ».`,
+    email: {
+      subject: 'Votre profil a été retenu — OffRec',
+      body: [
+        `Votre profil a été retenu par ${companyName} pour l’offre « ${title} ».`,
+        'OffRec organise la mise en relation et vous recontacte pour les prochaines étapes. Vous pouvez suivre ce dossier depuis votre espace.',
+      ],
+      actionLabel: 'Voir le dossier',
+    },
+  }
+  await notifyUser({
+    userId: suggestion.candidateId,
+    event: candidate.event,
+    title: candidate.title,
+    message: candidate.message,
+    link: `/candidat/offres/${suggestion.opportunityId}`,
+    email: candidate.email,
+  })
+  const recruiter = notice?.recruiter ?? {
+    title: 'Mise en relation confirmée',
+    message: `OffRec vous met en relation avec un candidat pour « ${title} ».`,
+  }
+  try {
+    await prisma.notification.create({
+      data: {
+        userId: opportunity.recruiterId,
+        title: recruiter.title,
+        message: recruiter.message,
+        link: '/recruteur/candidatures',
+      },
+    })
+  } catch (err) {
+    console.error('[match] Notification du recruteur impossible', err)
+  }
+}
 
 export type AdminTransitionResult =
   | { ok: true; suggestion: DbMatchSuggestion }
@@ -94,6 +231,8 @@ interface AdminTransitionInput {
   opportunity: Pick<DbOpportunityRow, 'recruiterId' | 'title' | 'companyName'>
   /** Consentement de matching en vigueur du candidat, relu en base par l'appelant. */
   hasConsent: boolean
+  /** Compte candidat suspendu ou banni, relu en base par l'appelant. */
+  candidateBlocked?: boolean
   to: MatchSuggestionStatus
   actorId: string
   /** Colonnes mises à jour avec le statut (rang de présélection, score rafraîchi). */
@@ -103,29 +242,32 @@ interface AdminTransitionInput {
 }
 
 /**
- * Fait avancer une suggestion côté admin : contrôle de la transition
- * (`ADMIN_ALLOWED_TRANSITIONS`), du consentement pour tout passage à
- * `proposee_recruteur`, puis mise à jour, journal d'audit et notifications.
- * Utilisé par le PATCH unitaire ET par la transmission groupée de la
- * présélection : les deux appliquent exactement les mêmes règles et effets.
+ * Fait avancer une suggestion côté admin : règles communes
+ * (`checkMatchTransition`), écriture conditionnelle
+ * (`commitMatchTransition`), journal d'audit et notifications. Utilisé par
+ * le PATCH unitaire ET par la transmission groupée de la présélection : les
+ * deux appliquent exactement les mêmes règles et effets. Le recruteur qui
+ * fixe un entretien passe par les mêmes briques (lib/interviews.ts).
  */
 export async function applyAdminTransition(input: AdminTransitionInput): Promise<AdminTransitionResult> {
   const { suggestion: existing, opportunity, to } = input
-  const allowed = ADMIN_ALLOWED_TRANSITIONS[existing.status] ?? []
-  if (!allowed.includes(to)) {
-    return { ok: false, httpStatus: 400, error: `Transition ${existing.status} → ${to} non autorisée.` }
-  }
-
-  // Aucun profil ne part chez un recruteur sans le consentement en vigueur
-  // du candidat — y compris pour les lignes héritées.
-  if (to === 'proposee_recruteur' && !input.hasConsent) {
-    return { ok: false, httpStatus: 409, error: NO_CONSENT_ERROR }
-  }
-
-  const suggestion = await prisma.matchSuggestion.update({
-    where: { id: existing.id },
-    data: { ...input.extraData, status: to },
+  const check = checkMatchTransition({
+    actor: 'admin',
+    from: existing.status,
+    to,
+    hasConsent: input.hasConsent,
+    candidateBlocked: input.candidateBlocked,
   })
+  if (!check.ok) return check
+
+  const suggestion = await commitMatchTransition(prisma, {
+    id: existing.id,
+    from: existing.status,
+    to,
+    extraData: input.extraData,
+  })
+  if (!suggestion) return { ok: false, httpStatus: 409, error: STALE_SUGGESTION_ERROR }
+
   await prisma.auditLog.create({
     data: {
       userId: input.actorId,
@@ -138,32 +280,7 @@ export async function applyAdminTransition(input: AdminTransitionInput): Promise
     await notifyRecruiterOfProposal(opportunity)
   }
   if (to === 'mise_en_relation') {
-    // Seul moment où le candidat est notifié (plateforme + email) : il est
-    // retenu, et c'est aussi le seul moment où il apprend le nom de l'entreprise.
-    const { companyName, title } = opportunity
-    await notifyUser({
-      userId: existing.candidateId,
-      event: 'mise_en_relation',
-      title: 'Mise en relation confirmée',
-      message: `OffRec vous met en relation avec ${companyName} pour « ${title} ».`,
-      link: `/candidat/offres/${existing.opportunityId}`,
-      email: {
-        subject: 'Votre profil a été retenu — OffRec',
-        body: [
-          `Votre profil a été retenu par ${companyName} pour l’offre « ${title} ».`,
-          'OffRec organise la mise en relation et vous recontacte pour les prochaines étapes. Vous pouvez suivre ce dossier depuis votre espace.',
-        ],
-        actionLabel: 'Voir le dossier',
-      },
-    })
-    await prisma.notification.create({
-      data: {
-        userId: opportunity.recruiterId,
-        title: 'Mise en relation confirmée',
-        message: `OffRec vous met en relation avec un candidat pour « ${title} ».`,
-        link: '/recruteur/candidatures',
-      },
-    })
+    await notifyMiseEnRelation(existing, opportunity)
   }
 
   return { ok: true, suggestion }

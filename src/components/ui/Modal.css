@@ -24,6 +24,10 @@
   padding: 2rem 1.75rem 1.75rem;
 }
 
+.modal-card:focus {
+  outline: none;
+}
+
 .modal-close {
   position: absolute;
   top: 1rem;

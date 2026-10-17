@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { EmptyState } from '../ui/EmptyState'
-import { formatDate } from '../../lib/format'
-import type { Notification } from '../../types'
+import { Badge } from '../ui/Badge'
+import { formatDate, formatDateTime } from '../../lib/format'
+import type { Notification, NotificationCategory } from '../../types'
 import './NotificationList.css'
 
 interface NotificationListProps {
@@ -22,11 +23,21 @@ interface NotificationListProps {
   isKnownLink?: (link: string) => boolean
   /** Présent : affiche le compteur de non lus et « Tout marquer comme lu ». */
   onMarkAllRead?: () => void
+  /**
+   * Présent : chaque notification porte un badge de catégorie (espace admin).
+   * Une notification sans catégorie affiche `uncategorizedLabel`, s'il est
+   * fourni. Absent : aucun badge (espaces candidat et recruteur).
+   */
+  categoryLabels?: Record<NotificationCategory, string>
+  uncategorizedLabel?: string
+  /** Affiche l'heure en plus de la date. */
+  withTime?: boolean
 }
 
 /**
- * Liste de notifications partagée par les espaces candidat et recruteur :
- * état lu / non lu, date, clic qui marque comme lu puis navigue vers `link`.
+ * Liste de notifications partagée par les espaces candidat, recruteur et
+ * admin : état lu / non lu, date, clic qui marque comme lu puis navigue vers
+ * `link`.
  */
 export function NotificationList({
   notifications,
@@ -35,6 +46,9 @@ export function NotificationList({
   emptyDescription,
   isKnownLink,
   onMarkAllRead,
+  categoryLabels,
+  uncategorizedLabel,
+  withTime = false,
 }: NotificationListProps) {
   const navigate = useNavigate()
 
@@ -65,6 +79,11 @@ export function NotificationList({
         {notifications.map((n) => {
           const link = n.link && (!isKnownLink || isKnownLink(n.link)) ? n.link : null
           const clickable = !isKnownLink || link !== null
+          const categoryLabel = categoryLabels
+            ? n.category
+              ? categoryLabels[n.category]
+              : uncategorizedLabel
+            : undefined
           const handleClick = () => {
             onRead(n.id)
             if (link) navigate(link)
@@ -76,9 +95,18 @@ export function NotificationList({
               onClick={clickable ? handleClick : undefined}
               hover={clickable}
             >
-              <strong>{n.title}</strong>
+              {categoryLabel ? (
+                <span className="notif-head">
+                  <strong>{n.title}</strong>
+                  <Badge variant={n.category ? 'primary' : 'muted'}>{categoryLabel}</Badge>
+                </span>
+              ) : (
+                <strong>{n.title}</strong>
+              )}
               <p className="notif-message">{n.message}</p>
-              <time className="notif-time">{formatDate(n.createdAt)}</time>
+              <time className="notif-time" dateTime={n.createdAt}>
+                {withTime ? formatDateTime(n.createdAt) : formatDate(n.createdAt)}
+              </time>
             </Card>
           )
         })}

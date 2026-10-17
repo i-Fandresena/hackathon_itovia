@@ -1,5 +1,5 @@
 /* « Candidats proposés » (/recruteur/candidatures) : profils regroupés par
-   offre, meilleurs scores d'abord. */
+   offre (la plus récemment publiée d'abord), meilleurs scores d'abord. */
 
 .rapp-group {
   margin-bottom: 1.75rem;
@@ -22,6 +22,13 @@
   color: var(--color-ink-secondary);
   font-size: 0.75rem;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.rapp-group-date {
+  color: var(--color-ink-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -84,6 +91,68 @@
 .rapp-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
   margin-top: auto;
+}
+
+/* « Voir l'entretien » : date courte dans le libellé, pastille si un état
+   demande l'attention (empêchement, lien Meet en attente). */
+.rapp-iv-btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+.rapp-iv-when {
+  margin-left: -0.2rem;
+  color: var(--color-ink-muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.rapp-iv-when.is-cancelled {
+  font-style: italic;
+}
+
+.rapp-iv-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  box-shadow: 0 0 0 2px var(--color-bg-elevated);
+}
+
+.rapp-iv-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.rapp-feedback {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rapp-feedback.is-ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.rapp-feedback.is-error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }

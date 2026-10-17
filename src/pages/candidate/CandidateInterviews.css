@@ -1,0 +1,12 @@
+/* Onglet « Entretiens » du candidat (/candidat/entretiens). Les briques
+   communes (filtres, groupes, lignes) sont dans
+   components/interview/InterviewList.css (préfixe `ivl-`). Préfixe `cint-`. */
+
+.cint-groups[aria-busy='true'] {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.cint-group-text {
+  min-width: 0;
+}

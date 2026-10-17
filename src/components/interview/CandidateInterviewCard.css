@@ -1,0 +1,55 @@
+/* Carte « Entretien » côté candidat. */
+
+.civ-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+}
+
+.civ-feedback {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.civ-feedback.is-ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.civ-feedback.is-error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.civ-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.civ-text {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+}
+
+.civ-error {
+  margin: 0 0 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.civ-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}

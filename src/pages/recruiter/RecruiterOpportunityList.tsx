@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { Briefcase, Pencil, Trash2, Users2 } from 'lucide-react'
+import { Briefcase, Eye, Pencil, Trash2, Users2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -76,6 +76,12 @@ export function RecruiterOpportunityList() {
                     </Badge>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                    <Link to={`/offres/${o.id}`}>
+                      <Button variant="outline" size="sm">
+                        <Eye size={14} />
+                        Voir l’offre
+                      </Button>
+                    </Link>
                     <Link to={`/recruteur/offres/${o.id}/shortlist`}>
                       <Button variant="outline" size="sm">
                         <Users2 size={14} />

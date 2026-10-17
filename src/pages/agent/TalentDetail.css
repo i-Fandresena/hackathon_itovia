@@ -1,0 +1,132 @@
+/* Fiche talent (agent) */
+
+.tdet {
+  max-width: 760px;
+}
+
+.tdet-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  color: var(--color-ink-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.tdet-back:hover {
+  color: var(--color-accent);
+}
+
+.tdet-block {
+  margin-bottom: 1.25rem;
+}
+
+.tdet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tdet-head-main {
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.tdet-head h1 {
+  font-size: 1.3rem;
+  overflow-wrap: anywhere;
+}
+
+.tdet-muted {
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.tdet-consent {
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--color-ink-secondary);
+}
+
+.tdet-section-title {
+  font-size: 1.05rem;
+  margin-bottom: 0.75rem;
+}
+
+.tdet-section-gap {
+  margin-bottom: 1.25rem;
+}
+
+.tdet-card-title {
+  font-size: 1.05rem;
+  margin-bottom: 0.5rem;
+}
+
+.tdet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tdet-private {
+  display: flex;
+  gap: 0.35rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.tdet-proof img {
+  display: block;
+  max-width: min(220px, 100%);
+  max-height: 160px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  object-fit: cover;
+}
+
+.tdet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.tdet-propose {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.tdet-propose-field {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.tdet-propose-field select {
+  max-width: 100%;
+}
+
+.tdet-match {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.tdet-proposals {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.tdet-proposals h3 {
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+}

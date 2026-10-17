@@ -23,6 +23,14 @@ import adminMatchingRoutes from './routes/admin-matching.routes.js'
 import matchSuggestionsRoutes from './routes/match-suggestions.routes.js'
 import cvVerificationRoutes from './routes/cv-verification.routes.js'
 import uploadsRoutes from './routes/uploads.routes.js'
+import endorsementRoutes from './routes/endorsements.routes.js'
+import publicTalentRoutes from './routes/public-talents.routes.js'
+import companyRoutes from './routes/companies.routes.js'
+import adminCompanyRoutes from './routes/admin-companies.routes.js'
+import adminRecruiterRoutes from './routes/admin-recruiters.routes.js'
+import adminCandidateRoutes from './routes/admin-candidates.routes.js'
+import adminActivityRoutes from './routes/admin-activity.routes.js'
+import recruiterRoutes from './routes/recruiter.routes.js'
 
 export function createApp() {
   const app = express()
@@ -63,7 +71,18 @@ export function createApp() {
   app.use('/api/talent-account', talentAccountRoutes)
   app.use('/api/admin/matching', adminMatchingRoutes)
   app.use('/api/match-suggestions', matchSuggestionsRoutes)
+  app.use('/api/recruiter', recruiterRoutes)
   app.use('/api/cv-verification', cvVerificationRoutes)
+  app.use('/api/endorsements', endorsementRoutes)
+  // Vitrine publique « Talents recommandés » (lecture sans compte).
+  app.use('/api/talents-recommandes', publicTalentRoutes)
+  // Entreprises recommandées : vitrine publique, encart du recruteur lié.
+  app.use('/api/companies', companyRoutes)
+  app.use('/api/admin/companies', adminCompanyRoutes)
+  app.use('/api/admin/recruiters', adminRecruiterRoutes)
+  app.use('/api/admin/candidates', adminCandidateRoutes)
+  // Journal d'activité de la plateforme (consultation admin).
+  app.use('/api/admin/activity', adminActivityRoutes)
 
   app.use(notFound)
   app.use(errorHandler)

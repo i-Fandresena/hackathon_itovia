@@ -1,9 +1,21 @@
 import type {
+  AdminInterview,
+  Interview,
+  InterviewDuration,
+  InterviewPeriod,
+  InterviewStatus,
+  CompanyRelation,
+  LinkedCompanySummary,
+  PublicCompany,
   AgentProfile,
+  ContactRequestStatus,
+  PublicTalent,
+  PublicVisibilityState,
   Availability,
   CandidateProfile,
   CvFlag,
   CvVerificationStatus,
+  EndorsementRelation,
   EducationLevel,
   ExperienceLevel,
   Gender,
@@ -12,6 +24,7 @@ import type {
   Member,
   MatchFit,
   MatchSuggestion,
+  MatchSuggestionOrigin,
   MatchSuggestionStatus,
   Opportunity,
   OpportunityType,
@@ -21,15 +34,20 @@ import type {
   PreselectionResult,
   PreselectionTop,
   PreselectionTransmitOutcome,
+  ProofType,
   Provider,
   Recommendation,
   RecruiterProfile,
   Sector,
   SourcingLead,
   SourcingLeadType,
+  SubjectTrust,
+  TalentStatus,
+  TrustLevel,
   TalentAccountProfile,
   TalentLead,
   TalentProfile,
+  TalentSignalStatus,
   TalentVerification,
   User,
   UserRole,
@@ -275,14 +293,38 @@ export async function apiMyBookmarks(): Promise<string[]> {
   return bookmarks.map((b) => b.opportunityId)
 }
 
+/** Candidat diplômé transmis par OffRec, vu par le recruteur : le nom
+ *  seulement — ni email ni téléphone (OffRec reste l'intermédiaire). */
 export interface ShortlistMatched {
   source: 'matche_ia'
   suggestionId: string
   candidateId: string
   fullName: string
-  email: string
   status: MatchSuggestionStatus
   match: { score: number; reasons: string[] }
+}
+
+/** Recommandation d'un talent telle que la voit le recruteur : ni
+ *  commentaire, ni nom d'auteur, ni photo, ni contact. */
+export interface RecruiterEndorsement {
+  id: string
+  /** « Un client · Itaosy » : relation et quartier, jamais un nom. */
+  authorLabel: string
+  relation: EndorsementRelation
+  /** Seulement si l'agent l'a revu et ne l'a pas masqué. */
+  jobLabel: string | null
+  jobDate: string
+  highlights: string[]
+  proofVerified: boolean
+  createdAt: string
+}
+
+/** Dernière vérification de grille par l'agent. */
+export interface VerificationSummary {
+  verifiedAt: string
+  trade: string
+  validated: number
+  total: number
 }
 
 export interface ShortlistProposed {
@@ -290,13 +332,27 @@ export interface ShortlistProposed {
   talentId: string
   fullName: string
   trade: string
-  status: string
+  city: string
+  district: string | null
+  status: TalentStatus
+  proposedAt: string
+  /** « Adéquation à l'offre » (scoreOpportunity) — jamais additionnée à la confiance. */
+  match: { score: number; reasons: string[] }
+  /** « Confiance » calculée par le serveur à partir des recommandations. */
+  trust: SubjectTrust
+  verification: VerificationSummary | null
+  endorsements: RecruiterEndorsement[]
+}
+
+export interface Shortlist {
+  /** Offre de la shortlist (titre pour la modale d'entretien). */
+  opportunity: { id: string; title: string }
+  matched: ShortlistMatched[]
+  proposed: ShortlistProposed[]
 }
 
 export function apiShortlist(opportunityId: string) {
-  return request<{ matched: ShortlistMatched[]; proposed: ShortlistProposed[] }>(
-    `/opportunities/${opportunityId}/shortlist`,
-  )
+  return request<Shortlist>(`/opportunities/${opportunityId}/shortlist`)
 }
 
 /* ------------------------------------------------------------------ */
@@ -312,6 +368,9 @@ export type CandidateSuggestionOpportunity = Omit<Opportunity, 'recruiterId' | '
 
 export interface MatchSuggestionWithOpportunity extends MatchSuggestion {
   opportunity: CandidateSuggestionOpportunity
+  /** Entretien fixé par le recruteur — uniquement à partir de
+   *  `mise_en_relation` ; `null`/absent sinon. */
+  interview?: Interview | null
 }
 
 /** Adapte l'offre d'un dossier candidat aux composants qui attendent une
@@ -338,18 +397,21 @@ export interface ReceivedSuggestion {
   status: MatchSuggestionStatus
   score: number
   reasons: string[]
-  opportunity: { id: string; title: string }
+  /** `createdAt` : date de publication de l'offre (ISO) — absente si le
+   *  serveur est plus ancien. */
+  opportunity: { id: string; title: string; createdAt?: string }
   /** Adéquation critère par critère avec l'offre du recruteur — `null` si le
    *  profil candidat est introuvable, absent si le serveur est plus ancien. */
   fit?: MatchFit | null
   /** Rang dans la présélection OffRec au moment de la transmission, s'il a
    *  été enregistré. */
   preselectionRank?: number | null
+  /** Entretien fixé (dossier `mise_en_relation`), `null`/absent sinon. */
+  interview?: Interview | null
   /** Le serveur ne transmet au recruteur qu'une liste blanche du profil :
-   *  ni téléphone, ni CV, ni statut de vérification du CV. */
+   *  ni email, ni téléphone, ni CV, ni statut de vérification du CV. */
   candidate: {
     id: string
-    email: string
     candidateProfile: Pick<
       CandidateProfile,
       | 'fullName'
@@ -371,10 +433,10 @@ export function apiReceivedSuggestions() {
   )
 }
 
-/** Exprimer un intérêt — jamais un contact direct, ça notifie l'admin.
- *  Recruteur : sur un profil `proposee_recruteur`. Candidat : uniquement sur
- *  une ligne héritée `proposee_candidat` (400 sinon) — le consentement global
- *  remplace l'intérêt par offre. */
+/** Intérêt sans date — candidat uniquement, sur une ligne héritée
+ *  `proposee_candidat` (400 sinon). Côté recruteur, l'intérêt sans date est
+ *  retiré (400) : « Ce profil m'intéresse » fixe un entretien
+ *  (`apiScheduleInterview`, décision 2026-10-14). */
 export function apiExpressInterest(suggestionId: string) {
   return request<{ suggestion: MatchSuggestion }>(`/match-suggestions/${suggestionId}/interest`, {
     method: 'POST',
@@ -388,6 +450,148 @@ export function apiDeclineSuggestion(suggestionId: string) {
   return request<{ suggestion: MatchSuggestion }>(`/match-suggestions/${suggestionId}/decline`, {
     method: 'POST',
   })
+}
+
+/* ------------------------------------------------------------------ */
+/* Entretiens (décision produit 2026-10-14)                            */
+/* ------------------------------------------------------------------ */
+
+export interface InterviewInput {
+  /** Instant ISO avec fuseau — l'heure de Madagascar avec `+03:00`
+   *  (`madagascarInputsToIso`, src/lib/interview.ts). */
+  scheduledAt: string
+  durationMinutes: InterviewDuration
+  message?: string | null
+}
+
+/** « Ce profil m'intéresse » : le recruteur fixe l'entretien, ce qui met
+ *  directement en relation et notifie le candidat (plateforme + email).
+ *  403 hors de ses offres ; 409 sans accord du candidat, compte inactif ou
+ *  entretien déjà fixé ; 400 date hors fenêtre (2 h à 60 jours). */
+export function apiScheduleInterview(suggestionId: string, input: InterviewInput) {
+  return request<{ suggestion: MatchSuggestion; interview: Interview }>(
+    `/match-suggestions/${suggestionId}/interview`,
+    { method: 'POST', body: JSON.stringify(input) },
+  )
+}
+
+/** Reprogrammer : l'entretien repart à « en attente de confirmation ». */
+export function apiRescheduleInterview(suggestionId: string, input: InterviewInput) {
+  return request<{ interview: Interview }>(`/match-suggestions/${suggestionId}/interview`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
+/** Annuler l'entretien — la mise en relation reste acquise. */
+export function apiCancelInterview(suggestionId: string) {
+  return request<{ interview: Interview }>(`/match-suggestions/${suggestionId}/interview/cancel`, {
+    method: 'POST',
+  })
+}
+
+/** Candidat : confirmer sa présence. */
+export function apiConfirmInterview(suggestionId: string) {
+  return request<{ interview: Interview }>(`/match-suggestions/${suggestionId}/interview/confirm`, {
+    method: 'POST',
+  })
+}
+
+/** Candidat : signaler un empêchement (motif court, sans coordonnées). */
+export function apiReportInterviewUnavailable(suggestionId: string, reason: string) {
+  return request<{ interview: Interview }>(`/match-suggestions/${suggestionId}/interview/unavailable`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+/** Admin : relancer la synchronisation de l'agenda Google d'un entretien.
+ *  409 en mode simulé, 502 si Google échoue encore. */
+export function apiAdminResyncInterview(interviewId: string) {
+  return request<{ interview: AdminInterview }>(`/admin/matching/interviews/${interviewId}/calendar-sync`, {
+    method: 'POST',
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/* Onglets « Entretiens » (recruteur, admin)                           */
+/* ------------------------------------------------------------------ */
+
+export interface InterviewListFilters {
+  period: InterviewPeriod
+  status?: InterviewStatus
+  opportunityId?: string
+}
+
+export interface RecruiterInterviewItem {
+  interview: Interview
+  suggestionId: string
+  opportunity: { id: string; title: string }
+  /** Seul élément du profil transmis : le nom (ni email ni téléphone). */
+  candidate: { fullName: string | null }
+}
+
+export interface InterviewOfferSummary {
+  id: string
+  title: string
+  total: number
+  upcoming: number
+  /** Empêchements signalés, à reprogrammer ou annuler. */
+  toHandle: number
+}
+
+export interface RecruiterInterviewList {
+  interviews: RecruiterInterviewItem[]
+  /** Offres ayant au moins un entretien, compteurs indépendants des filtres. */
+  offers: InterviewOfferSummary[]
+  counts: { total: number; upcoming: number; toHandle: number }
+  truncated: boolean
+}
+
+function interviewListQuery(filters: Record<string, string | number | boolean | undefined>): string {
+  const q = new URLSearchParams()
+  for (const [name, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== '' && value !== false) q.set(name, String(value))
+  }
+  const text = q.toString()
+  return text ? `?${text}` : ''
+}
+
+/** Recruteur : entretiens de ses offres (lecture seule). */
+export function apiRecruiterInterviews(filters: InterviewListFilters) {
+  return request<RecruiterInterviewList>(`/match-suggestions/interviews${interviewListQuery({ ...filters })}`)
+}
+
+export interface AdminInterviewFilters extends InterviewListFilters {
+  recruiterId?: string
+  calendarIssue?: boolean
+}
+
+export interface AdminInterviewItem {
+  interview: AdminInterview
+  suggestionId: string
+  suggestionStatus: MatchSuggestionStatus
+  opportunity: { id: string; title: string; companyName: string }
+  recruiter: { id: string; companyName: string }
+  candidate: { id: string; fullName: string | null }
+}
+
+export interface AdminInterviewList {
+  interviews: AdminInterviewItem[]
+  total: number
+  /** Décalage de la page suivante, `null` s'il n'y en a plus. */
+  nextOffset: number | null
+  /** Sur l'offre / le recruteur filtrés, sinon toute la plateforme. */
+  counts: { upcoming: number; impediments: number; calendarIssues: number }
+  offers: { id: string; title: string; companyName: string; recruiterId: string }[]
+  recruiters: { id: string; companyName: string }[]
+}
+
+/** Admin : tous les entretiens, par page (`limit` 30 par défaut, 100 au plus). */
+export function apiAdminInterviews(filters: AdminInterviewFilters, page: { offset?: number; limit?: number } = {}) {
+  return request<AdminInterviewList>(
+    `/admin/matching/interviews${interviewListQuery({ ...filters, offset: page.offset || undefined, limit: page.limit })}`,
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -470,6 +674,8 @@ export interface AdminMatchSuggestion extends MatchSuggestion {
   cvFlagCount: number
   /** `false` : le serveur refusera (409) la transmission au recruteur. */
   matchingConsent: boolean
+  /** Entretien fixé par le recruteur (dossier `mise_en_relation`). */
+  interview?: AdminInterview | null
 }
 
 /** Suivi des suggestions. `apiAdminMatchSuggestions('suggeree')` = file de
@@ -627,14 +833,25 @@ export function apiAdminSetCvVerifierRoles(roles: UserRole[]) {
 /* Notifications                                                      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Les notifications du compte connecté, les plus récentes d'abord — le
+ * serveur en renvoie au plus `NOTIFICATIONS_PAGE_SIZE`.
+ */
+export const NOTIFICATIONS_PAGE_SIZE = 200
+
 export function apiMyNotifications() {
-  return request<{ notifications: Notification[] }>('/notifications/mine').then(
+  return request<{ notifications: Notification[] }>(`/notifications/mine?limit=${NOTIFICATIONS_PAGE_SIZE}`).then(
     (r) => r.notifications,
   )
 }
 
 export function apiMarkNotificationRead(id: string) {
   return request<void>(`/notifications/${id}/read`, { method: 'POST' })
+}
+
+/** Marque comme lues toutes les notifications du compte connecté. */
+export function apiMarkAllNotificationsRead() {
+  return request<{ updated: number }>('/notifications/read-all', { method: 'POST' }).then((r) => r.updated)
 }
 
 /* ------------------------------------------------------------------ */
@@ -813,8 +1030,16 @@ export function apiSubscribe(planCode: string) {
 /* Agent de terrain (verticale emploi vérifié)                         */
 /* ------------------------------------------------------------------ */
 
+/** Résumé de confiance sans détail (listes, compte talent). */
+export interface TrustSummary {
+  level: TrustLevel
+  recommendationCount: number
+}
+
+export type AgentTalentListItem = TalentProfile & { trust: TrustSummary }
+
 export function apiMyTalents() {
-  return request<{ talents: TalentProfile[] }>('/agent/talents').then((r) => r.talents)
+  return request<{ talents: AgentTalentListItem[] }>('/agent/talents').then((r) => r.talents)
 }
 
 export interface TalentDetail extends TalentProfile {
@@ -822,8 +1047,19 @@ export interface TalentDetail extends TalentProfile {
   proposals: { id: string; opportunityId: string; proposedAt: string; opportunity: Opportunity }[]
 }
 
+/** Fiche talent vue par son agent : confiance, recommandations, adéquation par offre. */
+export interface AgentTalentDetail extends TalentDetail {
+  trust: SubjectTrust
+  endorsements: AgentSignalEndorsement[]
+  opportunityMatches: { opportunityId: string; score: number; reasons: string[] }[]
+  /** Accord de visibilité publique (vitrine) et conditions manquantes. */
+  publicVisibility: PublicVisibilityState
+  /** Aperçu EXACT de la fiche publique (même liste blanche que la vitrine). */
+  publicPreview: PublicTalent
+}
+
 export function apiTalentDetail(id: string) {
-  return request<{ talent: TalentDetail }>(`/agent/talents/${id}`).then((r) => r.talent)
+  return request<{ talent: AgentTalentDetail }>(`/agent/talents/${id}`).then((r) => r.talent)
 }
 
 export interface TalentInput {
@@ -836,8 +1072,12 @@ export interface TalentInput {
   sector: Sector
   skills: string[]
   availability: string
+  district?: string
+  /** Obligatoire (`true`) à la création ; ignoré en modification. */
+  consent?: boolean
   fromLeadId?: string
   fromSourcingLeadId?: string
+  fromSignalId?: string
 }
 
 export function apiCreateTalent(input: TalentInput) {
@@ -970,7 +1210,14 @@ export interface TalentAccountMe {
   city: string
   gender: 'femme' | 'homme' | 'autre'
   lead: TalentLead | null
-  talent: TalentDetail | null
+  /** `trust` : niveau et nombre de recommandations, sans auteurs. */
+  talent:
+    | (TalentDetail & {
+        trust: TrustSummary & { independentSources: number }
+        /** Fiche publique (lecture seule : seul l'agent la gère). */
+        publicVisibility: { visible: boolean; publicConsentAt: string | null; publicRef: string | null }
+      })
+    | null
 }
 
 export function apiTalentAccountMe() {
@@ -978,11 +1225,189 @@ export function apiTalentAccountMe() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Recommandations de talents                                          */
+/* ------------------------------------------------------------------ */
+
+/** Contenu du champ `payload` de `apiRecommendTalent`. */
+export interface TalentEndorsementPayload {
+  trade: string
+  sector: Sector
+  province: string
+  city: string
+  district: string
+  subjectName?: string
+  contactPhone?: string
+  contactHint?: string
+  relation: 'client' | 'employeur' | 'collegue'
+  jobLabel: string
+  /** `YYYY-MM-DD`, jamais dans le futur. */
+  jobDate: string
+  highlights: string[]
+  comment?: string
+  authorDistrict?: string
+}
+
+/** Construit le `FormData` attendu par `apiRecommendTalent` (photo facultative). */
+export function talentEndorsementForm(payload: TalentEndorsementPayload, proof?: File | null): FormData {
+  const form = new FormData()
+  form.append('payload', JSON.stringify(payload))
+  if (proof) form.append('proof', proof)
+  return form
+}
+
+/** Réponse toujours neutre : ne dit jamais si la personne est déjà connue. */
+export async function apiRecommendTalent(form: FormData): Promise<{ ok: true; message: string }> {
+  const res = await fetch(`${API_BASE}/endorsements/talents`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  })
+  const body = await res.json().catch(() => undefined)
+  if (!res.ok) {
+    let message = body?.error ?? `Erreur ${res.status}`
+    const fieldErrors = body?.details?.fieldErrors as Record<string, string[]> | undefined
+    const first = fieldErrors ? Object.values(fieldErrors).flat()[0] : undefined
+    if (first) message = first
+    throw new ApiError(message, res.status, body?.details)
+  }
+  return body
+}
+
+/**
+ * Recommandation envoyée (talent ou entreprise). Statut neutre : talent —
+ * `en_cours` tant qu'un agent peut agir, `traitee` ensuite ; entreprise —
+ * `en_cours` tant qu'une preuve attend la revue de l'admin.
+ */
+export interface MyEndorsement {
+  id: string
+  subjectType: 'talent' | 'entreprise'
+  /** Entreprise : nom ; `null` pour un talent. */
+  companyName: string | null
+  /** Entreprise : id de la fiche si elle est visible (lien), sinon `null`. */
+  companyId: string | null
+  trade: string
+  city: string
+  district: string
+  relation: EndorsementRelation
+  jobLabel: string
+  jobDate: string
+  highlights: string[]
+  hasProof: boolean
+  proofFileUrl: string | null
+  createdAt: string
+  status: 'en_cours' | 'traitee'
+}
+
+export function apiMyEndorsements() {
+  return request<{ endorsements: MyEndorsement[] }>('/endorsements/mine').then((r) => r.endorsements)
+}
+
+/** Signal de la file des agents (sans téléphone : voir le détail). */
+export interface AgentTalentSignal {
+  id: string
+  trade: string
+  sector: Sector
+  province: string
+  city: string
+  district: string
+  status: TalentSignalStatus
+  mine: boolean
+  createdAt: string
+  updatedAt: string
+  expiresAt: string
+  contactPurged: boolean
+  mergedIntoId: string | null
+  talentId: string | null
+  subjectName: string | null
+  hasPhone: boolean
+  endorsementCount: number
+  proofCount: number
+  mergedCount: number
+  trust: SubjectTrust
+  possibleDuplicateIds: string[]
+}
+
+export interface AgentSignalEndorsement {
+  id: string
+  signalId: string | null
+  relation: EndorsementRelation
+  jobLabel: string
+  jobDate: string
+  highlights: string[]
+  comment: string | null
+  proof: ProofType
+  proofFileUrl: string | null
+  proofAccepted: boolean | null
+  reviewedAt: string | null
+  hiddenJobLabel: boolean
+  excludedAt: string | null
+  excludedReason: string | null
+  createdAt: string
+  authorDistrict: string
+  authorName: string
+  authorRoleLabel: string
+}
+
+export interface AgentTalentSignalDetail
+  extends Omit<AgentTalentSignal, 'subjectName' | 'hasPhone' | 'endorsementCount' | 'proofCount' | 'mergedCount' | 'possibleDuplicateIds'> {
+  subjectName: string | null
+  contactPhone: string | null
+  contactHint: string | null
+  endorsements: AgentSignalEndorsement[]
+  merged: { id: string; createdAt: string; district: string; subjectName: string | null; contactPhone: string | null; contactHint: string | null }[]
+  possibleDuplicates: { id: string; trade: string; district: string; city: string; status: TalentSignalStatus; createdAt: string; subjectName: string | null }[]
+}
+
+export function apiAgentTalentSignals(status?: TalentSignalStatus) {
+  return request<{ counts: Partial<Record<TalentSignalStatus, number>>; signals: AgentTalentSignal[] }>(
+    `/agent/talent-signals${status ? `?status=${status}` : ''}`,
+  )
+}
+
+export function apiAgentTalentSignal(id: string) {
+  return request<{ signal: AgentTalentSignalDetail }>(`/agent/talent-signals/${id}`).then((r) => r.signal)
+}
+
+/** Prise en charge atomique : 409 si un autre agent l'a prise avant. */
+export function apiAgentTakeSignal(id: string) {
+  return request<{ ok: true }>(`/agent/talent-signals/${id}/take`, { method: 'POST' })
+}
+
+/** `nouveau` rend le signal à la file ; `refuse` purge le contact immédiatement. */
+export function apiAgentUpdateSignal(id: string, status: 'nouveau' | 'pris_en_charge' | 'injoignable' | 'refuse') {
+  return request<{ ok: true }>(`/agent/talent-signals/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  })
+}
+
+export function apiAgentMergeSignal(id: string, intoId: string) {
+  return request<{ ok: true; intoId: string }>(`/agent/talent-signals/${id}/merge`, {
+    method: 'POST',
+    body: JSON.stringify({ intoId }),
+  })
+}
+
+export function apiAgentReviewEndorsement(
+  id: string,
+  review: { proofAccepted?: boolean; reviewed?: true; hiddenJobLabel?: boolean; exclude?: { reason: string } },
+) {
+  return request<{ endorsement: Pick<AgentSignalEndorsement, 'id' | 'proofAccepted' | 'reviewedAt' | 'hiddenJobLabel' | 'excludedAt' | 'excludedReason'> }>(
+    `/agent/endorsements/${id}`,
+    { method: 'PATCH', body: JSON.stringify(review) },
+  ).then((r) => r.endorsement)
+}
+
+/* ------------------------------------------------------------------ */
 /* Placements et success fee                                          */
 /* ------------------------------------------------------------------ */
 
+/** Déclaration d'un placement : l'offre doit être au recruteur et la
+ *  personne doit lui avoir été proposée pour cette offre (dossier transmis
+ *  par OffRec, ou talent proposé par un agent) — 404 / 400 sinon, 409 si un
+ *  placement non annulé existe déjà. */
 export interface PlacementInput {
-  opportunityId?: string
+  opportunityId: string
   candidateId?: string
   talentId?: string
   monthlySalaryAr?: number
@@ -995,8 +1420,16 @@ export function apiCreatePlacement(input: PlacementInput) {
   }).then((r) => r.placement)
 }
 
+/** Placement vu par le recruteur : le nom du candidat ou du talent, jamais
+ *  son email ni son téléphone. */
+export interface RecruiterPlacement extends Placement {
+  opportunity: { id: string; title: string; companyName: string } | null
+  candidate: { id: string; fullName: string | null } | null
+  talent: { id: string; fullName: string } | null
+}
+
 export function apiMyPlacements() {
-  return request<{ placements: Placement[] }>('/placements/mine').then((r) => r.placements)
+  return request<{ placements: RecruiterPlacement[] }>('/placements/mine').then((r) => r.placements)
 }
 
 export function apiUpdatePlacementStage(id: string, stage: PlacementStage) {
@@ -1024,7 +1457,93 @@ export function apiAdminPlacements() {
 /* Admin                                                               */
 /* ------------------------------------------------------------------ */
 
+/** Nombre d'événements sur les 7 derniers jours glissants et les 7 précédents. */
+export interface AdminWeekCounts {
+  last7: number
+  prev7: number
+}
+
+/** Champs historiques (`users` … `employment`) + indicateurs du tableau de
+ *  bord, tous calculés en base à `computedAt`. Séries quotidiennes alignées
+ *  sur `seriesDays` (30 jours, calendrier de Madagascar UTC+3, aujourd'hui
+ *  inclus, jours sans événement = 0). */
 export interface AdminStats {
+  computedAt: string
+  timezone: string
+  seriesDays: string[]
+  signups: {
+    total: number[]
+    byRole: Record<UserRole, number[]>
+    last30: number
+    last7: number
+    prev7: number
+    weeksByRole: Record<UserRole, AdminWeekCounts>
+  }
+  accounts: { total: number; byRole: Record<UserRole, number>; byStatus: Record<AdminUserStatus, number> }
+  candidates: {
+    total: number
+    withCv: number
+    withConsent: number
+    cvToVerify: number
+    cvVerified: number
+    cvRejected: number
+  }
+  matching: {
+    byStatus: Record<MatchSuggestionStatus, number>
+    toValidate: number
+    transmitted: number
+    interest: number
+    connected: number
+    dismissed: number
+    sentToRecruiter: number
+    conversionPercent: number | null
+    connectedSeries: number[]
+    connectedLast30: number
+    connectedLast7: number
+    connectedPrev7: number
+    createdLast7: number
+    createdPrev7: number
+  }
+  offers: {
+    total: number
+    open: number
+    expired: number
+    recruitersWithOpenOffer: number
+    newLast7: number
+    newPrev7: number
+  }
+  verifiedEmployment: {
+    talentsTotal: number
+    talentsByStatus: Record<TalentStatus, number>
+    signalsToProcess: number
+    signalsInProgress: number
+    contactRequestsNew: number
+    contactRequestsOpen: number
+    talentLeadsNew: number
+  }
+  trust: {
+    companyProofsToReview: number
+    companiesVisible: number
+    talentEndorsements: number
+    companyEndorsements: number
+  }
+  billing: {
+    plans: { code: string; name: string; priceAr: number; subscribers: number }[]
+    paidSubscriptions: number
+    monthlyCatalogAr: number
+    transactionsLast30Ar: number
+    transactionsLast30Count: number
+  }
+  placements: {
+    total: number
+    byStage: Record<PlacementStage, number>
+    inProgress: number
+    completed: number
+    cancelled: number
+    last30: number
+  }
+  notifications: { adminUnread: number }
+
   users: { candidates: number; recruiters: number; individuals: number; agents: number }
   opportunities: number
   applications: number
@@ -1040,16 +1559,87 @@ export interface AdminStats {
     placementsByStage: Record<string, number>
     activePartnerCompanies: number
   }
-  recentActivity: {
+}
+
+/** Tableau de bord du recruteur connecté (`GET /recruiter/stats`) : ses
+ *  seules données, calculées en base à `computedAt`. « Profils reçus » =
+ *  dossiers transmis par OffRec (à partir de `proposee_recruteur`), écartés
+ *  compris seulement s'ils avaient été transmis ; jamais une suggestion en
+ *  file interne. Séries alignées sur `seriesDays` (30 jours, UTC+3). */
+export interface RecruiterStats {
+  computedAt: string
+  timezone: string
+  seriesDays: string[]
+  offers: { total: number; open: number; expired: number; newLast7: number; newPrev7: number }
+  profiles: {
+    received: number
+    toReview: number
+    transmitted: number
+    interest: number
+    connected: number
+    dismissed: number
+    declinedByYou: number
+    connectionRate: number | null
+    receivedSeries: number[]
+    receivedSeriesByStatus: { toReview: number[]; connected: number[]; dismissed: number[] }
+    receivedLast30: number
+    receivedLast7: number
+    receivedPrev7: number
+    connectedSeries: number[]
+    connectedLast30: number
+    connectedLast7: number
+    connectedPrev7: number
+  }
+  byOffer: {
     id: string
-    action: string
-    userEmail: string | null
-    userRole: string | null
-    metadata: Record<string, unknown> | null
-    createdAt: string
+    title: string
+    open: boolean
+    deadline: string
+    received: number
+    toReview: number
+    connected: number
+    dismissed: number
   }[]
-  /** Connexions/déconnexions des 7 derniers jours — résumées, pas listées. */
-  recentLoginCount: number
+  /** `null` : entretiens pas encore activés sur ce serveur. */
+  interviews: {
+    total: number
+    upcoming: number
+    upcomingConfirmed: number
+    awaitingReply: number
+    toHandle: number
+    pastLast30: number
+    cancelled: number
+    next: {
+      suggestionId: string
+      scheduledAt: string
+      durationMinutes: number
+      status: InterviewStatus
+      opportunity: { id: string; title: string }
+      candidateName: string | null
+    } | null
+  } | null
+  placements: {
+    total: number
+    byStage: Record<PlacementStage, number>
+    inProgress: number
+    completed: number
+    cancelled: number
+    feeStepsDue: number
+    last30: number
+  }
+  subscription: {
+    planCode: string
+    planName: string
+    priceAr: number
+    maxActiveOpportunities: number | null
+    startedAt: string
+  } | null
+  notifications: { unread: number }
+  messages: { unread: number }
+}
+
+export function apiRecruiterStats() {
+  return request<RecruiterStats>('/recruiter/stats')
 }
 
 export function apiAdminStats() {
@@ -1067,7 +1657,7 @@ export function apiAdminCreateAgent(payload: {
   )
 }
 
-export type ReportTargetType = 'opportunity' | 'provider' | 'recommendation' | 'user'
+export type ReportTargetType = 'opportunity' | 'provider' | 'recommendation' | 'user' | 'endorsement' | 'talent' | 'company'
 export type ModerationActionType = 'dismiss' | 'warning' | 'restriction' | 'suspension' | 'ban'
 
 export function apiCreateReport(targetType: ReportTargetType, targetId: string, reason: string) {
@@ -1085,6 +1675,8 @@ export interface AdminReport {
   createdAt: string
   reporterEmail: string
   targetUser: { email: string; role: string; status: string } | null
+  /** Fiche publique de talent : « métier · quartier, ville » ; entreprise : « nom · ville ». */
+  targetLabel?: string | null
 }
 
 export function apiAdminReports() {
@@ -1103,4 +1695,636 @@ export function apiAiSummarizeProvider(providerId: string) {
     `/ai/summarize-provider/${providerId}`,
     { method: 'POST' },
   )
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin : talents et signaux (lecture seule)                         */
+/* ------------------------------------------------------------------ */
+
+export interface AdminTalent {
+  id: string
+  fullName: string
+  trade: string
+  sector: Sector
+  province: string
+  city: string
+  district: string | null
+  status: TalentStatus
+  createdAt: string
+  consentAt: string | null
+  /** Accord de visibilité publique (vitrine) recueilli par l'agent. */
+  publicConsentAt: string | null
+  publicRef: string | null
+  /** Réellement en ligne (accord + conditions réunies). */
+  publicVisible: boolean
+  /** Demandes de contact `nouvelle` ou `transmise`. */
+  openContactRequests: number
+  agent: { id: string; name: string }
+  verification: VerificationSummary | null
+  verificationCount: number
+  proposalCount: number
+  placementCount: number
+  trust: SubjectTrust
+}
+
+export function apiAdminTalents() {
+  return request<{ talents: AdminTalent[] }>('/admin/talents').then((r) => r.talents)
+}
+
+/** Modération : retire la fiche publique d'un talent (jamais la donner). */
+export function apiAdminRevokePublicVisibility(talentId: string) {
+  return request<{ ok: true }>(`/admin/talents/${talentId}/public-visibility`, {
+    method: 'PUT',
+    body: JSON.stringify({ granted: false }),
+  })
+}
+
+export interface AdminTalentSignal {
+  id: string
+  trade: string
+  sector: Sector
+  province: string
+  city: string
+  district: string
+  status: TalentSignalStatus
+  createdAt: string
+  expiresAt: string
+  contactPurged: boolean
+  subjectName: string | null
+  contactPhone: string | null
+  contactHint: string | null
+  agentName: string | null
+  talentId: string | null
+  mergedIntoId: string | null
+  endorsementCount: number
+  trust: SubjectTrust
+}
+
+export function apiAdminTalentSignals(status?: TalentSignalStatus) {
+  return request<{ counts: Partial<Record<TalentSignalStatus, number>>; signals: AdminTalentSignal[] }>(
+    `/admin/talent-signals${status ? `?status=${status}` : ''}`,
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Vitrine publique « Talents recommandés » et contact via OffRec      */
+/* ------------------------------------------------------------------ */
+
+export interface PublicTalentList {
+  /** Niveau « Recommandé » ou « Très recommandé », triés par confiance. */
+  recommended: PublicTalent[]
+  /** Niveau « Nouveau » : section séparée, jamais pénalisée. */
+  newcomers: PublicTalent[]
+  total: { recommended: number; newcomers: number }
+  /** Métiers et villes présents dans la vitrine (pour les filtres). */
+  filters: { trades: string[]; cities: string[] }
+}
+
+export function apiPublicTalents(params: { trade?: string; city?: string } = {}) {
+  const q = new URLSearchParams()
+  if (params.trade) q.set('trade', params.trade)
+  if (params.city) q.set('city', params.city)
+  const qs = q.toString()
+  return request<PublicTalentList>(`/talents-recommandes${qs ? `?${qs}` : ''}`)
+}
+
+export function apiPublicTalent(publicRef: string) {
+  return request<{ talent: PublicTalent }>(`/talents-recommandes/${encodeURIComponent(publicRef)}`).then((r) => r.talent)
+}
+
+export function apiRequestTalentContact(publicRef: string, need: string) {
+  return request<{ request: { id: string; status: ContactRequestStatus; createdAt: string }; message: string }>(
+    `/talents-recommandes/${encodeURIComponent(publicRef)}/contact`,
+    { method: 'POST', body: JSON.stringify({ need }) },
+  )
+}
+
+export interface MyTalentContactRequest {
+  id: string
+  need: string
+  status: ContactRequestStatus
+  createdAt: string
+  handledAt: string | null
+  /** `publicRef` : `null` si la fiche n'est plus publique. */
+  talent: { trade: string; city: string; district: string | null; publicRef: string | null }
+}
+
+export function apiMyTalentContactRequests() {
+  return request<{ requests: MyTalentContactRequest[] }>('/talents-recommandes/mes-demandes').then((r) => r.requests)
+}
+
+/** Agent : donner ou retirer l'accord de visibilité publique d'un de ses talents. */
+export function apiAgentSetPublicVisibility(talentId: string, granted: boolean) {
+  return request<{ publicVisibility: PublicVisibilityState }>(`/agent/talents/${talentId}/public-visibility`, {
+    method: 'PUT',
+    body: JSON.stringify({ granted }),
+  }).then((r) => r.publicVisibility)
+}
+
+export interface AgentContactRequest {
+  id: string
+  status: ContactRequestStatus
+  need: string
+  createdAt: string
+  handledAt: string | null
+  talent: { id: string; fullName: string; trade: string; city: string; district: string | null }
+  requester: { role: UserRole; roleLabel: string; name: string | null; email: string; phone: string | null }
+}
+
+export function apiAgentContactRequests(status?: ContactRequestStatus) {
+  return request<{ counts: Partial<Record<ContactRequestStatus, number>>; requests: AgentContactRequest[] }>(
+    `/agent/contact-requests${status ? `?status=${status}` : ''}`,
+  )
+}
+
+export function apiAgentUpdateContactRequest(id: string, status: Exclude<ContactRequestStatus, 'nouvelle'>) {
+  return request<{ request: AgentContactRequest }>(`/agent/contact-requests/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  }).then((r) => r.request)
+}
+
+/* ------------------------------------------------------------------ */
+/* Entreprises recommandées                                            */
+/* ------------------------------------------------------------------ */
+
+export interface PublicCompanyList {
+  /** Triées par confiance, puis par nom. */
+  companies: PublicCompany[]
+  total: number
+  filters: { cities: string[] }
+}
+
+/** Vitrine et recherche (`q` : nom, comparé sans accents, ponctuation ni forme juridique). */
+export function apiPublicCompanies(params: { q?: string; city?: string; sector?: Sector; limit?: number } = {}) {
+  const q = new URLSearchParams()
+  if (params.q) q.set('q', params.q)
+  if (params.city) q.set('city', params.city)
+  if (params.sector) q.set('sector', params.sector)
+  if (params.limit) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return request<PublicCompanyList>(`/companies${qs ? `?${qs}` : ''}`)
+}
+
+export function apiPublicCompany(id: string) {
+  return request<{ company: PublicCompany }>(`/companies/${encodeURIComponent(id)}`).then((r) => r.company)
+}
+
+/** Fiche de l'entreprise qui publie une offre, `null` si aucune fiche liée et visible. */
+export function apiCompanyForOpportunity(opportunityId: string) {
+  return request<{ company: PublicCompany | null }>(
+    `/companies/by-opportunity/${encodeURIComponent(opportunityId)}`,
+  ).then((r) => r.company)
+}
+
+/** Recruteur : sa fiche entreprise liée par un admin, `null` sinon. */
+export function apiMyLinkedCompany() {
+  return request<{ company: LinkedCompanySummary | null }>('/companies/mine').then((r) => r.company)
+}
+
+/** Contenu du champ `payload` de `apiRecommendCompany`. */
+export interface CompanyEndorsementPayload {
+  /** Entreprise existante (choisie dans la recherche)… */
+  companyId?: string
+  /** …ou nouvelle fiche (dédoublonnée par nom normalisé et ville). */
+  company?: { name: string; sector: Sector; province: string; city: string }
+  relation: CompanyRelation
+  jobLabel: string
+  /** `YYYY-MM-DD`, jamais dans le futur. */
+  jobDate: string
+  highlights: string[]
+  comment?: string
+  authorDistrict?: string
+}
+
+/** Réponse neutre ; la preuve (photo ou PDF) est facultative. */
+export async function apiRecommendCompany(payload: CompanyEndorsementPayload, proof?: File | null): Promise<{ ok: true; message: string }> {
+  const form = new FormData()
+  form.append('payload', JSON.stringify(payload))
+  if (proof) form.append('proof', proof)
+  const res = await fetch(`${API_BASE}/endorsements/companies`, { method: 'POST', credentials: 'include', body: form })
+  const body = await res.json().catch(() => undefined)
+  if (!res.ok) {
+    let message = body?.error ?? `Erreur ${res.status}`
+    const fieldErrors = body?.details?.fieldErrors as Record<string, string[]> | undefined
+    const first = fieldErrors ? Object.values(fieldErrors).flat()[0] : undefined
+    if (first) message = first
+    throw new ApiError(message, res.status, body?.details)
+  }
+  return body
+}
+
+/** Admin : recommandation d'entreprise, auteur et commentaire compris. */
+export interface AdminCompanyEndorsement {
+  id: string
+  relation: EndorsementRelation
+  jobLabel: string
+  jobDate: string
+  highlights: string[]
+  comment: string | null
+  proof: 'facture' | 'photo' | 'aucune'
+  /** Présent tant que la preuve attend la revue (supprimée ensuite). */
+  proofFileUrl: string | null
+  proofAccepted: boolean | null
+  reviewedAt: string | null
+  excludedAt: string | null
+  excludedReason: string | null
+  createdAt: string
+  authorDistrict: string
+  authorName: string
+  authorRoleLabel: string
+}
+
+export interface AdminCompany {
+  id: string
+  name: string
+  nameKey: string
+  sector: Sector
+  city: string
+  province: string
+  hiddenAt: string | null
+  hiddenReason: string | null
+  createdAt: string
+  recruiter: { id: string; email: string; status: string; companyName: string | null } | null
+  trust: SubjectTrust
+  endorsementCount: number
+  retainedCount: number
+  pendingProofs: number
+}
+
+export interface AdminRecruiterOption {
+  id: string
+  email: string
+  status: string
+  companyName: string | null
+  city: string | null
+  linkedCompany: { id: string; name: string } | null
+}
+
+export function apiAdminCompanies() {
+  return request<{ companies: AdminCompany[] }>('/admin/companies').then((r) => r.companies)
+}
+
+export function apiAdminCompanyEndorsements(id: string) {
+  return request<{ endorsements: AdminCompanyEndorsement[] }>(`/admin/companies/${id}`).then((r) => r.endorsements)
+}
+
+export function apiAdminCompanyRecruiters() {
+  return request<{ recruiters: AdminRecruiterOption[] }>('/admin/companies/recruiters').then((r) => r.recruiters)
+}
+
+/** Décision sur la preuve (le fichier est supprimé dans les deux cas) ou exclusion d'un auteur lié. */
+export function apiAdminReviewCompanyEndorsement(
+  id: string,
+  review: { proofAccepted?: boolean; exclude?: { reason: string } },
+) {
+  return request<{ ok: true }>(`/admin/companies/endorsements/${id}`, { method: 'PATCH', body: JSON.stringify(review) })
+}
+
+export function apiAdminSetCompanyHidden(id: string, hidden: boolean, reason?: string) {
+  return request<{ ok: true }>(`/admin/companies/${id}/visibility`, {
+    method: 'PATCH',
+    body: JSON.stringify(hidden ? { hidden: true, reason } : { hidden: false }),
+  })
+}
+
+export function apiAdminLinkCompanyRecruiter(id: string, recruiterUserId: string | null) {
+  return request<{ ok: true }>(`/admin/companies/${id}/recruiter`, {
+    method: 'PUT',
+    body: JSON.stringify({ recruiterUserId }),
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin : comptes recruteurs (consultation)                           */
+/* ------------------------------------------------------------------ */
+
+/** Statut d'un compte (pipeline de modération). */
+export type AdminUserStatus = 'active' | 'warned' | 'restricted' | 'suspended' | 'banned'
+
+export type AdminRecruiterSort = 'activity' | 'recent' | 'name'
+
+/** Profils d'une offre par statut ; `legacy` regroupe les statuts hérités. */
+export interface AdminRecruiterSuggestionCounts {
+  suggeree: number
+  proposee_recruteur: number
+  interet_recruteur: number
+  mise_en_relation: number
+  ecartee: number
+  legacy: number
+}
+
+export interface AdminRecruiterSummary {
+  id: string
+  email: string
+  /** Entreprise déclarée, ou l'email à défaut de profil. */
+  displayName: string
+  status: AdminUserStatus
+  createdAt: string
+  lastActivityAt: string
+  profile: { companyName: string; sector: Sector; city: string; province: string } | null
+  subscription: { planCode: string; planName: string; priceAr: number; startedAt: string } | null
+  linkedCompany: {
+    id: string
+    name: string
+    city: string
+    hidden: boolean
+    trust: { level: TrustLevel; index: number | null; independentSources: number } | null
+  } | null
+  counts: {
+    offers: number
+    openOffers: number
+    expiredOffers: number
+    awaitingValidation: number
+    proposedProfiles: number
+    interests: number
+    connections: number
+    discarded: number
+    talentProposals: number
+    placements: number
+    openReports: number
+  }
+}
+
+export interface AdminRecruiterList {
+  total: number
+  totalRecruiters: number
+  limit: number
+  offset: number
+  statusCounts: Record<AdminUserStatus, number>
+  recruiters: AdminRecruiterSummary[]
+}
+
+export interface AdminRecruiterOpportunity {
+  id: string
+  title: string
+  companyName: string
+  category: string
+  sector: Sector
+  opportunityType: OpportunityType
+  level: ExperienceLevel
+  province: string
+  city: string
+  requiredSkills: string[]
+  /** `[]` si l'offre n'en a pas (ou serveur antérieur aux missions). */
+  missions: string[]
+  featured: boolean
+  createdAt: string
+  deadline: string
+  expired: boolean
+  suggestions: AdminRecruiterSuggestionCounts
+  talentProposals: number
+  placements: number
+}
+
+export interface AdminRecruiterDetail {
+  recruiter: AdminRecruiterSummary
+  /** Conversation existante entre l'admin connecté et ce recruteur (`/messages?c=…`). */
+  conversationId: string | null
+  opportunitiesTotal: number
+  opportunities: AdminRecruiterOpportunity[]
+}
+
+export function apiAdminRecruiters(
+  params: { q?: string; status?: AdminUserStatus; sort?: AdminRecruiterSort; limit?: number; offset?: number } = {},
+) {
+  const q = new URLSearchParams()
+  if (params.q) q.set('q', params.q)
+  if (params.status) q.set('status', params.status)
+  if (params.sort) q.set('sort', params.sort)
+  if (params.limit !== undefined) q.set('limit', String(params.limit))
+  if (params.offset !== undefined) q.set('offset', String(params.offset))
+  const qs = q.toString()
+  return request<AdminRecruiterList>(`/admin/recruiters${qs ? `?${qs}` : ''}`)
+}
+
+export function apiAdminRecruiter(id: string) {
+  return request<AdminRecruiterDetail>(`/admin/recruiters/${encodeURIComponent(id)}`)
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin : comptes candidats (consultation)                            */
+/* ------------------------------------------------------------------ */
+
+export type AdminCandidateSort = 'activity' | 'recent' | 'name' | 'completion'
+/** `given` : consentement de matching en vigueur ; `missing` : jamais donné ou retiré. */
+export type AdminCandidateConsentFilter = 'given' | 'missing'
+/** `present` / `absent`, ou un statut de vérification (CV déposé dans ce statut). */
+export type AdminCandidateCvFilter = 'present' | 'absent' | CvVerificationStatus
+
+/** Dossiers d'un candidat par statut ; `legacy` regroupe les statuts hérités. */
+export type AdminCandidateDossierCounts = AdminRecruiterSuggestionCounts
+
+export interface AdminCandidateSummary {
+  id: string
+  email: string
+  /** Nom du profil, ou l'email à défaut de profil. */
+  displayName: string
+  status: AdminUserStatus
+  createdAt: string
+  lastActivityAt: string
+  profile: {
+    city: string
+    province: string
+    educationLevel: EducationLevel
+    experienceLevel: ExperienceLevel
+    sector: Sector | null
+    skillsCount: number
+  } | null
+  /** 0–100, même règle que la carte « Complétez votre profil » ; `null` sans profil. */
+  completion: number | null
+  cv: {
+    uploaded: boolean
+    /** `null` sans CV déposé. */
+    verificationStatus: CvVerificationStatus | null
+    submittedAt: string | null
+    flagCount: number
+  }
+  matchingConsentAt: string | null
+  counts: AdminCandidateDossierCounts & { openReports: number }
+}
+
+export interface AdminCandidateList {
+  total: number
+  totalCandidates: number
+  limit: number
+  offset: number
+  statusCounts: Record<AdminUserStatus, number>
+  candidates: AdminCandidateSummary[]
+}
+
+/** Suggestions extraites du CV par l'IA, NON confirmées par le candidat. */
+export interface AdminCandidateExtracted {
+  extractedAt: string | null
+  confidence: 'high' | 'medium' | 'low'
+  professionalTitle: string | null
+  professionalSummary: string | null
+  yearsOfExperience: number | null
+  /** Compétences détectées absentes du profil confirmé. */
+  skillsNotInProfile: string[]
+  technologies: string[]
+  experiences: {
+    jobTitle: string | null
+    company: string | null
+    location: string | null
+    startDate: string | null
+    endDate: string | null
+    isCurrent: boolean
+    description: string | null
+  }[]
+  education: { degree: string | null; school: string | null; field: string | null; graduationDate: string | null }[]
+  certifications: { name: string | null; issuer: string | null; issueDate: string | null }[]
+  languages: { name: string | null; level: string | null }[]
+  projects: { name: string | null; role: string | null; description: string | null }[]
+  desiredLocations: string[]
+  availability: string | null
+}
+
+export interface AdminCandidateDossier {
+  id: string
+  status: MatchSuggestionStatus
+  score: number
+  origin: MatchSuggestionOrigin
+  reasons: string[]
+  preselectionRank: number | null
+  createdAt: string
+  updatedAt: string
+  opportunity: { id: string; title: string; companyName: string; city: string; deadline: string; expired: boolean }
+  recruiter: { id: string; email: string; displayName: string }
+}
+
+export interface AdminCandidateAccountDetail {
+  candidate: AdminCandidateSummary
+  /** Profil confirmé (même forme que l'aperçu de la mise en relation) ; `null` sans profil. */
+  profile: AdminCandidateDetail | null
+  /** Éléments manquants pour atteindre 100 % de complétion. */
+  completionMissing: string[]
+  cv: {
+    /** Chemin du CV en vigueur, à ouvrir avec `apiFileUrl()` (accès contrôlé par le serveur). */
+    url: string | null
+    submittedAt: string | null
+    attestedAt: string | null
+    verificationStatus: CvVerificationStatus | null
+    verifiedAt: string | null
+    verificationNote: string | null
+    flags: CvFlag[]
+    submissions: { submittedAt: string; current: boolean; flagCount: number }[]
+    history: CvVerificationDecisionEntry[]
+  }
+  /** `null` sans CV déposé. */
+  extracted: AdminCandidateExtracted | null
+  dossiersTotal: number
+  dossiers: AdminCandidateDossier[]
+}
+
+export function apiAdminCandidates(
+  params: {
+    q?: string
+    status?: AdminUserStatus
+    consent?: AdminCandidateConsentFilter
+    cv?: AdminCandidateCvFilter
+    sort?: AdminCandidateSort
+    limit?: number
+    offset?: number
+  } = {},
+) {
+  const q = new URLSearchParams()
+  if (params.q) q.set('q', params.q)
+  if (params.status) q.set('status', params.status)
+  if (params.consent) q.set('consent', params.consent)
+  if (params.cv) q.set('cv', params.cv)
+  if (params.sort) q.set('sort', params.sort)
+  if (params.limit !== undefined) q.set('limit', String(params.limit))
+  if (params.offset !== undefined) q.set('offset', String(params.offset))
+  const qs = q.toString()
+  return request<AdminCandidateList>(`/admin/candidates${qs ? `?${qs}` : ''}`)
+}
+
+export function apiAdminCandidate(id: string) {
+  return request<AdminCandidateAccountDetail>(`/admin/candidates/${encodeURIComponent(id)}`)
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin : journal d'activité (consultation)                           */
+/* ------------------------------------------------------------------ */
+
+/** Familles d'actions — libellés fournis par le serveur (`families`), seule source. */
+export type AdminActivityFamily =
+  | 'comptes'
+  | 'candidats'
+  | 'matching'
+  | 'recruteurs'
+  | 'talents'
+  | 'recommandations'
+  | 'entreprises'
+  | 'moderation'
+  | 'placements'
+  | 'administration'
+  | 'autre'
+
+export interface AdminActivityItem {
+  id: string
+  createdAt: string
+  /** Code d'action d'`AuditLog` (jamais affiché tel quel : voir `label`). */
+  action: string
+  family: AdminActivityFamily
+  /** Événement technique (matching, envoi de notification, purge). */
+  system: boolean
+  /** Libellé français de l'action. */
+  label: string
+  /** Complément de phrase (statut, nombre, profil concerné…) ou `null`. */
+  detail: string | null
+  actor: {
+    id: string
+    displayName: string
+    role: UserRole
+    email: string
+    /** Fiche admin de l'acteur quand elle existe (`/admin/candidats?id=`…). */
+    link: string | null
+  } | null
+  /** L'acteur existe mais n'est jamais exposé (auteur d'une recommandation). */
+  actorMasked: boolean
+  target: {
+    type: 'compte' | 'offre' | 'entreprise' | 'talent' | 'signal' | 'placement'
+    id: string | null
+    label: string
+  } | null
+  /** Écran admin concerné, ou `null`. */
+  link: string | null
+}
+
+export interface AdminActivityPage {
+  items: AdminActivityItem[]
+  nextCursor: string | null
+  total: number
+  families: { key: AdminActivityFamily; label: string; count: number }[]
+  allCount: number
+  includeSystem: boolean
+}
+
+export interface AdminActivityQuery {
+  family?: AdminActivityFamily
+  role?: UserRole
+  q?: string
+  /** ISO 8601, inclus. */
+  from?: string
+  /** ISO 8601, exclu. */
+  to?: string
+  system?: boolean
+  cursor?: string
+  limit?: number
+}
+
+export function apiAdminActivity(params: AdminActivityQuery = {}) {
+  const q = new URLSearchParams()
+  if (params.family) q.set('family', params.family)
+  if (params.role) q.set('role', params.role)
+  if (params.q) q.set('q', params.q)
+  if (params.from) q.set('from', params.from)
+  if (params.to) q.set('to', params.to)
+  if (params.system) q.set('system', '1')
+  if (params.cursor) q.set('cursor', params.cursor)
+  if (params.limit !== undefined) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return request<AdminActivityPage>(`/admin/activity${qs ? `?${qs}` : ''}`)
 }

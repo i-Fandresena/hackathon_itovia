@@ -15,6 +15,7 @@ export function ReportButton({ targetType, targetId }: ReportButtonProps) {
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [sent, setSent] = useState(false)
+  const [error, setError] = useState('')
 
   if (!currentUser) return null
   if (sent) {
@@ -24,8 +25,13 @@ export function ReportButton({ targetType, targetId }: ReportButtonProps) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (reason.trim().length < 10) return
-    await apiCreateReport(targetType, targetId, reason.trim())
-    setSent(true)
+    setError('')
+    try {
+      await apiCreateReport(targetType, targetId, reason.trim())
+      setSent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Signalement impossible.')
+    }
   }
 
   if (!open) {
@@ -48,6 +54,11 @@ export function ReportButton({ targetType, targetId }: ReportButtonProps) {
       <Button type="submit" size="sm" disabled={reason.trim().length < 10}>
         Envoyer
       </Button>
+      {error && (
+        <p role="alert" style={{ width: '100%', fontSize: '0.85rem', color: 'var(--color-danger)' }}>
+          {error}
+        </p>
+      )}
     </form>
   )
 }

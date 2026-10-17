@@ -23,7 +23,7 @@ const STAGE_LABELS: Record<PlacementStage, string> = {
  * recruteur autodéclare et fait avancer ses propres placements sans
  * validation ; jusqu'ici, le seul écho côté admin était le compteur agrégé
  * du tableau de bord. Une correction faite ici est journalisée (voir
- * `admin_corrected_placement_stage` dans l'activité récente).
+ * `admin_corrected_placement_stage` dans le journal d'activité, `/admin/activite`).
  */
 export function AdminPlacements() {
   const [placements, setPlacements] = useState<AdminPlacement[] | null>(null)
@@ -75,7 +75,7 @@ export function AdminPlacements() {
           <p>
             Tous les placements déclarés par les recruteurs, toutes offres confondues.
             Le recruteur fait avancer ses étapes lui-même — une correction faite ici est
-            journalisée dans l’activité récente du tableau de bord.
+            journalisée dans le journal d’activité.
           </p>
         </header>
 

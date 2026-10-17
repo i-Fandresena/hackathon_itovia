@@ -4,6 +4,7 @@ import path from 'node:path'
 import { prisma } from '../lib/prisma.js'
 import { isAccountBlocked } from '../middleware/auth.js'
 import { canVerifyCv } from '../lib/cv-access.js'
+import { PROOF_DIR, PROOF_FILE_PATTERN } from '../lib/proof-upload.js'
 
 /**
  * Accès authentifié aux fichiers déposés — remplace l'ancien `express.static`
@@ -67,6 +68,84 @@ router.get('/cv/:file', async (req, res, next) => {
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', 'inline')
     res.setHeader('Cache-Control', 'private, no-store')
+    res.sendFile(filePath, (err) => {
+      if (err && !res.headersSent) next(err)
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Preuves des recommandations — jamais publiques. Entreprise (photo ou PDF,
+ * pas de signal) : un admin et l'auteur seulement, jusqu'à la revue de
+ * l'admin qui supprime le fichier. Talent (photo) :
+ * lisibles par : un admin ; un agent si le signal (ou celui dans lequel il a
+ * été fusionné) est `nouveau` ou lui est attribué, ou si le talent rattaché
+ * est le sien ; l'auteur de la recommandation. `Cross-Origin-Resource-Policy:
+ * same-site` : sinon helmet (`same-origin`) bloque l'`<img>` du frontend
+ * servi sur un autre port en développement.
+ */
+router.get('/preuves/:file', async (req, res, next) => {
+  try {
+    if (!req.session) {
+      res.status(401).json({ error: 'Authentification requise.' })
+      return
+    }
+    const fileName = req.params.file
+    if (!PROOF_FILE_PATTERN.test(fileName)) {
+      res.status(404).json({ error: 'Fichier introuvable.' })
+      return
+    }
+    if (await isAccountBlocked(req.session.sub)) {
+      res.status(403).json({ error: 'Compte suspendu ou banni.' })
+      return
+    }
+    const fileUrl = `/uploads/preuves/${fileName}`
+    const endorsement = await prisma.endorsement.findFirst({
+      where: { proofFileUrl: fileUrl },
+      select: { authorMember: { select: { userId: true } }, talentSignal: true },
+    })
+    if (!endorsement) {
+      res.status(404).json({ error: 'Fichier introuvable.' })
+      return
+    }
+    const { role, sub } = req.session
+    let allowed = role === 'admin' || endorsement.authorMember.userId === sub
+    if (!allowed && role === 'agent' && endorsement.talentSignal) {
+      let signal = endorsement.talentSignal
+      for (let i = 0; i < 10 && signal.mergedIntoId; i++) {
+        const next = await prisma.talentSignal.findUnique({ where: { id: signal.mergedIntoId } })
+        if (!next) break
+        signal = next
+      }
+      allowed = signal.status === 'nouveau' || signal.agentId === sub
+      if (!allowed && signal.talentId) {
+        const talent = await prisma.talentProfile.findUnique({ where: { id: signal.talentId }, select: { agentId: true } })
+        allowed = talent?.agentId === sub
+      }
+    }
+    if (!allowed) {
+      res.status(403).json({ error: 'Accès refusé à ce fichier.' })
+      return
+    }
+
+    const filePath = path.join(PROOF_DIR, fileName)
+    try {
+      await access(filePath)
+    } catch {
+      res.status(404).json({ error: 'Fichier introuvable.' })
+      return
+    }
+    const ext = fileName.split('.').pop()
+    res.setHeader(
+      'Content-Type',
+      ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'pdf' ? 'application/pdf' : 'image/jpeg',
+    )
+    res.setHeader('Content-Disposition', 'inline')
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-site')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
     res.sendFile(filePath, (err) => {
       if (err && !res.headersSent) next(err)
     })

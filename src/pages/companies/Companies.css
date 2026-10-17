@@ -1,0 +1,239 @@
+/* Entreprises recommandées (préfixe cmp-) — complète PublicTalents.css (ptl-)
+   et RecommendTalent.css (rt-), réutilisés pour la vitrine et le formulaire. */
+
+.cmp-relations-line {
+  color: var(--color-ink-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cmp-chip-count {
+  color: var(--color-ink-muted);
+  font-weight: 700;
+}
+
+.cmp-card-note {
+  color: var(--color-ink-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* Vitrine : filtres (recherche + ville + secteur) */
+.cmp-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr)) auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 1.5rem;
+}
+
+.cmp-filters .field {
+  min-width: 0;
+}
+
+/* Fiche : répartition et points forts */
+.cmp-bars {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+}
+
+.cmp-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--color-ink-secondary);
+}
+
+.cmp-bar-label {
+  overflow-wrap: anywhere;
+}
+
+.cmp-bar-track {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  overflow: hidden;
+}
+
+.cmp-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent);
+}
+
+.cmp-bar-value {
+  font-weight: 700;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Formulaire : choix de l'entreprise */
+.cmp-search-results {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+.cmp-result {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.cmp-result:hover,
+.cmp-result:focus-visible {
+  border-color: var(--color-accent);
+}
+
+.cmp-result svg {
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+
+.cmp-result-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cmp-result-text strong {
+  overflow-wrap: anywhere;
+}
+
+.cmp-result-text span {
+  color: var(--color-ink-muted);
+  font-size: 0.82rem;
+}
+
+.cmp-selected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent-muted);
+  margin-bottom: 0.75rem;
+}
+
+.cmp-selected-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cmp-selected-name svg {
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+
+/* Encart du recruteur lié et bloc de l'offre publique */
+.cmp-linked {
+  margin-bottom: 1.5rem;
+}
+
+.cmp-linked-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.cmp-linked-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cmp-linked-title svg {
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+
+.cmp-linked-count {
+  color: var(--color-ink-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 0.6rem;
+}
+
+.cmp-linked-note {
+  color: var(--color-ink-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin-top: 0.75rem;
+}
+
+.cmp-employer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  font-size: 0.9rem;
+}
+
+.cmp-employer-label {
+  font-weight: 650;
+  color: var(--color-ink);
+}
+
+.cmp-employer a {
+  color: var(--color-accent);
+  font-weight: 650;
+}
+
+@media (max-width: 760px) {
+  .cmp-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .cmp-filters .cmp-filter-q,
+  .cmp-filters .ptl-filters-reset {
+    grid-column: 1 / -1;
+  }
+
+  .cmp-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .cmp-bar-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

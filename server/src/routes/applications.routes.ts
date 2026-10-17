@@ -20,11 +20,19 @@ router.get('/mine', requireRole('candidate'), async (req, res, next) => {
 
 router.get('/received', requireRole('recruiter'), async (req, res, next) => {
   try {
+    // Ancien parcours (candidatures directes) : liste blanche explicite, sans
+    // email ni téléphone du candidat — OffRec reste l'intermédiaire.
     const applications = await prisma.application.findMany({
       where: { opportunity: { recruiterId: req.session!.sub } },
-      include: {
-        opportunity: true,
-        candidate: { include: { candidateProfile: true } },
+      select: {
+        id: true,
+        opportunityId: true,
+        candidateId: true,
+        message: true,
+        status: true,
+        createdAt: true,
+        opportunity: { select: { title: true } },
+        candidate: { select: { candidateProfile: { select: { fullName: true, province: true } } } },
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -34,8 +42,6 @@ router.get('/received', requireRole('recruiter'), async (req, res, next) => {
         opportunityId: a.opportunityId,
         candidateId: a.candidateId,
         candidateName: a.candidate.candidateProfile?.fullName ?? '',
-        candidateEmail: a.candidate.email,
-        candidatePhone: a.candidate.candidateProfile?.phone ?? '',
         candidateProvince: a.candidate.candidateProfile?.province ?? '',
         message: a.message ?? undefined,
         status: a.status,

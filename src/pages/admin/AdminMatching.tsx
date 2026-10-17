@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Bot,
   CheckCircle2,
@@ -21,11 +22,15 @@ import { Loading } from '../../components/ui/Loading'
 import { Modal } from '../../components/ui/Modal'
 import { CvFlagCount, CvFlagList, CvStatusBadge } from '../../components/cv/CvStatus'
 import { MatchFitDetail } from '../../components/matching/MatchFitDetail'
+import { OpportunityMissions } from '../../components/opportunity/OpportunityMissions'
+import { InterviewSummary } from '../../components/interview/InterviewSummary'
+import { calendarActionLabel } from '../../lib/interview'
 import {
   ApiError,
   apiFileUrl,
   apiAdminCandidateDetail,
   apiAdminCreateSuggestion,
+  apiAdminResyncInterview,
   apiAdminMatchSuggestions,
   apiAdminPreselection,
   apiAdminRunMatching,
@@ -157,6 +162,9 @@ function describeRun(result: MatchingRunResult): string {
  * mise en relation est confirmée, seul moment où le candidat est notifié.
  */
 export function AdminMatching() {
+  /** `?offre=<id>` (lien depuis « Recruteurs ») : offre présélectionnée à l'ouverture. */
+  const [searchParams] = useSearchParams()
+  const requestedOpp = searchParams.get('offre')
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [selectedOpp, setSelectedOpp] = useState('')
   const [top, setTop] = useState<PreselectionTop>(5)
@@ -193,8 +201,10 @@ export function AdminMatching() {
     apiListOpportunities()
       .then((opps) => {
         setOpportunities(opps)
-        // La première offre encore ouverte : une offre expirée n'a pas de présélection.
-        const first = opps.find((o) => !isExpired(o)) ?? opps[0]
+        // L'offre demandée dans l'URL si elle existe, sinon la première offre
+        // encore ouverte : une offre expirée n'a pas de présélection.
+        const requested = requestedOpp ? opps.find((o) => o.id === requestedOpp) : undefined
+        const first = requested ?? opps.find((o) => !isExpired(o)) ?? opps[0]
         if (first) setSelectedOpp(first.id)
       })
       .catch(() => setPreselError('Impossible de charger les offres.'))
@@ -288,6 +298,30 @@ export function AdminMatching() {
     }
   }
 
+  /** Régularisation de l'agenda Google d'un entretien (lien Meet en attente…). */
+  const handleResync = async (interviewId: string) => {
+    if (busy === interviewId) return
+    setBusy(interviewId)
+    clearNotices()
+    try {
+      const { interview } = await apiAdminResyncInterview(interviewId)
+      setNotice({
+        kind: 'ok',
+        text:
+          interview.meetStatus === 'disponible'
+            ? 'Agenda Google à jour : le lien Meet est disponible pour le candidat et le recruteur.'
+            : 'Agenda Google à jour.',
+      })
+    } catch (err) {
+      // 409 : agenda Google non configuré, entretien terminé ou annulé ;
+      // 502 : Google échoue encore. Le message du serveur est explicite.
+      setNotice({ kind: 'error', text: errorText(err, 'Synchronisation impossible.') })
+    } finally {
+      setBusy(null)
+      reload()
+    }
+  }
+
   const handleRunMatching = async () => {
     if (!selectedOpp) return
     setBusy('run')
@@ -367,6 +401,7 @@ export function AdminMatching() {
     const legacy = s.status === 'interet_candidat' || s.status === 'proposee_candidat'
     const canTransmit = TRANSMITTABLE.includes(s.status)
     const isBusy = busy === s.id
+    const calendarAction = s.interview ? calendarActionLabel(s.interview) : null
     return (
       <Card key={s.id} className="match-card">
         <div className="match-card-head">
@@ -401,6 +436,26 @@ export function AdminMatching() {
         )}
 
         {canTransmit && !s.matchingConsent && <p className="match-hint match-hint-warning">{NO_CONSENT_HINT}</p>}
+
+        {/* Entretien fixé par le recruteur (décision 2026-10-14). */}
+        {s.status === 'mise_en_relation' &&
+          (s.interview ? (
+            <InterviewSummary interview={s.interview} audience="admin">
+              {calendarAction && (
+                <Button
+                  size="sm"
+                  disabled={busy === s.interview.id}
+                  aria-busy={busy === s.interview.id}
+                  onClick={() => handleResync(s.interview!.id)}
+                >
+                  <RefreshCw size={14} aria-hidden />
+                  {busy === s.interview.id ? 'Synchronisation…' : calendarAction}
+                </Button>
+              )}
+            </InterviewSummary>
+          ) : (
+            <p className="match-hint">Aucun entretien fixé par le recruteur.</p>
+          ))}
 
         <div className="match-actions">
           {canTransmit && (
@@ -628,6 +683,12 @@ export function AdminMatching() {
                     <dd>
                       {SECTOR_LABELS[offer.sector] ?? offer.sector}
                       {offer.category ? ` · ${offer.category}` : ''}
+                    </dd>
+                  </div>
+                  <div className="presel-criterion presel-criterion-wide">
+                    <dt>Missions (information, hors score)</dt>
+                    <dd>
+                      {(offer.missions ?? []).length === 0 ? '—' : <OpportunityMissions missions={offer.missions} compact />}
                     </dd>
                   </div>
                 </dl>

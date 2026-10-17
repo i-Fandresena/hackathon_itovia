@@ -11,6 +11,7 @@ import {
   startOfUtcDay,
   type CandidateIneligibility,
 } from './preselection.js'
+import { clip, notifyAdmins, plural } from './notify.js'
 
 /**
  * Moteur de matching diplômés (décision produit 2026-10-08).
@@ -260,6 +261,46 @@ async function logRun(result: MatchingRunResult, options: RunOptions, opportunit
 }
 
 /**
+ * Récapitulatif pour les admins : UNE notification par exécution qui a
+ * produit quelque chose (suggestions mises en file, profils envoyés ou promus
+ * chez un recruteur) — jamais une par ligne, et rien pour une exécution qui
+ * n'a fait que rafraîchir des scores ou n'a rien produit. L'admin qui a
+ * relancé le moteur à la main n'est pas notifié de sa propre relance.
+ */
+async function notifyAdminsOfRun(
+  result: MatchingRunResult,
+  options: RunOptions,
+  subject: { opportunityTitle: string } | { candidateName: string },
+): Promise<void> {
+  const queued = result.queued
+  const direct = result.sentDirect + result.promoted
+  if (queued === 0 && direct === 0) return
+
+  const forOffer = 'opportunityTitle' in subject
+  const parts: string[] = []
+  if (queued > 0) parts.push(`${plural(queued, 'suggestion')} à valider`)
+  if (direct > 0) {
+    parts.push(
+      forOffer
+        ? `${plural(direct, 'profil')} ${direct > 1 ? 'envoyés' : 'envoyé'} directement au recruteur (CV vérifié)`
+        : `envoi direct au recruteur pour ${plural(direct, 'offre')} (CV vérifié)`,
+    )
+  }
+  const target = forOffer
+    ? `offre « ${clip(subject.opportunityTitle)} »`
+    : `profil de ${clip(subject.candidateName, 60)}`
+
+  await notifyAdmins({
+    event: 'matching_run_summary',
+    category: 'systeme',
+    title: queued > 0 && direct > 0 ? 'Résultats du matching' : queued > 0 ? 'Suggestions à valider' : 'Profils envoyés au recruteur',
+    message: `Moteur de matching, ${target} : ${parts.join(' et ')}.`,
+    link: '/admin/mise-en-relation',
+    excludeUserId: options.actorId ?? null,
+  })
+}
+
+/**
  * Pendant SQL de `opportunityClosedReason()` (même borne de date, mêmes
  * statuts actifs), pour lister les offres ouvertes sans les charger toutes.
  */
@@ -306,6 +347,7 @@ export async function runMatchingForCandidate(userId: string, options: RunOption
     getMatchingConfig(),
   )
   await logRun(result, options)
+  await notifyAdminsOfRun(result, options, { candidateName: profile.fullName })
   return result
 }
 
@@ -353,6 +395,7 @@ export async function runMatchingForOpportunity(opportunityId: string, options: 
     getMatchingConfig(),
   )
   await logRun(result, options, opportunityId)
+  await notifyAdminsOfRun(result, options, { opportunityTitle: opportunity.title })
   return result
 }
 

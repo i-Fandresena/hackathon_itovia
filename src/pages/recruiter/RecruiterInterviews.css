@@ -1,0 +1,14 @@
+/* Onglet « Entretiens » du recruteur (/recruteur/entretiens). Les briques
+   communes (filtres, groupes, lignes) sont dans
+   components/interview/InterviewList.css (préfixe `ivl-`). */
+
+.rint-groups[aria-busy='true'] {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.rint-truncated {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+}

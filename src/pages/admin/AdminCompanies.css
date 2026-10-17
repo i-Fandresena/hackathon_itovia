@@ -1,0 +1,126 @@
+/* Admin « Entreprises » (préfixe adc-) — complète AdminTalents.css (adt-). */
+
+.adc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.85rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font-size: 0.875rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.adc-endorsements {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.85rem 0 0;
+  padding: 0;
+}
+
+.adc-endorsement {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  min-width: 0;
+}
+
+.adc-endorsement.is-excluded {
+  opacity: 0.75;
+}
+
+.adc-endorsement-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+}
+
+.adc-endorsement-title {
+  font-weight: 650;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.adc-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.adc-tag {
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-elevated);
+  color: var(--color-ink-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.adc-comment {
+  color: var(--color-ink-secondary);
+  font-size: 0.9rem;
+  font-style: italic;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.adc-proof {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.adc-proof-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 650;
+}
+
+.adc-excluded {
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.adc-exclude-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.adc-exclude-form input {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.adc-error {
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  margin: 0.5rem 0;
+}
+
+.adc-modal-text {
+  margin-bottom: 1rem;
+  line-height: 1.55;
+}
+
+.adc-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}

@@ -1,0 +1,44 @@
+.trust-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.trust-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.trust-panel-title {
+  font-size: 1.02rem;
+  color: var(--color-ink);
+}
+
+.trust-panel-count {
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+}
+
+.trust-panel-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.trust-panel-warning {
+  color: var(--color-warning);
+}
+
+.trust-panel-footer {
+  font-size: 0.8rem;
+  color: var(--color-ink-muted);
+}

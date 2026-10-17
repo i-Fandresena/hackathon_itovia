@@ -14,7 +14,8 @@ export interface TabBarItem {
    *  du navigateur vers la section. */
   href?: string
   badge?: number
-  /** État actif manuel pour un item bouton. */
+  /** État actif manuel : pour un item bouton, ou pour forcer celui d'un
+   *  lien quand plusieurs liens partagent un préfixe d'URL. */
   active?: boolean
   onClick?: () => void
 }
@@ -38,8 +39,16 @@ export function TabBar({ items }: { items: TabBarItem[] }) {
             <span className="tab-bar-label">{item.label}</span>
           </a>
         ) : item.to ? (
-          <NavLink key={item.key} to={item.to} end={item.end} className="tab-bar-item">
-            {({ isActive }) => (
+          <NavLink
+            key={item.key}
+            to={item.to}
+            end={item.end}
+            className="tab-bar-item"
+            aria-current={item.active === false ? false : undefined}
+          >
+            {({ isActive: routeActive }) => {
+              const isActive = item.active ?? routeActive
+              return (
               <>
                 <span className="tab-bar-icon-wrap">
                   <item.icon size={20} aria-hidden />
@@ -47,7 +56,8 @@ export function TabBar({ items }: { items: TabBarItem[] }) {
                 </span>
                 <span className={`tab-bar-label ${isActive ? 'active' : ''}`}>{item.label}</span>
               </>
-            )}
+              )
+            }}
           </NavLink>
         ) : (
           <button

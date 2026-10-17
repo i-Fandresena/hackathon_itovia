@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
 import { subscribeSchema } from '../lib/validation.js'
+import { actorLabel, clip, scheduleAdminNotification } from '../lib/notify.js'
 
 const router = Router()
 
@@ -41,6 +42,10 @@ router.post('/subscribe', requireRole('recruiter'), async (req, res, next) => {
       return
     }
 
+    const previous = await prisma.subscription.findUnique({
+      where: { recruiterId: req.session!.sub },
+      select: { planCode: true },
+    })
     const subscription = await prisma.subscription.upsert({
       where: { recruiterId: req.session!.sub },
       create: { recruiterId: req.session!.sub, planCode: plan.code },
@@ -60,6 +65,20 @@ router.post('/subscribe', requireRole('recruiter'), async (req, res, next) => {
     }
 
     res.json({ subscription })
+    // Rien si le recruteur re-souscrit le plan gratuit qu'il a déjà.
+    const recruiterId = req.session!.sub
+    if (!previous || previous.planCode !== plan.code || plan.priceAr > 0) {
+      scheduleAdminNotification(async () => ({
+        event: previous ? 'subscription_changed' : 'subscription_created',
+        category: 'recruteur',
+        title: !previous ? 'Nouvel abonnement' : previous.planCode !== plan.code ? 'Changement d’abonnement' : 'Abonnement renouvelé',
+        message:
+          `${await actorLabel(recruiterId)} ${!previous ? 'a souscrit' : previous.planCode !== plan.code ? 'est passé à' : 'a renouvelé'} ` +
+          `l’offre ${clip(plan.name, 40)}` +
+          (plan.priceAr > 0 ? ` (${plan.priceAr.toLocaleString('fr-FR')} Ar, paiement simulé).` : ' (gratuit).'),
+        link: '/admin',
+      }))
+    }
   } catch (err) {
     next(err)
   }

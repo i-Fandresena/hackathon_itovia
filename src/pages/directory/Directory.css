@@ -201,3 +201,16 @@
 .dir-star.active {
   color: var(--color-warning);
 }
+
+/* Onglet « Professionnels » de l'Annuaire : titre de section sous le h1
+   commun de `DirectoryTabs`. */
+.dir-head {
+  margin-bottom: 1.25rem;
+}
+
+.dir-head h2 {
+  font-size: clamp(1.2rem, 2.4vw, 1.45rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 0.4rem;
+}

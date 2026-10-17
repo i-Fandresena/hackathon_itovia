@@ -2,11 +2,12 @@ import { ArrowLeft, Building2, FolderX, MapPin, Send } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { WithdrawDossierButton } from '../components/candidate/WithdrawDossierButton'
+import { CandidateInterviewCard } from '../components/interview/CandidateInterviewCard'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { OpportunityMissions } from '../components/opportunity/OpportunityMissions'
 import { EmptyState } from '../components/ui/EmptyState'
-import { MatchScore } from '../components/ui/MatchScore'
 import { ReportButton } from '../components/ui/ReportButton'
 import {
   EXPERIENCE_LABELS,
@@ -17,6 +18,7 @@ import { useApp } from '../context/AppContext'
 import { toDisplayOpportunity } from '../lib/api'
 import { canWithdrawFromDossier, dossierStatusInfo } from '../lib/candidateDossier'
 import { formatDate } from '../lib/format'
+import { EmployerTrust } from './companies/LinkedCompanyCard'
 import './OpportunityDetail.css'
 
 interface OpportunityDetailProps {
@@ -34,7 +36,8 @@ interface OpportunityDetailProps {
 export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityDetailProps) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { opportunities, getSuggestionForOpportunity, expressInterest } = useApp()
+  const { opportunities, getSuggestionForOpportunity, expressInterest, currentUser, hydrated } =
+    useApp()
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null)
   const [withdrawnTitle, setWithdrawnTitle] = useState('')
 
@@ -120,6 +123,10 @@ export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityD
           {opportunity.city}, {opportunity.province} · Date limite : {formatDate(opportunity.deadline)}
         </p>
 
+        {/* Confiance de l'employeur : jamais dans un dossier candidat avant la
+            mise en relation (le niveau aiderait à deviner l'entreprise). */}
+        {showCompany && <EmployerTrust opportunityId={opportunity.id} />}
+
         <div className="detail-report">
           <ReportButton targetType="opportunity" targetId={opportunity.id} />
         </div>
@@ -131,6 +138,16 @@ export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityD
               <Badge variant={status.variant}>{status.label}</Badge>
             </div>
             <p className="detail-dossier-text">{status.description}</p>
+
+            {suggestion.status === 'mise_en_relation' && suggestion.interview && (
+              <div className="detail-interview" id="entretien">
+                <CandidateInterviewCard
+                  suggestionId={suggestion.id}
+                  interview={suggestion.interview}
+                  companyName={suggestion.opportunity.companyName}
+                />
+              </div>
+            )}
 
             <div className="detail-dossier-actions">
               {suggestion.status === 'proposee_candidat' && (
@@ -166,16 +183,15 @@ export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityD
           </Card>
         )}
 
-        {suggestion && (
-          <div className="detail-match">
-            <p className="detail-rec-label">Pourquoi votre profil a été proposé</p>
-            <MatchScore match={{ score: suggestion.score, reasons: suggestion.reasons }} />
-          </div>
-        )}
-
         <Card className="detail-description">
           <h2>Description</h2>
           <p className="detail-description-text">{opportunity.description}</p>
+          {(opportunity.missions ?? []).length > 0 && (
+            <>
+              <h3>Missions</h3>
+              <OpportunityMissions missions={opportunity.missions} />
+            </>
+          )}
           <h3>Compétences recherchées</h3>
           <div className="detail-badges">
             {opportunity.requiredSkills.map((s) => (
@@ -202,7 +218,9 @@ export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityD
           )}
         </Card>
 
-        {!candidate && (
+        {/* Appel à l'inscription : visiteurs non connectés uniquement (attendre
+            l'hydratation évite de le faire clignoter pour un utilisateur connecté). */}
+        {hydrated && !currentUser && (
           <Link to="/inscription">
             <Button>Créer un compte pour être recommandé·e</Button>
           </Link>

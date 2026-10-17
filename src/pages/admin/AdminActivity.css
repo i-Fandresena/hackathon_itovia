@@ -1,0 +1,319 @@
+/* Admin : journal d'activité de la plateforme (consultation) */
+
+/* ------------------------------------------------------------------ filtres */
+
+.aact-filters {
+  margin-bottom: 1.25rem;
+}
+
+.aact-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.aact-toolbar > .input {
+  flex: 0 1 13rem;
+  min-width: 0;
+}
+
+.aact-search {
+  position: relative;
+  flex: 2 1 16rem;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.aact-search svg {
+  position: absolute;
+  left: 0.8rem;
+  color: var(--color-ink-muted);
+  pointer-events: none;
+}
+
+.aact-search .input {
+  width: 100%;
+  padding-left: 2.3rem;
+}
+
+.aact-period {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.aact-date {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 8.5rem;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--color-ink-secondary);
+}
+
+.aact-date .input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.aact-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.aact-toggle {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.875rem;
+  color: var(--color-ink-secondary);
+  cursor: pointer;
+}
+
+.aact-toggle input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+}
+
+.aact-families {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.aact-family-chip {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-ink-secondary);
+  font-family: inherit;
+}
+
+.aact-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  margin-left: 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ états */
+
+.aact-result-line {
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-ink-muted);
+}
+
+.aact-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.aact-error-line {
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+  color: var(--color-danger);
+}
+
+/* ------------------------------------------------------------ fil */
+
+.aact-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  transition: opacity 0.2s var(--ease-out);
+}
+
+.aact-feed-loading {
+  opacity: 0.6;
+}
+
+.aact-day-title {
+  position: sticky;
+  top: var(--header-h, 0);
+  z-index: 1;
+  margin: 0 0 0.5rem;
+  padding: 0.35rem 0;
+  background: var(--color-bg);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.aact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.aact-item {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.aact-item + .aact-item {
+  border-top: 1px solid var(--color-border);
+}
+
+.aact-time {
+  padding-top: 0.1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-muted);
+}
+
+.aact-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.aact-line {
+  margin: 0;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.aact-label {
+  font-weight: 650;
+}
+
+.aact-detail {
+  color: var(--color-ink-secondary);
+}
+
+.aact-meta,
+.aact-target {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--color-ink-muted);
+  min-width: 0;
+}
+
+.aact-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.aact-tag-moderation {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.aact-tag-matching,
+.aact-tag-recruteurs {
+  background: var(--color-accent-muted);
+  color: var(--color-accent-hover);
+}
+
+.aact-actor {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.aact-actor a,
+.aact-actor-name {
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+}
+
+.aact-actor a:hover {
+  color: var(--color-accent-hover);
+}
+
+.aact-target-label {
+  min-width: 0;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.aact-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-weight: 600;
+  color: var(--color-accent-hover);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.aact-open:hover {
+  text-decoration: underline;
+}
+
+.aact-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+
+/* Écran étroit : les familles défilent sur une ligne au lieu d'occuper tout l'écran. */
+@media (max-width: 640px) {
+  .aact-toolbar > .input {
+    flex: 1 1 100%;
+  }
+
+  .aact-families {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    margin: 0 -1rem;
+    padding: 0.1rem 1rem 0.4rem;
+  }
+
+  .aact-family-chip {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .aact-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.2rem;
+    padding: 0.7rem 0.85rem;
+  }
+}

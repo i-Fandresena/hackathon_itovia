@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
 import {
+  adminInterviewQuerySchema,
   createMatchSuggestionSchema,
   matchSuggestionQuerySchema,
   matchSuggestionStatusSchema,
@@ -11,8 +12,11 @@ import {
 import { scoreOpportunity } from '../../../src/lib/recommendation.js'
 import { toDomainCandidateProfile, toDomainOpportunity } from '../lib/domain.js'
 import { parseCvFlags } from '../lib/cv-flags.js'
+import { adminCandidateProfileSelect, toAdminCandidateProfile } from '../lib/admin-candidates.js'
 import { getMatchingConfig, runMatchingForOpportunity } from '../lib/matching.js'
 import { applyAdminTransition, loadPreselection, transmitPreselection } from '../lib/preselection-service.js'
+import { loadInterviewsBySuggestion, resyncInterviewCalendar, toAdminInterviewView } from '../lib/interviews.js'
+import { listAdminInterviews } from '../lib/interview-list.js'
 
 const router = Router()
 
@@ -95,39 +99,20 @@ router.post('/opportunities/:id/run-matching', async (req, res, next) => {
 /**
  * Détail complet d'un profil candidat, pour que l'admin puisse l'examiner
  * avant de décider de le proposer — jamais le mot de passe ni autre champ
- * sensible, `select` explicite uniquement.
+ * sensible : `select` et liste blanche partagés avec la fiche des comptes
+ * candidats (lib/admin-candidates.ts).
  */
 router.get('/candidates/:id', async (req, res, next) => {
   try {
     const profile = await prisma.candidateProfile.findUnique({
       where: { userId: req.params.id },
-      select: {
-        fullName: true,
-        phone: true,
-        province: true,
-        city: true,
-        gender: true,
-        educationLevel: true,
-        skills: true,
-        experienceLevel: true,
-        desiredOpportunityTypes: true,
-        availability: true,
-        cvUrl: true,
-        cvVerificationStatus: true,
-        cvFlags: true,
-        sector: true,
-        matchingConsentAt: true,
-        user: { select: { email: true, createdAt: true } },
-      },
+      select: { ...adminCandidateProfileSelect, user: { select: { email: true, createdAt: true } } },
     })
     if (!profile) {
       res.status(404).json({ error: 'Candidat introuvable.' })
       return
     }
-    const { user, cvFlags, ...rest } = profile
-    res.json({
-      candidate: { ...rest, cvFlags: parseCvFlags(cvFlags), email: user.email, memberSince: user.createdAt },
-    })
+    res.json({ candidate: toAdminCandidateProfile(profile, profile.user) })
   } catch (err) {
     next(err)
   }
@@ -228,9 +213,16 @@ router.get('/match-suggestions', async (req, res, next) => {
       // File de validation : les meilleurs scores d'abord ; sinon les plus récentes.
       orderBy: status === 'suggeree' ? [{ score: 'desc' }, { createdAt: 'asc' }] : { updatedAt: 'desc' },
     })
+    // Entretien fixé par le recruteur (décision 2026-10-14) : date, statut,
+    // fournisseur et état de l'agenda Google, pour suivre et régulariser.
+    const interviews = await loadInterviewsBySuggestion(
+      rows.filter((row) => row.status === 'mise_en_relation').map((row) => row.id),
+    )
     const suggestions = rows.map(({ candidate, ...suggestion }) => {
       const profile = candidate.candidateProfile
+      const interview = interviews.get(suggestion.id)
       return {
+        interview: interview ? toAdminInterviewView(interview) : null,
         ...suggestion,
         candidate: {
           id: candidate.id,
@@ -258,7 +250,7 @@ router.patch('/match-suggestions/:id', async (req, res, next) => {
       where: { id: req.params.id },
       include: {
         opportunity: true,
-        candidate: { select: { candidateProfile: { select: { matchingConsentAt: true } } } },
+        candidate: { select: { status: true, candidateProfile: { select: { matchingConsentAt: true } } } },
       },
     })
     if (!existing) {
@@ -270,6 +262,7 @@ router.patch('/match-suggestions/:id', async (req, res, next) => {
       suggestion: existing,
       opportunity: existing.opportunity,
       hasConsent: Boolean(existing.candidate.candidateProfile?.matchingConsentAt),
+      candidateBlocked: existing.candidate.status === 'suspended' || existing.candidate.status === 'banned',
       to: body.status,
       actorId: req.session!.sub,
     })
@@ -278,6 +271,42 @@ router.patch('/match-suggestions/:id', async (req, res, next) => {
       return
     }
     res.json({ suggestion: result.suggestion })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Onglet « Entretiens » de l'admin : tous les entretiens de la plateforme,
+ * filtrés par `?period=` (défaut `a_venir`), `?status=`, `?opportunityId=`,
+ * `?recruiterId=`, `?calendarIssue=true` ; page de `?limit=` (30, 100 au plus)
+ * à partir de `?offset=`. Ordre : à venir du plus proche au plus lointain,
+ * puis passés et annulés du plus récent au plus ancien.
+ */
+router.get('/interviews', async (req, res, next) => {
+  try {
+    const query = adminInterviewQuerySchema.parse(req.query)
+    const outcome = await listAdminInterviews(query)
+    if (outcome.ok) res.status(outcome.httpStatus).json(outcome.body)
+    else res.status(outcome.httpStatus).json({ error: outcome.error })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Régularisation de l'agenda Google d'un entretien (lien Meet en attente,
+ * horaire non reporté, suppression échouée, ou entretien fixé en mode simulé
+ * avant la configuration de Google) : relance la synchronisation.
+ * 409 si Google n'est pas configuré, si l'entretien est terminé ou annulé
+ * sans événement ; 502 si Google échoue encore (l'entretien porte alors le
+ * nouveau message d'erreur). Journalisé (`interview_calendar_resync`).
+ */
+router.post('/interviews/:id/calendar-sync', async (req, res, next) => {
+  try {
+    const outcome = await resyncInterviewCalendar({ interviewId: req.params.id, adminId: req.session!.sub })
+    if (outcome.ok) res.status(outcome.httpStatus).json(outcome.body)
+    else res.status(outcome.httpStatus).json({ error: outcome.error })
   } catch (err) {
     next(err)
   }

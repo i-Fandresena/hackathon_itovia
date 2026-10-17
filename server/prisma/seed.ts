@@ -1,6 +1,8 @@
 import 'dotenv/config'
 import bcrypt from 'bcryptjs'
 import { PrismaClient, type Sector } from '@prisma/client'
+import { phoneKeyOf } from '../src/lib/validation.js'
+import { missionsData } from '../src/lib/opportunity-missions.js'
 
 const prisma = new PrismaClient()
 
@@ -155,6 +157,11 @@ const OPPORTUNITIES = [
     city: 'Antananarivo',
     opportunityType: 'emploi',
     requiredSkills: ['Réseaux sociaux', 'Canva', 'Communication', 'Français'],
+    missions: [
+      'Créer des visuels et de courtes vidéos pour les réseaux sociaux',
+      'Planifier et publier le calendrier éditorial hebdomadaire',
+      'Suivre les statistiques des campagnes et proposer des améliorations',
+    ],
     level: 'junior',
     deadline: '2026-06-30',
     featured: true,
@@ -170,6 +177,12 @@ const OPPORTUNITIES = [
     city: 'Antananarivo',
     opportunityType: 'emploi',
     requiredSkills: ['JavaScript', 'React', 'Git', 'Français'],
+    missions: [
+      'Développer les écrans web à partir des maquettes',
+      'Brancher les interfaces sur l’API REST existante',
+      'Corriger les anomalies remontées par les utilisateurs',
+      'Participer aux revues de code avec votre mentor',
+    ],
     level: 'junior',
     deadline: '2026-07-15',
     featured: true,
@@ -185,6 +198,11 @@ const OPPORTUNITIES = [
     city: 'Toamasina',
     opportunityType: 'stage',
     requiredSkills: ['Excel', 'Communication', 'Français'],
+    missions: [
+      'Saisir et contrôler les bons de livraison',
+      'Mettre à jour les tableaux de suivi des flux',
+      'Préparer les échanges avec les fournisseurs',
+    ],
     level: 'debutant',
     deadline: '2026-05-20',
     featured: true,
@@ -719,6 +737,8 @@ async function main() {
         city: o.city,
         opportunityType: o.opportunityType,
         requiredSkills: [...o.requiredSkills],
+        // Ignorées (offre créée sans missions) si le client Prisma précède la colonne.
+        ...(missionsData('missions' in o ? [...o.missions] : []) ?? {}),
         level: o.level,
         deadline: seedDeadline(o.deadline, index),
         featured: 'featured' in o ? Boolean(o.featured) : false,
@@ -871,6 +891,18 @@ async function main() {
         skills: [...t.skills],
         availability: t.availability,
         status: t.status,
+        phoneKey: phoneKeyOf(t.phone),
+        // talent-1 (créé depuis une recommandation) et talent-3 ont un accord
+        // tracé ; les autres illustrent un « accord non tracé (profil
+        // antérieur) » — jamais publics, même avec un accord public.
+        ...(t.key === 'talent-1' ? { consentAt: new Date('2026-08-20T09:00:00Z'), district: 'Analamahitsy' } : {}),
+        ...(t.key === 'talent-3' ? { consentAt: new Date('2026-09-02T09:00:00Z'), district: 'Isotry' } : {}),
+        // Vitrine « Talents recommandés » : accord public explicite, distinct
+        // de l'accord de création. talent-1 « Très recommandé », talent-3
+        // « Nouveau » (section « Nouveaux talents vérifiés »). `publicRef`
+        // fixe pour la démo (aléatoire en usage réel).
+        ...(t.key === 'talent-1' ? { publicConsentAt: new Date('2026-09-10T09:00:00Z'), publicRef: 'v7k2mpq4ta' } : {}),
+        ...(t.key === 'talent-3' ? { publicConsentAt: new Date('2026-09-12T09:00:00Z'), publicRef: 's3hn8xw2rc' } : {}),
       },
     })
     talentIdByKey.set(t.key, talent.id)
@@ -928,17 +960,228 @@ async function main() {
     },
   })
 
+  console.log('Talent recommandé en attente d’un agent (démo diversité)…')
+  {
+    // Deux recommandations du même jour et du même quartier : le moteur les
+    // compte comme une seule source (niveau « Nouveau »). Données fictives,
+    // numéro manifestement factice ; le signal est encore dans la file.
+    const madagascarOffset = 3 * 60 * 60 * 1000
+    const day = 24 * 60 * 60 * 1000
+    const dayStart = Math.floor((Date.now() + madagascarOffset) / day) * day - madagascarOffset - 3 * day
+    const morning = new Date(dayStart + 9 * 60 * 60 * 1000)
+    const afternoon = new Date(dayStart + 15 * 60 * 60 * 1000)
+    const signal = await prisma.talentSignal.create({
+      data: {
+        trade: 'Mécanicien',
+        sector: 'autre',
+        province: 'Antananarivo',
+        city: 'Antananarivo',
+        district: 'Ambohimangakely',
+        subjectName: 'Rado T.',
+        contactPhone: '034 00 000 01',
+        phoneKey: '340000001',
+        contactHint: 'Petit garage de motos près du marché (fictif)',
+        status: 'nouveau',
+        createdAt: morning,
+        expiresAt: new Date(afternoon.getTime() + 60 * day),
+      },
+    })
+    const authors = [
+      { userId: userIdByKey.get('candidat-1')!, displayName: 'Miora R.', at: morning, relation: 'client' as const, jobLabel: 'Réparation de l’embrayage de ma moto', highlights: ['Travail soigné', 'Prix respecté'] },
+      { userId: individualUser.id, displayName: 'Njaka R.', at: afternoon, relation: 'client' as const, jobLabel: 'Révision complète d’un scooter avant la saison des pluies', highlights: ['Ponctuel·le', 'Honnête', 'Bon conseil'] },
+    ]
+    for (const a of authors) {
+      const member = await prisma.member.create({
+        data: { userId: a.userId, displayName: a.displayName, district: 'Ambohimangakely', city: 'Antananarivo', joinedAt: a.at },
+      })
+      await prisma.endorsement.create({
+        data: {
+          subjectType: 'talent',
+          talentSignalId: signal.id,
+          authorMemberId: member.id,
+          authorDistrict: 'Ambohimangakely',
+          relation: a.relation,
+          jobLabel: a.jobLabel,
+          jobDate: new Date(a.at.getTime() - 20 * day),
+          highlights: a.highlights,
+          comment: 'Commentaire de démonstration (fictif).',
+          createdAt: a.at,
+        },
+      })
+    }
+  }
+
+  console.log('Recommandations rattachées à talent-1 (signal converti)…')
+  {
+    // Quatre auteurs aux téléphones DISTINCTS (comptes candidat/particulier,
+    // pas les membres de l'annuaire qui partagent tous le même numéro), des
+    // jours et quartiers différents : quatre sources indépendantes. Le
+    // contact du signal a été effacé à la conversion, comme dans l'appli.
+    const day = 24 * 60 * 60 * 1000
+    const talent1 = talentIdByKey.get('talent-1')!
+    const signal = await prisma.talentSignal.create({
+      data: {
+        trade: 'Couturière',
+        sector: 'textile_artisanat',
+        province: 'Antananarivo',
+        city: 'Antananarivo',
+        district: 'Analamahitsy',
+        status: 'converti',
+        agentId: userIdByKey.get('agent-1')!,
+        talentId: talent1,
+        createdAt: new Date('2026-08-02T08:00:00Z'),
+        expiresAt: new Date(Date.now() + 60 * day),
+        contactPurgedAt: new Date('2026-08-20T09:00:00Z'),
+      },
+    })
+    const memberFor = async (userId: string, displayName: string, district: string, joinedAt: string) =>
+      (await prisma.member.findUnique({ where: { userId } })) ??
+      (await prisma.member.create({ data: { userId, displayName, district, city: 'Antananarivo', joinedAt: new Date(joinedAt) } }))
+    const recs = [
+      { userId: userIdByKey.get('candidat-1')!, name: 'Miora R.', district: 'Analamahitsy', joined: '2026-03-01', relation: 'client' as const, jobLabel: 'Robe de cérémonie sur mesure', jobDate: '2026-07-12', createdAt: '2026-08-02T08:00:00Z', highlights: ['Travail soigné', 'Délais tenus'], proof: 'photo' as const, proofAccepted: true, reviewed: true },
+      { userId: individualUser.id, name: 'Njaka R.', district: 'Ambohimangakely', joined: '2026-02-10', relation: 'client' as const, jobLabel: 'Retouches de trois pantalons et une veste', jobDate: '2026-06-03', createdAt: '2026-08-09T15:30:00Z', highlights: ['Prix respecté', 'Honnête'], proof: 'aucune' as const, proofAccepted: null, reviewed: true },
+      { userId: userIdByKey.get('candidat-2')!, name: 'Faniry A.', district: 'Itaosy', joined: '2026-05-20', relation: 'employeur' as const, jobLabel: 'Uniformes brodés pour une petite équipe', jobDate: '2026-05-15', createdAt: '2026-08-14T10:00:00Z', highlights: ['Travail soigné', 'Communique bien'], proof: 'aucune' as const, proofAccepted: null, reviewed: false },
+      { userId: userIdByKey.get('candidat-3')!, name: 'Tahiana R.', district: 'Tanjombato', joined: '2026-06-01', relation: 'collegue' as const, jobLabel: 'Atelier partagé pendant la saison des fêtes', jobDate: '2026-04-20', createdAt: '2026-08-18T17:45:00Z', highlights: ['Ponctuel·le'], proof: 'aucune' as const, proofAccepted: null, reviewed: true },
+    ]
+    for (const r of recs) {
+      const member = await memberFor(r.userId, r.name, r.district, r.joined)
+      await prisma.endorsement.create({
+        data: {
+          subjectType: 'talent',
+          talentSignalId: signal.id,
+          authorMemberId: member.id,
+          authorDistrict: r.district,
+          relation: r.relation,
+          jobLabel: r.jobLabel,
+          jobDate: new Date(r.jobDate),
+          highlights: r.highlights,
+          comment: 'Commentaire privé de démonstration (fictif).',
+          // Photo acceptée par l'agent ; le fichier de démo n'est pas fourni.
+          proof: r.proof,
+          proofAccepted: r.proofAccepted,
+          reviewedAt: r.reviewed ? new Date('2026-08-20T09:00:00Z') : null,
+          createdAt: new Date(r.createdAt),
+        },
+      })
+    }
+  }
+
+  console.log('Entreprises recommandées (fictives)…')
+  {
+    // Deux entreprises fictives. TechMada Solutions reprend le nom du
+    // recruteur de démo et de ses offres (déjà public sur /offres/:id) : la
+    // fiche est liée à recruteur@demo.mg, comme le ferait un admin. Le
+    // dossier de candidat@demo.mg sur opp-1 est en `mise_en_relation` : le
+    // lien vers la fiche n'y apparaît qu'à ce stade. Auteurs aux téléphones
+    // DISTINCTS (comptes candidat/particulier), jours et quartiers
+    // différents ; aucun auteur n'a de dossier en cours chez TechMada avant
+    // mise en relation. Les documents de preuve « acceptés » ne sont pas
+    // fournis (supprimés après revue, comme dans l'appli).
+    const memberOf = async (userId: string, displayName: string, district: string, joinedAt: string) =>
+      (await prisma.member.findUnique({ where: { userId } })) ??
+      (await prisma.member.create({ data: { userId, displayName, district, city: 'Antananarivo', joinedAt: new Date(joinedAt) } }))
+    const techmada = await prisma.company.create({
+      data: {
+        name: 'TechMada Solutions',
+        nameKey: 'techmada solutions',
+        sector: 'digital',
+        city: 'Antananarivo',
+        province: 'Antananarivo',
+        recruiterUserId: userIdByKey.get('techmada')!,
+        createdAt: new Date('2026-08-05T09:00:00Z'),
+      },
+    })
+    const lac = await prisma.company.create({
+      data: {
+        name: 'Bâtisseurs Fictifs du Lac SARL',
+        nameKey: 'batisseurs fictifs du lac',
+        sector: 'btp',
+        city: 'Antananarivo',
+        province: 'Antananarivo',
+        createdAt: new Date('2026-09-02T09:00:00Z'),
+      },
+    })
+    const recs = [
+      { companyId: techmada.id, userId: userIdByKey.get('candidat-3')!, name: 'Tahiana R.', district: 'Tanjombato', joined: '2026-06-01', relation: 'salarie' as const, jobLabel: 'Assistant support informatique', jobDate: '2026-06-30', createdAt: '2026-08-05T09:00:00Z', highlights: ['Paie à l’heure', 'Respecte le contrat', 'Forme ses équipes'], proof: 'facture' as const, proofAccepted: true },
+      { companyId: techmada.id, userId: userIdByKey.get('candidat-4')!, name: 'Nomena F.', district: 'Ivandry', joined: '2026-04-12', relation: 'salarie' as const, jobLabel: 'Développeuse web', jobDate: '2026-05-31', createdAt: '2026-08-21T14:00:00Z', highlights: ['Paie à l’heure', 'Bonne ambiance'], proof: 'aucune' as const, proofAccepted: null },
+      { companyId: techmada.id, userId: userIdByKey.get('candidat-5')!, name: 'Sitraka R.', district: 'Itaosy', joined: '2026-05-03', relation: 'stagiaire' as const, jobLabel: 'Stage en marketing digital', jobDate: '2026-07-15', createdAt: '2026-09-03T08:30:00Z', highlights: ['Forme ses équipes', 'Horaires respectés'], proof: 'aucune' as const, proofAccepted: null },
+      { companyId: techmada.id, userId: individualUser.id, name: 'Njaka R.', district: 'Ambohimangakely', joined: '2026-02-10', relation: 'prestataire' as const, jobLabel: 'Installation du réseau des bureaux', jobDate: '2026-04-20', createdAt: '2026-09-10T16:00:00Z', highlights: ['Paie à l’heure', 'Respecte le contrat'], proof: 'aucune' as const, proofAccepted: null },
+      { companyId: lac.id, userId: userIdByKey.get('candidat-2')!, name: 'Faniry A.', district: 'Itaosy', joined: '2026-05-20', relation: 'salarie' as const, jobLabel: 'Aide-maçon sur chantier', jobDate: '2026-08-10', createdAt: '2026-09-02T09:00:00Z', highlights: ['Sécurité respectée', 'Paie à l’heure'], proof: 'aucune' as const, proofAccepted: null },
+      { companyId: lac.id, userId: userIdByKey.get('candidat-1')!, name: 'Miora R.', district: 'Analamahitsy', joined: '2026-03-01', relation: 'prestataire' as const, jobLabel: 'Communication du chantier', jobDate: '2026-07-01', createdAt: '2026-09-12T11:00:00Z', highlights: ['Respecte le contrat'], proof: 'aucune' as const, proofAccepted: null },
+    ]
+    for (const r of recs) {
+      const member = await memberOf(r.userId, r.name, r.district, r.joined)
+      await prisma.endorsement.create({
+        data: {
+          subjectType: 'entreprise',
+          companyId: r.companyId,
+          authorMemberId: member.id,
+          authorDistrict: r.district,
+          relation: r.relation,
+          jobLabel: r.jobLabel,
+          jobDate: new Date(r.jobDate),
+          highlights: r.highlights,
+          comment: 'Commentaire privé de démonstration (fictif) — jamais public.',
+          proof: r.proof,
+          proofAccepted: r.proofAccepted,
+          reviewedAt: r.proofAccepted === null ? null : new Date('2026-08-06T09:00:00Z'),
+          createdAt: new Date(r.createdAt),
+        },
+      })
+    }
+    await prisma.company.update({
+      where: { id: techmada.id },
+      data: { createdByMemberId: (await prisma.member.findUnique({ where: { userId: userIdByKey.get('candidat-3')! } }))!.id },
+    })
+    await prisma.company.update({
+      where: { id: lac.id },
+      data: { createdByMemberId: (await prisma.member.findUnique({ where: { userId: userIdByKey.get('candidat-2')! } }))!.id },
+    })
+  }
+
   console.log('Propositions d’opportunités par les agents…')
-  const proposals: { talentKey: string; opportunityKey: string }[] = [
+  // talent-3 puis talent-1 sur opp-1 (TechMada) : même adéquation, la
+  // confiance de talent-1 la fait passer devant malgré une proposition plus
+  // récente — démonstration du départage dans la shortlist de recruteur@demo.mg.
+  const proposals: { talentKey: string; opportunityKey: string; proposedAt?: string }[] = [
     { talentKey: 'talent-1', opportunityKey: 'opp-4' },
     { talentKey: 'talent-2', opportunityKey: 'opp-9' },
     { talentKey: 'talent-4', opportunityKey: 'opp-5' },
+    { talentKey: 'talent-3', opportunityKey: 'opp-1', proposedAt: '2026-09-01T08:00:00Z' },
+    { talentKey: 'talent-1', opportunityKey: 'opp-1', proposedAt: '2026-09-05T08:00:00Z' },
   ]
   for (const p of proposals) {
     await prisma.talentOpportunityProposal.create({
-      data: { talentId: talentIdByKey.get(p.talentKey)!, opportunityId: opportunityIdByKey.get(p.opportunityKey)! },
+      data: {
+        talentId: talentIdByKey.get(p.talentKey)!,
+        opportunityId: opportunityIdByKey.get(p.opportunityKey)!,
+        ...(p.proposedAt ? { proposedAt: new Date(p.proposedAt) } : {}),
+      },
     })
   }
+
+  console.log('Accords publics et demande de contact via la vitrine…')
+  for (const key of ['talent-1', 'talent-3']) {
+    const talent = TALENTS.find((t) => t.key === key)!
+    await prisma.auditLog.create({
+      data: {
+        userId: userIdByKey.get(talent.agentKey)!,
+        action: 'talent_consent_public_granted',
+        metadata: { talentId: talentIdByKey.get(key)! },
+        createdAt: new Date(key === 'talent-1' ? '2026-09-10T09:00:00Z' : '2026-09-12T09:00:00Z'),
+      },
+    })
+  }
+  // Le particulier de démo veut faire faire des rideaux : demande « nouvelle »
+  // dans « Demandes pour mes talents » de agent.analamanga@demo.mg.
+  await prisma.talentContactRequest.create({
+    data: {
+      talentId: talentIdByKey.get('talent-1')!,
+      requesterId: individualUser.id,
+      need: 'Je cherche une couturière pour confectionner six paires de rideaux pour mon salon, à Analamahitsy, d’ici trois semaines.',
+      createdAt: new Date('2026-10-08T07:30:00Z'),
+    },
+  })
 
   console.log('Placements et suivi du success fee…')
   await prisma.placement.create({

@@ -1,5 +1,5 @@
-import { HelpCircle, LogIn, Store, Briefcase, UserPlus } from 'lucide-react'
-import { Link, NavLink } from 'react-router-dom'
+import { LogIn, Sparkles, Store, Briefcase, UserPlus } from 'lucide-react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Logo } from '../brand/Logo'
 import { Button } from '../ui/Button'
 import { ThemeToggle } from '../ui/ThemeToggle'
@@ -24,15 +24,30 @@ interface HeaderProps {
  * moyen d'y accéder sur mobile/tablette.
  */
 export function Header({ floating }: HeaderProps = {}) {
-  const navLinks = [
-    { to: '/annuaire', label: 'Annuaire' },
+  const { pathname } = useLocation()
+  // Talents et entreprises sont des onglets de l'Annuaire : sur ces pages,
+  // c'est le raccourci « Talents » / « Entreprises » qui est actif, pas
+  // « Annuaire » (sinon deux liens actifs à la fois).
+  const inTalents = pathname.startsWith('/annuaire/talents')
+  const inCompanies = pathname.startsWith('/annuaire/entreprises')
+  const annuaireActive = pathname.startsWith('/annuaire') && !inTalents && !inCompanies
+
+  const navLinks: { to: string; label: string; wide?: boolean; active?: boolean }[] = [
+    { to: '/annuaire/talents', label: 'Talents' },
+    // Grand écran seulement (>= 1100px, sinon la nav passe sur deux lignes
+    // ou déborde) ; la barre d'onglets mobile reste à 5 : accès depuis les
+    // onglets de l'Annuaire et l'accueil.
+    { to: '/annuaire/entreprises', label: 'Entreprises', wide: true },
+    { to: '/annuaire', label: 'Annuaire', active: annuaireActive },
     { to: '/connexion', label: 'Connexion' },
   ]
 
   const tabItems: TabBarItem[] = [
-    { key: 'comment', label: 'Guide', icon: HelpCircle, href: '/#comment-ca-marche' },
+    // « Talents » remplace « Guide » (ancre de la landing, toujours atteinte
+    // par le logo) : 5 onglets au plus, lisibles à 390 px.
+    { key: 'talents', label: 'Talents', icon: Sparkles, to: '/annuaire/talents' },
     { key: 'offres', label: 'Offres', icon: Briefcase, href: '/#offres' },
-    { key: 'annuaire', label: 'Annuaire', icon: Store, to: '/annuaire' },
+    { key: 'annuaire', label: 'Annuaire', icon: Store, to: '/annuaire', active: annuaireActive },
     { key: 'connexion', label: 'Connexion', icon: LogIn, to: '/connexion' },
     { key: 'inscription', label: 'Inscription', icon: UserPlus, to: '/inscription' },
   ]
@@ -47,7 +62,15 @@ export function Header({ floating }: HeaderProps = {}) {
             <a href="/#comment-ca-marche">Comment ça marche</a>
             <a href="/#offres">Offres</a>
             {navLinks.map((l) => (
-              <NavLink key={l.to} to={l.to}>
+              <NavLink
+                key={l.to}
+                to={l.to}
+                className={({ isActive }) =>
+                  [l.wide ? 'header-nav-wide' : '', (l.active ?? isActive) ? 'active' : ''].filter(Boolean).join(' ') ||
+                  undefined
+                }
+                aria-current={l.active === false ? false : 'page'}
+              >
                 {l.label}
               </NavLink>
             ))}

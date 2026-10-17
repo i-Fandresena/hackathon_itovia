@@ -21,6 +21,7 @@ import {
   apiListOpportunities,
   apiLogin,
   apiLogout,
+  apiMarkAllNotificationsRead,
   apiMarkNotificationRead,
   apiMe,
   apiMyNotifications,
@@ -108,12 +109,20 @@ interface AppContextValue {
   addOpportunity: (opp: OpportunityInput) => Promise<Result & { opportunity?: Opportunity }>
   updateOpportunity: (id: string, data: OpportunityInput) => Promise<Result>
   deleteOpportunity: (id: string) => Promise<Result>
-  /** Le candidat/recruteur ne fait jamais que signaler un intérêt — jamais
-   *  de contact direct, c'est l'admin qui fait avancer la suite. */
+  /** Intérêt sans date : uniquement une ligne héritée `proposee_candidat`
+   *  côté candidat. Le recruteur passe par un entretien
+   *  (`apiScheduleInterview`, décision 2026-10-14). */
   expressInterest: (suggestionId: string) => Promise<Result>
+  /** Recharge les dossiers du compte (`mySuggestions` / `receivedSuggestions`)
+   *  et ses notifications, après une action sur un entretien. */
+  refreshDossiers: () => Promise<void>
   declineSuggestion: (suggestionId: string) => Promise<Result>
   getSuggestionForOpportunity: (opportunityId: string) => MatchSuggestionWithOpportunity | undefined
   markNotificationRead: (id: string) => Promise<void>
+  /** Un seul appel serveur, quel que soit le nombre de notifications. */
+  markAllNotificationsRead: () => Promise<void>
+  /** Recharge les notifications du compte (ouverture d'une page Notifications). */
+  refreshNotifications: () => Promise<void>
   unreadCount: number
 
   /** Identité communautaire du compte connecté (porte la réputation). */
@@ -357,6 +366,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [currentUser, loadRoleScopedData],
   )
 
+  const refreshDossiers = useCallback(async () => {
+    try {
+      await loadRoleScopedData(currentUser)
+    } catch {
+      // Les données affichées restent celles du dernier chargement réussi.
+    }
+  }, [currentUser, loadRoleScopedData])
+
   const getSuggestionForOpportunity = useCallback(
     (opportunityId: string) => mySuggestions.find((s) => s.opportunityId === opportunityId),
     [mySuggestions],
@@ -370,6 +387,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.error('markNotificationRead', err)
     }
   }, [])
+
+  const refreshNotifications = useCallback(async () => {
+    try {
+      setNotifications(await apiMyNotifications())
+    } catch (err) {
+      console.error('refreshNotifications', err)
+    }
+  }, [])
+
+  const markAllNotificationsRead = useCallback(async () => {
+    setNotifications((s) => s.map((n) => (n.read ? n : { ...n, read: true })))
+    try {
+      await apiMarkAllNotificationsRead()
+    } catch (err) {
+      console.error('markAllNotificationsRead', err)
+      // L'état affiché ne doit pas mentir si le serveur a refusé.
+      await refreshNotifications()
+    }
+  }, [refreshNotifications])
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
@@ -493,9 +529,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateOpportunity,
     deleteOpportunity,
     expressInterest,
+    refreshDossiers,
     declineSuggestion,
     getSuggestionForOpportunity,
     markNotificationRead,
+    markAllNotificationsRead,
+    refreshNotifications,
     unreadCount,
     currentMemberId,
     membersById,

@@ -1,0 +1,138 @@
+/* Demandes de contact reçues via la vitrine (agent, préfixe pcr-). */
+
+.pcr-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.pcr-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  margin-left: 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.pcr-notice {
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-muted);
+  color: var(--color-ink);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.pcr-error {
+  margin-bottom: 0.75rem;
+}
+
+.pcr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pcr-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.pcr-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem 0.75rem;
+}
+
+.pcr-head-main {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.pcr-talent {
+  font-weight: 700;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.pcr-talent:hover {
+  color: var(--color-accent);
+}
+
+.pcr-meta {
+  margin-top: 0.2rem;
+  color: var(--color-ink-muted);
+  font-size: 0.82rem;
+}
+
+.pcr-label {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+  margin-bottom: 0.25rem;
+}
+
+.pcr-need-text {
+  color: var(--color-ink-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.pcr-requester-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pcr-role {
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+.pcr-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.3rem;
+  font-size: 0.875rem;
+}
+
+.pcr-contact a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.pcr-contact svg {
+  flex-shrink: 0;
+}
+
+.pcr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pcr-modal-text {
+  color: var(--color-ink-secondary);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin-bottom: 1rem;
+}

@@ -113,3 +113,42 @@ export function rankOpportunities(
     }))
     .sort((a, b) => b.match.score - a.match.score)
 }
+
+/** Champs du profil candidat qui entrent dans le taux de complétion. */
+export interface CandidateCompletionInput {
+  fullName: string
+  phone: string
+  province: string
+  city: string
+  skills: readonly string[]
+  desiredOpportunityTypes: readonly string[]
+  cvUrl?: string | null
+}
+
+/**
+ * Éléments du taux de complétion du profil candidat : uniquement les champs
+ * que le candidat peut réellement laisser vides puis renseigner depuis
+ * `/candidat/profil` (les listes déroulantes ont toujours une valeur et ne
+ * comptent donc pas). Source unique de la carte « Complétez votre profil »
+ * (Sidebar) et de la complétude affichée à l'admin (`/api/admin/candidates`).
+ * Indépendant de `scoreOpportunity()` : n'entre dans aucun score.
+ */
+export function candidateCompletionChecks(
+  profile: CandidateCompletionInput,
+): { key: string; label: string; done: boolean }[] {
+  return [
+    { key: 'fullName', label: 'Nom complet', done: profile.fullName.trim() !== '' },
+    { key: 'phone', label: 'Téléphone', done: profile.phone.trim() !== '' },
+    { key: 'province', label: 'Province', done: profile.province.trim() !== '' },
+    { key: 'city', label: 'Ville', done: profile.city.trim() !== '' },
+    { key: 'skills', label: 'Compétences', done: profile.skills.length > 0 },
+    { key: 'desiredOpportunityTypes', label: 'Types d’opportunité', done: profile.desiredOpportunityTypes.length > 0 },
+    { key: 'cv', label: 'CV', done: Boolean(profile.cvUrl) },
+  ]
+}
+
+/** Taux de complétion (0–100) — voir `candidateCompletionChecks()`. */
+export function candidateProfileCompletion(profile: CandidateCompletionInput): number {
+  const checks = candidateCompletionChecks(profile)
+  return Math.round((checks.filter((c) => c.done).length / checks.length) * 100)
+}

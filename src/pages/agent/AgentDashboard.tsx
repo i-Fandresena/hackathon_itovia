@@ -7,15 +7,10 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Loading } from '../../components/ui/Loading'
-import { apiAgentStats, apiMyTalents } from '../../lib/api'
-import type { TalentProfile, TalentStatus } from '../../types'
-
-const STATUS_LABELS: Record<TalentStatus, string> = {
-  en_attente: 'En attente de vérification',
-  verifie: 'Vérifié',
-  recommande: 'Recommandé',
-  place: 'Placé',
-}
+import { TrustLevelBadge } from '../../components/trust/TrustLevelBadge'
+import { TALENT_STATUS_LABELS as STATUS_LABELS } from '../../data/endorsements'
+import { apiAgentStats, apiMyTalents, type AgentTalentListItem } from '../../lib/api'
+import type { TalentStatus } from '../../types'
 
 const STATUS_VARIANT: Record<TalentStatus, 'muted' | 'primary' | 'success'> = {
   en_attente: 'muted',
@@ -25,7 +20,7 @@ const STATUS_VARIANT: Record<TalentStatus, 'muted' | 'primary' | 'success'> = {
 }
 
 export function AgentDashboard() {
-  const [talents, setTalents] = useState<TalentProfile[] | null>(null)
+  const [talents, setTalents] = useState<AgentTalentListItem[] | null>(null)
   const [stats, setStats] = useState<{
     profilesCreated: number
     verificationRate: number
@@ -116,10 +111,14 @@ export function AgentDashboard() {
                     <div>
                       <strong style={{ color: 'var(--color-ink)' }}>{t.fullName}</strong>
                       <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)' }}>
-                        {t.skills.slice(0, 3).join(', ')} · {t.city}
+                        {t.trade || t.skills.slice(0, 3).join(', ')} · {t.city}
+                        {t.trust.recommendationCount > 0 ? ` · recommandé·e ${t.trust.recommendationCount} fois` : ''}
                       </p>
                     </div>
-                    <Badge variant={STATUS_VARIANT[t.status]}>{STATUS_LABELS[t.status]}</Badge>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
+                      {t.trust.recommendationCount > 0 && <TrustLevelBadge level={t.trust.level} />}
+                      <Badge variant={STATUS_VARIANT[t.status]}>{STATUS_LABELS[t.status]}</Badge>
+                    </div>
                   </div>
                 </Card>
               </Link>

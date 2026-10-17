@@ -1,0 +1,62 @@
+/* Modale « Proposer / Reprogrammer un entretien » (recruteur). */
+
+.ivm-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.ivm-context {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.ivm-when {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 0.75rem;
+}
+
+.ivm-reminder {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-muted);
+  color: var(--color-ink-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.ivm-reminder p {
+  margin: 0;
+}
+
+.ivm-error {
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.ivm-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 420px) {
+  .ivm-when {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ivm-actions > .btn {
+    flex: 1 1 100%;
+  }
+}

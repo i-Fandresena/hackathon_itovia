@@ -1,0 +1,30 @@
+/* Détail d'un entretien côté candidat (modale partagée par le tableau de
+   bord et l'onglet « Entretiens »). Préfixe `civd-`. */
+
+.civd-offer {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.civd-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.civd-notes:not(:empty) {
+  margin-top: 0.85rem;
+}
+
+.civd-notes:focus {
+  outline: none;
+}
+
+.civd-notes:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

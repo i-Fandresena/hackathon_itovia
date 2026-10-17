@@ -217,6 +217,16 @@ export interface TalentProfile {
   skills: string[]
   availability: Availability
   status: TalentStatus
+  /** Accord de la personne recueilli par l'agent ; `null` : profil
+   *  antérieur, accord non tracé. */
+  consentAt?: string | null
+  /** Quartier déclaré (facultatif). */
+  district?: string | null
+  /** Accord explicite de visibilité publique (« Talents recommandés »),
+   *  distinct de `consentAt`, révocable ; `null` : pas de fiche publique. */
+  publicConsentAt?: string | null
+  /** Identifiant public aléatoire de la fiche, régénéré à chaque accord. */
+  publicRef?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -317,7 +327,13 @@ export interface Opportunity {
   province: string
   city: string
   opportunityType: OpportunityType
+  /** Suggestions (`COMMON_SKILLS`) ou saisies libres du recruteur — règles
+   *  dans `src/lib/opportunityFields.ts`. */
   requiredSkills: string[]
+  /** Missions du poste, dans l'ordre choisi par le recruteur (`[]` si aucune).
+   *  Montrées au candidat avant la mise en relation : jamais de nom
+   *  d'entreprise ni de coordonnées (`src/lib/opportunityFields.ts`). */
+  missions: string[]
   level: ExperienceLevel
   deadline: string
   createdAt: string
@@ -329,8 +345,6 @@ export interface Application {
   opportunityId: string
   candidateId: string
   candidateName: string
-  candidateEmail: string
-  candidatePhone: string
   candidateProvince: string
   message?: string
   status: ApplicationStatus
@@ -372,6 +386,58 @@ export interface MatchSuggestion {
   preselectionRank?: number | null
   createdAt: string
   updatedAt: string
+}
+
+/* -------------------------------------------------------------------------
+ * Entretiens (décision produit 2026-10-14) — miroir de Prisma `Interview`
+ * ---------------------------------------------------------------------- */
+
+/** `planifie` : en attente de la réponse du candidat ; `confirme` /
+ *  `empechement` : réponse du candidat ; `annule` : annulé par le recruteur. */
+export type InterviewStatus = 'planifie' | 'confirme' | 'empechement' | 'annule'
+
+/** Agenda utilisé : vrai agenda Google d'OffRec, ou mode simulé (aucun
+ *  identifiant configuré, développement). */
+export type InterviewProvider = 'google' | 'simule'
+
+/** `disponible` : lien Google Meet généré ; `en_attente` : Google a échoué,
+ *  lien à régulariser par OffRec ; `simule` : aucun lien n'existe. */
+export type InterviewMeetStatus = 'disponible' | 'en_attente' | 'simule'
+
+export type InterviewDuration = 30 | 45 | 60
+
+/** Période des listes « Entretiens » (recruteur, admin) : `a_venir` =
+ *  non annulé et pas encore terminé ; `passes` = non annulé et terminé ;
+ *  `annules` ; `tous`. Voir `interviewPeriodOf()` (src/lib/interview.ts). */
+export type InterviewPeriod = 'a_venir' | 'passes' | 'annules' | 'tous'
+
+/** Entretien tel que le candidat et le recruteur le voient : jamais
+ *  l'identifiant de l'événement Google, l'erreur technique ni l'auteur. */
+export interface Interview {
+  id: string
+  suggestionId: string
+  /** Instant de début (ISO, UTC) — à afficher en heure de Madagascar. */
+  scheduledAt: string
+  durationMinutes: number
+  message: string | null
+  status: InterviewStatus
+  provider: InterviewProvider
+  meetStatus: InterviewMeetStatus
+  /** `null` sans lien, et toujours `null` une fois l'entretien annulé. */
+  meetUrl: string | null
+  declineReason: string | null
+  respondedAt: string | null
+  cancelledAt: string | null
+  rescheduleCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** Vue admin : en plus, l'état de synchronisation de l'agenda Google. */
+export interface AdminInterview extends Interview {
+  /** Dernier échec de synchronisation (message court), `null` si à jour. */
+  calendarError: string | null
+  hasGoogleEvent: boolean
 }
 
 /* -------------------------------------------------------------------------
@@ -489,6 +555,7 @@ export interface PreselectionOpportunity {
   city: string
   opportunityType: OpportunityType
   requiredSkills: string[]
+  missions: string[]
   level: ExperienceLevel
   deadline: string
   /** `false` : date limite dépassée ou compte recruteur inactif. */
@@ -528,11 +595,28 @@ export interface PreselectionTransmitOutcome {
   suggestionId: string | null
 }
 
+/**
+ * Origine d'une notification destinée aux administrateurs — miroir de l'enum
+ * Prisma `NotificationCategory`. Sert uniquement de filtre d'affichage.
+ */
+export type NotificationCategory = 'candidat' | 'recruteur' | 'agent' | 'systeme' | 'moderation' | 'annuaire'
+
+export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
+  'candidat',
+  'recruteur',
+  'agent',
+  'systeme',
+  'moderation',
+  'annuaire',
+]
+
 export interface Notification {
   id: string
   userId: string
   title: string
   message: string
+  /** Absente ou `null` : notification personnelle, ou antérieure aux catégories. */
+  category?: NotificationCategory | null
   /** Chemin frontend vers la source de la notification — absent si non cliquable. */
   link?: string | null
   read: boolean
@@ -643,4 +727,169 @@ export interface TrustResult {
 export interface ScoredProvider {
   provider: Provider
   trust: TrustResult
+}
+
+/* -------------------------------------------------------------------------
+ * Recommandations de talents et d'entreprises — confiance par niveaux
+ * ---------------------------------------------------------------------- */
+
+/** Niveau de confiance affiché d'un talent ou d'une entreprise. */
+export type TrustLevel = 'nouveau' | 'recommande' | 'tres_recommande'
+
+/** Lien entre l'auteur d'une recommandation et la personne ou l'entreprise
+ *  recommandée. Talent : client, employeur, collègue ; entreprise : salarié,
+ *  stagiaire, prestataire. */
+export type EndorsementRelation =
+  | 'client'
+  | 'employeur'
+  | 'collegue'
+  | 'salarie'
+  | 'stagiaire'
+  | 'prestataire'
+
+/** Ce qu'il faut savoir de l'auteur pour calculer sa fiabilité. */
+export interface AuthorStats {
+  phoneVerified: boolean
+  joinedAt: string
+  /** Retours publiés par l'auteur, annuaire et recommandations confondus. */
+  authoredCount: number
+  /** Confirmations reçues au total sur ces retours. */
+  confirmationsReceived: number
+}
+
+/**
+ * Une recommandation vue par le moteur, quel que soit son sujet. Construite
+ * côté serveur : `authorLinkKey` est une empreinte opaque (jamais un
+ * téléphone) qui ne doit pas être envoyée au client.
+ */
+export interface TrustEvidence {
+  id: string
+  authorMemberId: string
+  /** Empreinte d'auteur : deux recommandations de même empreinte forment
+   *  une seule source. `null` si inconnue. */
+  authorLinkKey: string | null
+  authorDistrict: string
+  /** `null` : auteur inconnu, fiabilité par défaut (0,3). */
+  author: AuthorStats | null
+  proof: ProofType
+  /** Seule une preuve acceptée par un agent pèse ; sinon `aucune`. */
+  proofAccepted: boolean | null
+  jobDate: string
+  createdAt: string
+  confirmations: number
+  /** Renseigné quand un agent a écarté la recommandation : elle ne compte plus. */
+  excludedAt: string | null
+}
+
+/** Résultat de `evaluateSubject` — explicable, comme `TrustResult`. */
+export interface SubjectTrust {
+  /** Indice 0–100, `null` tant que le niveau est « Nouveau ». */
+  index: number | null
+  level: TrustLevel
+  /** Recommandations retenues (une par auteur, exclusions retirées). */
+  recommendationCount: number
+  independentSources: number
+  sourcesWithProof: number
+  /** Somme des poids effectifs, diversité comprise (E). */
+  evidenceWeight: number
+  lastJobAt: string | null
+  reasons: string[]
+  warnings: string[]
+}
+
+/** Cycle de vie d'un signal de talent recommandé (file des agents). */
+export type TalentSignalStatus =
+  | 'nouveau'
+  | 'pris_en_charge'
+  | 'converti'
+  | 'refuse'
+  | 'injoignable'
+  | 'expire'
+  | 'fusionne'
+
+/* -------------------------------------------------------------------------
+ * Vitrine publique « Talents recommandés » et demandes de contact via OffRec
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Fiche publique d'un talent : LISTE BLANCHE exacte de ce que voit un
+ * visiteur. Jamais de nom (même partiel), téléphone, id interne, photo,
+ * agent, commentaire, libellé de travail ni auteur.
+ */
+export interface PublicTalent {
+  /** Identifiant public aléatoire (10 caractères) — jamais l'id du profil. */
+  publicRef: string
+  trade: string
+  sector: Sector
+  city: string
+  district: string | null
+  level: TrustLevel
+  independentSources: number
+  /** Les 3 points forts les plus cités (liste fermée). */
+  highlights: string[]
+  /** Mois de la dernière vérification par un agent, `AAAA-MM`. */
+  verifiedMonth: string | null
+}
+
+/** État de la visibilité publique, vu par l'agent du talent (et l'admin). */
+export interface PublicVisibilityState {
+  granted: boolean
+  publicConsentAt: string | null
+  publicRef: string | null
+  /** Accord donné et toutes les conditions réunies : la fiche est en ligne. */
+  visible: boolean
+  /** Conditions manquantes pour publier. */
+  blockers: string[]
+}
+
+export type ContactRequestStatus = 'nouvelle' | 'transmise' | 'close'
+
+/* -------------------------------------------------------------------------
+ * Entreprises recommandées (anciens salariés, stagiaires, prestataires)
+ * ---------------------------------------------------------------------- */
+
+/** Relations possibles d'un auteur avec une entreprise. */
+export type CompanyRelation = 'salarie' | 'stagiaire' | 'prestataire'
+
+/** Point fort cité et nombre de recommandations retenues qui le citent. */
+export interface HighlightCount {
+  label: string
+  count: number
+}
+
+/**
+ * Fiche publique d'une entreprise : LISTE BLANCHE exacte de ce que voit un
+ * visiteur (et la vitrine). Jamais d'auteur (même pseudonyme), de quartier
+ * d'auteur, de commentaire, de libellé de poste, de date de travail, de
+ * preuve, ni de compte recruteur lié.
+ */
+export interface PublicCompany {
+  id: string
+  name: string
+  sector: Sector
+  city: string
+  level: TrustLevel
+  /** Sources indépendantes (moteur `evaluateSubject`). */
+  independentSources: number
+  /**
+   * Répartition des recommandations retenues par relation (« 3 anciens
+   * salariés, 1 stagiaire »). `null` tant qu'il y a moins de
+   * `COMPANY_RELATION_MIN` recommandations retenues : un petit effectif
+   * permettrait à l'employeur de deviner l'auteur.
+   */
+  relations: Record<CompanyRelation, number> | null
+  /** Décompte des points forts cités (liste fermée), du plus cité au moins cité. */
+  highlights: HighlightCount[]
+}
+
+/** Encart du recruteur lié : niveau, nombre, points forts — jamais d'auteur ni de commentaire. */
+export interface LinkedCompanySummary {
+  id: string
+  name: string
+  sector: Sector
+  city: string
+  level: TrustLevel
+  recommendationCount: number
+  independentSources: number
+  highlights: HighlightCount[]
 }

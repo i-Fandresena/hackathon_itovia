@@ -1,0 +1,309 @@
+/* « Recommander un talent » et « Mes recommandations » */
+
+.rt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.rt-section {
+  min-width: 0;
+}
+
+.rt-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  margin-bottom: 1rem;
+}
+
+.rt-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-muted);
+  color: var(--color-accent);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.rt-optional {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+}
+
+.rt-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1rem;
+}
+
+.rt-private {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-success-bg);
+  color: var(--color-ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-bottom: 0.75rem;
+}
+
+.rt-private svg {
+  color: var(--color-success);
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.rt-help {
+  font-size: 0.875rem;
+  color: var(--color-ink-muted);
+  margin-bottom: 1rem;
+}
+
+.rt-relations {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.rt-relation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  color: var(--color-ink);
+  cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
+}
+
+.rt-relation strong {
+  font-size: 0.95rem;
+}
+
+.rt-relation span {
+  font-size: 0.8rem;
+  color: var(--color-ink-muted);
+  line-height: 1.4;
+}
+
+.rt-relation:hover {
+  border-color: var(--color-ink-faint);
+}
+
+.rt-relation.active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-muted);
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+.rt-photo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-ink-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.rt-photo span {
+  overflow-wrap: anywhere;
+}
+
+.rt-photo:hover {
+  border-color: var(--color-accent);
+}
+
+.rt-photo input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rt-photo:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+.rt-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rt-photo-remove {
+  align-self: flex-start;
+}
+
+.rt-error {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.rt-footnote {
+  font-size: 0.8rem;
+  color: var(--color-ink-muted);
+  text-align: center;
+}
+
+.rt-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+  padding: 2rem 1.25rem;
+}
+
+.rt-done h1 {
+  font-size: 1.4rem;
+  color: var(--color-ink);
+}
+
+.rt-done p {
+  color: var(--color-ink-secondary);
+}
+
+.rt-done-icon {
+  color: var(--color-success);
+}
+
+.rt-done-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+/* Mes recommandations */
+
+.rt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rt-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rt-item-title {
+  font-weight: 700;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.rt-item-title a {
+  color: var(--color-accent);
+}
+
+.rt-item-meta {
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+  margin-top: 0.15rem;
+}
+
+.rt-item-job {
+  margin-top: 0.6rem;
+  color: var(--color-ink-secondary);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.rt-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.rt-tag {
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.rt-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 640px) {
+  .rt-row,
+  .rt-relations {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Onglet « Mes recommandations » de l'Annuaire : titre de section sous le
+   h1 commun de `DirectoryTabs`. */
+.rt-mine-head {
+  margin-bottom: 1.25rem;
+}
+
+.rt-mine-head h2 {
+  font-size: clamp(1.2rem, 2.4vw, 1.45rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 0.4rem;
+}
+
+/* Retour à l'onglet de l'Annuaire depuis les formulaires de recommandation. */
+.rt-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.rt-back:hover {
+  color: var(--color-accent);
+}

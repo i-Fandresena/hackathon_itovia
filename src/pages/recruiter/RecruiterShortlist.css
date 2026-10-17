@@ -1,0 +1,193 @@
+/* Shortlist recruteur : talents vérifiés humainement */
+
+.rsl-explain {
+  margin-bottom: 0.85rem;
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+}
+
+.rsl-talent {
+  min-width: 0;
+}
+
+.rsl-talent-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rsl-talent-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.rsl-talent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.rsl-muted {
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Deux scores côte à côte, visuellement distincts, jamais un total. */
+.rsl-scores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.rsl-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  min-width: 0;
+}
+
+.rsl-score-match {
+  background: var(--color-bg);
+}
+
+.rsl-score-trust {
+  background: var(--color-bg-subtle);
+  border-style: dashed;
+}
+
+.rsl-score-label {
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-muted);
+}
+
+.rsl-score-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rsl-score-note {
+  font-size: 0.8rem;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.rsl-verif {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-ink-secondary);
+}
+
+.rsl-endorsements {
+  margin-top: 0.75rem;
+}
+
+.rsl-endorsements summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.rsl-reasons {
+  margin: 0.6rem 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--color-ink-secondary);
+}
+
+.rsl-warning {
+  color: var(--color-warning);
+}
+
+.rsl-endorsement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Retour d'action (succès ou erreur du serveur), toujours visible */
+
+.rsl-feedback {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rsl-feedback.is-ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.rsl-feedback.is-error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+/* Candidats diplômés proposés par OffRec */
+
+.rsl-matched {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rsl-matched-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.rsl-matched-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.rsl-place {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.rsl-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .rsl-matched-actions {
+    justify-content: flex-start;
+  }
+}

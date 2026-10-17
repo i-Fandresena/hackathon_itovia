@@ -836,3 +836,64 @@
   color: var(--color-ink-faint);
   flex-shrink: 0;
 }
+
+/* Appel vers la vitrine « Talents recommandés » */
+.landing-talents {
+  padding: 3rem 0 0;
+}
+
+.landing-talents-band {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.25rem 1.5rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+}
+
+.landing-companies-band {
+  margin-top: 1rem;
+}
+
+.landing-talents-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.landing-talents-copy {
+  min-width: 0;
+}
+
+.landing-talents-copy .eyebrow {
+  margin-bottom: 0.4rem;
+}
+
+.landing-talents-title {
+  font-size: clamp(1.15rem, 2.4vw, 1.45rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.35rem;
+}
+
+.landing-talents-text {
+  color: var(--color-ink-muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  max-width: 40rem;
+}
+
+@media (max-width: 760px) {
+  .landing-talents-band {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 1.25rem;
+  }
+}

@@ -1,0 +1,189 @@
+/*
+ * Tableau de bord recruteur (préfixe `rdash-`). La présentation commune
+ * (cartes, panneaux, grilles, « À traiter », squelettes) vient de
+ * `src/components/dashboard/Dashboard.css` (préfixe `odash-`) ; ne restent
+ * ici que les éléments propres au recruteur.
+ */
+
+.rdash-publish {
+  gap: 0.45rem;
+  text-decoration: none;
+}
+
+/* Colonne droite du second rang : « À traiter » puis « Prochain entretien ». */
+.rdash-stack {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.rdash-muted {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-ink-muted);
+}
+
+.rdash-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-accent-hover);
+  text-decoration: none;
+}
+
+.rdash-link:hover {
+  text-decoration: underline;
+}
+
+.rdash-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.rdash-more {
+  margin: 1rem 0 0;
+}
+
+/* ------------------------------------------------------------ prochain entretien */
+
+.rdash-next-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  color: var(--color-ink-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.rdash-next-empty svg {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.rdash-next-empty p {
+  margin: 0;
+}
+
+.rdash-next-body {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.rdash-next-date {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--color-ink);
+}
+
+.rdash-next-date svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  color: var(--color-accent);
+}
+
+.rdash-next-facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.6rem 1rem;
+  margin: 0;
+}
+
+.rdash-next-facts div {
+  min-width: 0;
+}
+
+.rdash-next-facts dt {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.rdash-next-facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------ nouveau recruteur */
+
+.rdash-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  padding: 1.5rem;
+}
+
+.rdash-empty-icon {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-accent-muted);
+  color: var(--color-accent);
+}
+
+.rdash-empty-text {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.rdash-empty-text h2 {
+  margin: 0 0 0.3rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.rdash-empty-text p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--color-ink-muted);
+  max-width: 40rem;
+}
+
+.rdash-empty .btn {
+  gap: 0.45rem;
+  text-decoration: none;
+}
+
+/* Fiche entreprise liée : rien quand aucune n'est liée. */
+.rdash-company:empty {
+  display: none;
+}
+
+.rdash-company .cmp-linked {
+  margin-bottom: 0;
+}
+
+/* ------------------------------------------------------------ petits écrans */
+
+@container odash (max-width: 439px) {
+  /* « Publier une offre » sur sa propre ligne, au-dessus d'Actualiser / Exporter. */
+  .odash-actions .rdash-publish {
+    flex: 1 1 100%;
+  }
+
+  .rdash-next-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rdash-empty .btn {
+    width: 100%;
+  }
+}

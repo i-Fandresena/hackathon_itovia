@@ -1,0 +1,25 @@
+/* Missions d'une offre, en liste à puces (détail public, dossier candidat, écrans admin). */
+.opp-missions {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  list-style: disc;
+  color: var(--color-ink-secondary);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.opp-missions li {
+  overflow-wrap: anywhere;
+}
+
+.opp-missions li::marker {
+  color: var(--color-accent);
+}
+
+.opp-missions-compact {
+  font-size: 0.8125rem;
+  gap: 0.2rem;
+}

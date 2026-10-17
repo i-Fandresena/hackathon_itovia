@@ -4,26 +4,35 @@ import {
   AlertTriangle,
   Bell,
   Briefcase,
+  BriefcaseBusiness,
+  Building2,
+  CalendarDays,
   ClipboardCheck,
   CreditCard,
   FileCheck2,
   FilePlus2,
+  GraduationCap,
   Handshake,
+  HeartHandshake,
+  History,
   Inbox,
   LayoutDashboard,
   LogOut,
   MessageCircle,
   Radar,
-  Search,
   ShieldCheck,
+  MessageSquareLock,
   Store,
   UserPlus,
   UserRound,
   Users,
+  UsersRound,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { interviewAwaitsCandidateReply } from '../../lib/interview'
+import { candidateProfileCompletion } from '../../lib/recommendation'
 import { ROLE_LABELS } from '../../lib/roles'
-import type { CandidateProfile, User, UserRole } from '../../types'
+import type { CandidateProfile, InterviewStatus, User, UserRole } from '../../types'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -40,6 +49,41 @@ export interface RoleLink {
   /** Entrée rangée sous « Compte » dans la carte latérale plutôt que dans
    *  la navigation principale. */
   account?: boolean
+  /** Entrée de la carte latérale seulement : la barre d'onglets mobile la
+   *  saute (elle reste sous « Menu »), pour ne pas déplacer ses 4 onglets. */
+  menuOnly?: boolean
+}
+
+/** Entretiens à traiter par le recruteur (empêchement signalé par le
+ *  candidat) — pastille de l'entrée « Entretiens », calculée sur les dossiers
+ *  déjà chargés (`receivedSuggestions`), sans requête de plus. */
+export function countInterviewsToHandle(
+  received: { status: string; interview?: { status: string } | null }[],
+): number {
+  return received.filter((s) => s.status === 'mise_en_relation' && s.interview?.status === 'empechement').length
+}
+
+/** Entretiens qui attendent la réponse du candidat (planifiés ou
+ *  reprogrammés, pas encore commencés) — pastille de son entrée
+ *  « Entretiens », calculée sur `mySuggestions`, sans requête de plus. */
+export function countInterviewsAwaitingReply(
+  dossiers: { status: string; interview?: { status: InterviewStatus; scheduledAt: string } | null }[],
+): number {
+  return dossiers.filter(
+    (s) => s.status === 'mise_en_relation' && s.interview && interviewAwaitsCandidateReply(s.interview),
+  ).length
+}
+
+/** Pastille « Entretiens » du rôle (recruteur : empêchements à traiter ;
+ *  candidat : réponses attendues). */
+export function countInterviewBadge(
+  role: UserRole,
+  received: Parameters<typeof countInterviewsToHandle>[0],
+  mine: Parameters<typeof countInterviewsAwaitingReply>[0],
+): number {
+  if (role === 'recruiter') return countInterviewsToHandle(received)
+  if (role === 'candidate') return countInterviewsAwaitingReply(mine)
+  return 0
 }
 
 /**
@@ -52,7 +96,12 @@ export interface RoleLink {
  * `canVerifyCv` ajoute « Vérification des CV » quel que soit le rôle :
  * c'est une capacité accordée par l'admin, pas un rôle.
  */
-export function getLinksByRole(role: UserRole, unreadCount: number, canVerifyCv = false): RoleLink[] {
+export function getLinksByRole(
+  role: UserRole,
+  unreadCount: number,
+  canVerifyCv = false,
+  interviewsToHandle = 0,
+): RoleLink[] {
   const LINKS_BY_ROLE: Record<UserRole, RoleLink[]> = {
     // Les 4 premières entrées forment la barre d'onglets mobile : le suivi
     // (offres, candidats proposés, notifications) y passe avant « Publier une
@@ -61,43 +110,91 @@ export function getLinksByRole(role: UserRole, unreadCount: number, canVerifyCv 
       { to: '/recruteur', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
       { to: '/recruteur/offres', label: 'Mes offres', icon: Briefcase },
       { to: '/recruteur/candidatures', label: 'Candidats proposés', icon: Users },
+      // Juste après « Candidats proposés », d'où les entretiens se créent ;
+      // hors barre d'onglets mobile (`menuOnly`) pour y garder les notifications.
+      { to: '/recruteur/entretiens', label: 'Entretiens', icon: CalendarDays, badge: interviewsToHandle, menuOnly: true },
       { to: '/recruteur/notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
       { to: '/recruteur/publier', label: 'Publier une offre', icon: FilePlus2 },
       { to: '/recruteur/placements', label: 'Placements', icon: ClipboardCheck },
       { to: '/messages', label: 'Discuter avec OffRec', icon: MessageCircle },
       { to: '/recruteur/abonnement', label: 'Abonnement', icon: CreditCard, account: true },
+      // Point d'entrée unique des recommandations (onglets Professionnels,
+      // Talents, Entreprises, Mes recommandations ; « Recommander un
+      // talent » depuis l'onglet Talents) — à un geste via « Menu ».
       { to: '/annuaire', label: 'Annuaire', icon: Store },
     ],
     candidate: [
       { to: '/candidat', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
+      // Juste après le tableau de bord, d'où l'on suit ses dossiers ; hors
+      // barre d'onglets mobile (`menuOnly`), déjà pleine (Tableau de bord,
+      // Annuaire, Notifications, Profil) : sa pastille passe sur « Menu ».
+      { to: '/candidat/entretiens', label: 'Entretiens', icon: CalendarDays, badge: interviewsToHandle, menuOnly: true },
       { to: '/annuaire', label: 'Annuaire', icon: Store },
       { to: '/candidat/notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
       { to: '/candidat/profil', label: 'Profil', icon: UserRound, account: true },
+      // Talents et entreprises recommandés, « Mes recommandations » et les
+      // formulaires pour recommander sont des onglets de l'Annuaire.
     ],
     particulier: [
       { to: '/particulier', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
-      { to: '/annuaire', label: 'Rechercher un pro', icon: Search },
+      // L'Annuaire regroupe désormais professionnels, talents, entreprises
+      // et « Mes recommandations » : le libellé « Rechercher un pro » n'en
+      // décrivait plus qu'un onglet.
+      { to: '/annuaire', label: 'Annuaire', icon: Store },
       { to: '/messages', label: 'Messages', icon: MessageCircle },
     ],
     admin: [
       { to: '/admin', label: 'Tableau de bord', icon: ShieldCheck, end: true },
       { to: '/admin/mise-en-relation', label: 'Mise en relation', icon: Handshake },
+      // Suivi de tous les entretiens, à côté des dossiers ; hors barre
+      // d'onglets mobile (`menuOnly`) : ses 4 onglets ne bougent pas.
+      { to: '/admin/entretiens', label: 'Entretiens', icon: CalendarDays, menuOnly: true },
+      // 3e position : avec « Vérification des CV » insérée en 4e (l'admin
+      // peut toujours vérifier), les notifications restent dans la barre
+      // d'onglets mobile, pastille de non lus visible sans ouvrir « Menu ».
+      { to: '/admin/notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
+      // Journal d'activité, juste après les notifications. « Vérification des
+      // CV » (toujours accordée à l'admin) s'insère avant lui en 4e position :
+      // la barre d'onglets mobile reste Tableau de bord, Mise en relation,
+      // Notifications, Vérification des CV ; « Activité » est sous « Menu ».
+      { to: '/admin/activite', label: 'Activité', icon: History },
       { to: '/admin/placements', label: 'Placements', icon: ClipboardCheck },
       { to: '/admin/moderation', label: 'Modération', icon: AlertTriangle },
       { to: '/admin/agents', label: 'Agents de terrain', icon: UserPlus },
+      // Après « Agents de terrain » : hors barre d'onglets mobile (4 premiers).
+      { to: '/admin/talents', label: 'Talents', icon: UsersRound },
+      // Comptes candidats (profil, CV, dossiers) puis comptes recruteurs et
+      // leurs offres — consultation seule ; « Recruteurs » reste à côté des
+      // fiches « Entreprises » auxquelles ils peuvent être liés.
+      { to: '/admin/candidats', label: 'Candidats', icon: GraduationCap },
+      { to: '/admin/recruteurs', label: 'Recruteurs', icon: BriefcaseBusiness },
+      { to: '/admin/entreprises', label: 'Entreprises', icon: Building2 },
       { to: '/annuaire', label: 'Annuaire', icon: Store },
       { to: '/messages', label: 'Messages', icon: MessageCircle },
     ],
     agent: [
       { to: '/agent', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
       { to: '/agent/leads', label: 'Demandes de contact', icon: Inbox },
+      // File de TRAITEMENT des recommandations reçues (signaux) — distincte de
+      // l'onglet d'affichage « Talents recommandés » de l'Annuaire.
+      { to: '/agent/recommandations', label: 'Signaux à traiter', icon: HeartHandshake },
       { to: '/agent/veille', label: 'Veille', icon: Radar },
+      // 5e position : hors barre d'onglets mobile (4 premiers) ; les
+      // notifications y mènent directement à chaque nouvelle demande.
+      { to: '/agent/demandes-talents', label: 'Demandes pour mes talents', icon: MessageSquareLock },
       { to: '/agent/talents/nouveau', label: 'Nouveau talent', icon: ClipboardCheck },
+      // Affichage seulement (Professionnels, Talents, Entreprises) : l'agent
+      // ne recommande pas, il n'a ni « Mes recommandations » ni les boutons.
+      { to: '/annuaire', label: 'Annuaire', icon: Store },
       { to: '/messages', label: 'Messages', icon: MessageCircle },
+      { to: '/agent/notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
     ],
     talent: [
       { to: '/mon-espace', label: 'Mon espace', icon: LayoutDashboard, end: true },
       { to: '/messages', label: 'Messages', icon: MessageCircle },
+      // Recommander (talent, entreprise) et « Mes recommandations » : onglets
+      // de l'Annuaire, ici dans la barre d'onglets mobile.
+      { to: '/annuaire', label: 'Annuaire', icon: Store },
     ],
   }
   const links = LINKS_BY_ROLE[role]
@@ -105,8 +202,13 @@ export function getLinksByRole(role: UserRole, unreadCount: number, canVerifyCv 
   // En 4e position : la barre d'onglets mobile n'affiche que les 4 premiers
   // liens, l'entrée y reste donc visible sans passer par « Menu », et ne
   // déplace qu'un seul lien du rôle.
+  // Position comptée hors entrées `menuOnly`, pour garder la même barre
+  // d'onglets mobile qu'avant leur ajout.
   const cvLink: RoleLink = { to: '/verification-cv', label: 'Vérification des CV', icon: FileCheck2 }
-  return [...links.slice(0, 3), cvLink, ...links.slice(3)]
+  let seen = 0
+  const at = links.findIndex((l) => !l.menuOnly && ++seen > 3)
+  const index = at === -1 ? links.length : at
+  return [...links.slice(0, index), cvLink, ...links.slice(index)]
 }
 
 /** Identité affichée dans l'en-tête de la carte latérale : nom du profil
@@ -127,23 +229,12 @@ export function getAccountIdentity(user: User | null) {
 }
 
 /**
- * Taux de complétion du profil candidat, calculé uniquement sur les champs
- * que le candidat peut réellement laisser vides puis renseigner depuis
- * `/candidat/profil` (les listes déroulantes ont toujours une valeur et ne
- * comptent donc pas). Les autres rôles n'ont pas de page d'édition de
- * profil : pas de taux pour eux.
+ * Taux de complétion du profil candidat — règle partagée avec l'espace admin
+ * (`candidateProfileCompletion()` dans lib/recommendation.ts). Les autres
+ * rôles n'ont pas de page d'édition de profil : pas de taux pour eux.
  */
 function candidateCompletion(profile: CandidateProfile): number {
-  const checks = [
-    profile.fullName.trim() !== '',
-    profile.phone.trim() !== '',
-    profile.province.trim() !== '',
-    profile.city.trim() !== '',
-    profile.skills.length > 0,
-    profile.desiredOpportunityTypes.length > 0,
-    Boolean(profile.cvUrl),
-  ]
-  return Math.round((checks.filter(Boolean).length / checks.length) * 100)
+  return candidateProfileCompletion(profile)
 }
 
 const RING_SIZE = 60
@@ -193,11 +284,16 @@ function ProfileCompletionCard({ percent, onNavigate }: { percent: number; onNav
  * complétion du profil tant qu'il n'est pas à 100 %.
  */
 export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
-  const { currentUser, unreadCount } = useApp()
+  const { currentUser, unreadCount, receivedSuggestions, mySuggestions } = useApp()
 
   const role = currentUser?.role ?? 'candidate'
   const identity = getAccountIdentity(currentUser)
-  const links = getLinksByRole(role, unreadCount, currentUser?.canVerifyCv === true)
+  const links = getLinksByRole(
+    role,
+    unreadCount,
+    currentUser?.canVerifyCv === true,
+    countInterviewBadge(role, receivedSuggestions, mySuggestions),
+  )
   const mainLinks = links.filter((l) => !l.account)
   const accountLinks = links.filter((l) => l.account)
 

@@ -1,0 +1,99 @@
+/* Compétences requises d'une offre : suggestions + saisie libre (formulaire recruteur). */
+.skill-picker {
+  border: 0;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.skill-picker > legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+}
+
+.skill-picker .chip:focus-visible,
+.skill-picker-remove:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.skill-picker-custom {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.skill-picker-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  max-width: 100%;
+  padding-right: 0.3rem;
+  cursor: default;
+}
+
+.skill-picker-tag > span {
+  overflow-wrap: anywhere;
+}
+
+.skill-picker-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.skill-picker-remove:hover {
+  background: var(--color-accent-ring);
+}
+
+.skill-picker-add {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.skill-picker-add-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+}
+
+.skill-picker-add-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.skill-picker-add-row .input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+}
+
+.skill-picker-add-row .input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.skill-picker-add-row .btn {
+  flex-shrink: 0;
+}
+
+.skill-picker-status {
+  font-size: 0.75rem;
+  color: var(--color-success);
+  margin: 0;
+}

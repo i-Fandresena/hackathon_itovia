@@ -22,6 +22,7 @@ import { checkCvName, computeCvFlags } from '../lib/cv-flags.js'
 import { extractCVDataWithAI, calculateYearsOfExperience } from '../lib/cv-extraction.js'
 import { COMMON_SKILLS } from '../../../src/data/constants.js'
 import { scheduleCandidateMatching } from '../lib/matching.js'
+import { clip, plural, scheduleAdminNotification, type NotifyAdminsInput } from '../lib/notify.js'
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -91,6 +92,57 @@ function setSessionCookie(res: Response, token: string): void {
   })
 }
 
+/**
+ * Notification admin d'une inscription. Le candidat et le recruteur sont
+ * nommés (nom du profil, raison sociale) ; le particulier et le compte de
+ * suivi talent ne le sont pas. Jamais l'adresse email ni le téléphone.
+ */
+function registrationNotification(user: UserWithProfiles): NotifyAdminsInput | null {
+  if (user.role === 'candidate') {
+    const profile = user.candidateProfile
+    return {
+      event: 'candidate_registered',
+      category: 'candidat',
+      title: 'Nouveau candidat inscrit',
+      message: profile
+        ? `${clip(profile.fullName, 60)} a créé un compte candidat (${clip(profile.city, 40)}).`
+        : 'Un candidat a créé un compte.',
+      link: '/admin',
+    }
+  }
+  if (user.role === 'recruiter') {
+    const profile = user.recruiterProfile
+    return {
+      event: 'recruiter_registered',
+      category: 'recruteur',
+      title: 'Nouveau recruteur inscrit',
+      message: profile
+        ? `L’entreprise ${clip(profile.companyName, 60)} a créé un compte recruteur.`
+        : 'Une entreprise a créé un compte recruteur.',
+      link: '/admin',
+    }
+  }
+  if (user.role === 'particulier') {
+    return {
+      event: 'individual_registered',
+      category: 'annuaire',
+      title: 'Nouveau particulier inscrit',
+      message: 'Un particulier a créé un compte pour utiliser l’annuaire de confiance.',
+      link: '/admin',
+    }
+  }
+  if (user.role === 'talent') {
+    return {
+      event: 'talent_account_registered',
+      category: 'agent',
+      title: 'Nouveau compte de suivi talent',
+      message: 'Une personne non diplômée a créé un compte pour suivre sa demande auprès des agents de terrain.',
+      link: '/admin/agents',
+    }
+  }
+  return null
+}
+
 router.post('/register', authLimiter, async (req, res, next) => {
   try {
     const body = registerSchema.parse(req.body)
@@ -157,6 +209,8 @@ router.post('/register', authLimiter, async (req, res, next) => {
     const token = signSession({ sub: user.id, role: user.role })
     setSessionCookie(res, token)
     res.status(201).json({ user: await toClientUser(user) })
+    const registration = registrationNotification(user)
+    if (registration) scheduleAdminNotification(registration)
   } catch (err) {
     next(err)
   }
@@ -263,6 +317,13 @@ router.post('/profile/candidate/matching-consent', requireRole('candidate'), asy
       }),
     ])
     res.json({ candidateProfile: serializeOwnCandidateProfile(profile) })
+    scheduleAdminNotification({
+      event: 'matching_consent_given',
+      category: 'candidat',
+      title: 'Accord de matching donné',
+      message: `${clip(profile.fullName, 60)} accepte qu’OffRec propose son profil aux entreprises.`,
+      link: '/admin/mise-en-relation',
+    })
     scheduleCandidateMatching(userId, 'consent_given')
   } catch (err) {
     next(err)
@@ -296,6 +357,21 @@ router.delete('/profile/candidate/matching-consent', requireRole('candidate'), a
       })
     }
     res.json({ candidateProfile: serializeOwnCandidateProfile(profile), withdrawnSuggestions: withdrawn.count })
+    // Comme le journal d'audit : rien si le consentement n'était déjà plus actif.
+    if (current.matchingConsentAt) {
+      scheduleAdminNotification({
+        event: 'matching_consent_withdrawn',
+        category: 'candidat',
+        title: 'Accord de matching retiré',
+        message:
+          `${clip(profile.fullName, 60)} a retiré son accord de matching` +
+          (withdrawn.count > 0
+            ? ` : ${plural(withdrawn.count, 'suggestion')} en attente de validation ${withdrawn.count > 1 ? 'ont été écartées' : 'a été écartée'}.`
+            : '.') +
+          ' Les dossiers déjà transmis à un recruteur restent en cours.',
+        link: '/admin/mise-en-relation',
+      })
+    }
   } catch (err) {
     next(err)
   }
@@ -539,6 +615,18 @@ router.post('/profile/candidate/cv', requireRole('candidate'), handleCvUpload, a
       flags,
       verificationStatus: 'non_verifie',
       matchingConsentAt: matchingConsentAt ? matchingConsentAt.toISOString() : null,
+    })
+    // Une seule notification, même quand le dépôt porte aussi le consentement.
+    scheduleAdminNotification({
+      event: grantsConsent ? 'cv_upload_with_consent' : 'cv_upload',
+      category: 'candidat',
+      title: 'CV à vérifier',
+      message:
+        `${clip(currentProfile.fullName, 60)} a déposé un CV` +
+        (grantsConsent ? ' et donné son accord de matching' : '') +
+        (flags.length > 0 ? ` — ${plural(flags.length, 'point')} à contrôler.` : '.') +
+        ' Une vérification humaine est attendue.',
+      link: '/verification-cv',
     })
     scheduleCandidateMatching(userId, 'cv_upload')
   } catch (err) {

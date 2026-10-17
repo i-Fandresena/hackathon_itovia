@@ -1,12 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { MissionsEditor } from '../../components/opportunity/MissionsEditor'
+import { RequiredSkillsPicker } from '../../components/opportunity/RequiredSkillsPicker'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Field, Input, Select, Textarea } from '../../components/ui/Form'
 import {
   ACTIVE_SECTORS,
   CATEGORIES,
-  COMMON_SKILLS,
   EXPERIENCE_LABELS,
   OPPORTUNITY_TYPE_LABELS,
   PROVINCES,
@@ -14,6 +15,7 @@ import {
   SECTORS,
 } from '../../data/constants'
 import { useApp } from '../../context/AppContext'
+import { checkMissions, normalizeRequiredSkills } from '../../lib/opportunityFields'
 import type { ExperienceLevel, OpportunityType, Sector } from '../../types'
 
 type SectorDetails = Record<string, string | boolean>
@@ -28,6 +30,8 @@ const defaultForm: {
   city: string
   opportunityType: OpportunityType
   requiredSkills: string[]
+  /** Lignes saisies (vides comprises) : nettoyées à l'envoi. */
+  missions: string[]
   level: ExperienceLevel
   deadline: string
 } = {
@@ -40,6 +44,7 @@ const defaultForm: {
   city: PROVINCES[0],
   opportunityType: 'emploi',
   requiredSkills: [],
+  missions: [''],
   level: 'junior',
   deadline: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
 }
@@ -51,6 +56,7 @@ export function RecruiterOpportunityForm() {
   const { opportunities, addOpportunity, updateOpportunity } = useApp()
   const [form, setForm] = useState(defaultForm)
   const [error, setError] = useState('')
+  const [showMissionErrors, setShowMissionErrors] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -66,6 +72,7 @@ export function RecruiterOpportunityForm() {
         city: existing.city,
         opportunityType: existing.opportunityType,
         requiredSkills: existing.requiredSkills,
+        missions: existing.missions?.length ? [...existing.missions] : [''],
         level: existing.level,
         deadline: existing.deadline,
       })
@@ -76,19 +83,19 @@ export function RecruiterOpportunityForm() {
     setForm((f) => ({ ...f, sectorDetails: { ...f.sectorDetails, [key]: value } }))
   }
 
-  const toggleSkill = (skill: string) => {
-    setForm((f) => ({
-      ...f,
-      requiredSkills: f.requiredSkills.includes(skill)
-        ? f.requiredSkills.filter((s) => s !== skill)
-        : [...f.requiredSkills, skill],
-    }))
-  }
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
-    const result = isEdit && id ? await updateOpportunity(id, form) : await addOpportunity(form)
+    // Mêmes règles que le serveur (src/lib/opportunityFields.ts), qui fait foi.
+    const { missions, errors } = checkMissions(form.missions)
+    if (errors.length > 0) {
+      setShowMissionErrors(true)
+      setError(errors.map((err) => err.message).join(' '))
+      return
+    }
+    setShowMissionErrors(false)
+    const payload = { ...form, missions, requiredSkills: normalizeRequiredSkills(form.requiredSkills) }
+    const result = isEdit && id ? await updateOpportunity(id, payload) : await addOpportunity(payload)
     if (!result.ok) {
       setError(result.error ?? 'Enregistrement impossible.')
       return
@@ -187,6 +194,11 @@ export function RecruiterOpportunityForm() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
             </Field>
+            <MissionsEditor
+              rows={form.missions}
+              onChange={(missions) => setForm((f) => ({ ...f, missions }))}
+              showErrors={showMissionErrors}
+            />
             <Field label="Province">
               <Select
                 value={form.province}
@@ -238,20 +250,10 @@ export function RecruiterOpportunityForm() {
                 ))}
               </Select>
             </Field>
-            <Field label="Compétences requises">
-              <div className="skill-chips">
-                {COMMON_SKILLS.map((skill) => (
-                  <button
-                    key={skill}
-                    type="button"
-                    className={`chip ${form.requiredSkills.includes(skill) ? 'active' : ''}`}
-                    onClick={() => toggleSkill(skill)}
-                  >
-                    {skill}
-                  </button>
-                ))}
-              </div>
-            </Field>
+            <RequiredSkillsPicker
+              value={form.requiredSkills}
+              onChange={(requiredSkills) => setForm((f) => ({ ...f, requiredSkills }))}
+            />
             <Field label="Date limite de l’offre">
               <Input
                 type="date"
@@ -262,6 +264,7 @@ export function RecruiterOpportunityForm() {
             </Field>
             {error && (
               <div
+                role="alert"
                 style={{
                   color: 'var(--color-danger, #dc2626)',
                   background: 'var(--color-danger-bg, #fef2f2)',

@@ -1,17 +1,20 @@
 import { useState } from 'react'
-import { ArrowRight, Building2, CheckCircle2, CircleAlert, Clock, MapPin, Send } from 'lucide-react'
+import { ArrowRight, Building2, CalendarDays, CheckCircle2, CircleAlert, Clock, MapPin, Send } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { WithdrawDossierButton } from '../../components/candidate/WithdrawDossierButton'
+import { candidateInterviewFlag } from '../../components/interview/CandidateInterviewCard'
+import { CandidateInterviewDetail } from '../../components/interview/CandidateInterviewDetail'
+import { interviewStatusLabel } from '../../components/interview/InterviewSummary'
 import { FadeUp } from '../../components/motion/Motion'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { MatchScore } from '../../components/ui/MatchScore'
 import { useApp } from '../../context/AppContext'
 import { OPPORTUNITY_TYPE_LABELS } from '../../data/constants'
 import { canWithdrawFromDossier, dossierStatusInfo, isTransmitted } from '../../lib/candidateDossier'
 import { formatDate } from '../../lib/format'
+import { formatMadagascarDateTime, formatMadagascarShortDateTime } from '../../lib/interview'
 import type { CandidateProfile } from '../../types'
 import './CandidateDashboard.css'
 
@@ -138,6 +141,7 @@ export function CandidateDashboard() {
   const { currentUser, mySuggestions } = useApp()
   const navigate = useNavigate()
   const [withdrawnTitle, setWithdrawnTitle] = useState('')
+  const [detailId, setDetailId] = useState<string | null>(null)
   const profile = currentUser?.candidateProfile
 
   if (!profile) {
@@ -169,6 +173,10 @@ export function CandidateDashboard() {
   const transmitted = dossiers.filter((s) => isTransmitted(s.status)).length
   const interested = dossiers.filter((s) => s.status === 'interet_recruteur').length
   const connected = dossiers.filter((s) => s.status === 'mise_en_relation').length
+  // Relu à chaque rendu : la modale revient à jour après une réponse.
+  const detail = detailId
+    ? dossiers.find((s) => s.id === detailId && s.status === 'mise_en_relation' && s.interview) ?? null
+    : null
 
   return (
     <div className="page">
@@ -273,6 +281,9 @@ export function CandidateDashboard() {
               // Le serveur ne renvoie le nom qu'à la mise en relation ; on
               // le conditionne aussi au statut, par défense.
               const company = s.status === 'mise_en_relation' ? s.opportunity.companyName : null
+              const interview = s.status === 'mise_en_relation' ? s.interview ?? null : null
+              const flag = interview ? candidateInterviewFlag(interview) : null
+              const flagId = `dossier-iv-flag-${s.id}`
               return (
                 <Card key={s.id} className="dossier-card">
                   <div className="dossier-head">
@@ -299,26 +310,60 @@ export function CandidateDashboard() {
 
                   <p className="dossier-status-text">{status.description}</p>
 
-                  <MatchScore match={{ score: s.score, reasons: s.reasons }} />
-
-                  <div className="dossier-actions">
-                    <Link to={detailPath}>
-                      <Button variant="secondary" size="sm">
-                        {s.status === 'proposee_candidat' ? 'Répondre' : 'Voir le dossier'}
-                      </Button>
-                    </Link>
-                    {canWithdrawFromDossier(s.status) && (
-                      <WithdrawDossierButton
-                        suggestionId={s.id}
-                        opportunityTitle={s.opportunity.title}
-                        onWithdrawn={setWithdrawnTitle}
-                      />
-                    )}
-                  </div>
+                  {(interview || canWithdrawFromDossier(s.status)) && (
+                    <div className="dossier-actions">
+                      {canWithdrawFromDossier(s.status) && (
+                        <WithdrawDossierButton
+                          suggestionId={s.id}
+                          opportunityTitle={s.opportunity.title}
+                          onWithdrawn={setWithdrawnTitle}
+                        />
+                      )}
+                      {/* Entretien fixé par l'entreprise (décision 2026-10-14),
+                          envoyé par le serveur à partir de la mise en relation
+                          seulement : détail et réponse dans une modale. */}
+                      {interview && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="dossier-iv-btn"
+                          aria-haspopup="dialog"
+                          aria-describedby={flag ? flagId : undefined}
+                          title={`Entretien : ${interviewStatusLabel(interview.status, 'candidate')} · ${formatMadagascarDateTime(interview.scheduledAt)} (heure de Madagascar)`}
+                          onClick={() => setDetailId(s.id)}
+                        >
+                          <CalendarDays size={14} aria-hidden />
+                          Voir l’entretien
+                          <span className={`dossier-iv-when${interview.status === 'annule' ? ' is-cancelled' : ''}`}>
+                            · {interview.status === 'annule' ? 'annulé' : formatMadagascarShortDateTime(interview.scheduledAt)}
+                          </span>
+                          {flag && <span className="dossier-iv-dot" aria-hidden />}
+                        </Button>
+                      )}
+                      {flag && (
+                        <span className="dossier-iv-flag" id={flagId}>
+                          <Clock size={13} aria-hidden />
+                          {flag}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </Card>
               )
             })}
           </div>
+        )}
+
+        {detail?.interview && (
+          <CandidateInterviewDetail
+            target={{
+              suggestionId: detail.id,
+              opportunityTitle: detail.opportunity.title,
+              companyName: detail.opportunity.companyName,
+              interview: detail.interview,
+            }}
+            onClose={() => setDetailId(null)}
+          />
         )}
       </div>
     </div>

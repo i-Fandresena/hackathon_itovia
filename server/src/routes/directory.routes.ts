@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireAuth } from '../middleware/auth.js'
 import { getOrCreateMember } from '../lib/member.js'
+import { clip, scheduleAdminNotification } from '../lib/notify.js'
 import { providerInputSchema, recommendationInputSchema } from '../lib/validation.js'
 import { canRecommend, evaluateProvider, rankProviders } from '../../../src/lib/trust.js'
 import type { Member, Provider, Recommendation } from '../../../src/types/index.js'
@@ -167,6 +168,15 @@ router.post('/providers', requireAuth, async (req, res, next) => {
       data: { ...body, addedByMemberId: member.id },
     })
     res.status(201).json({ provider: toDomainProvider(provider) })
+    // Le membre n'est jamais nommé (règle de confidentialité de l'annuaire).
+    scheduleAdminNotification({
+      event: 'provider_created',
+      category: 'annuaire',
+      title: 'Nouvelle fiche dans l’annuaire',
+      message: `Un membre a ajouté la fiche « ${clip(provider.name, 60)} » (${clip(provider.trade, 40)}, ${clip(provider.district, 40)}).`,
+      link: `/annuaire/${provider.id}`,
+      excludeUserId: req.session!.role === 'admin' ? req.session!.sub : null,
+    })
   } catch (err) {
     next(err)
   }
@@ -188,6 +198,16 @@ router.post('/providers/:id/claim', requireAuth, async (req, res, next) => {
       data: { claimedByMemberId: member.id },
     })
     res.json({ provider: toDomainProvider(provider) })
+    scheduleAdminNotification({
+      event: 'provider_claimed',
+      category: 'annuaire',
+      title: 'Fiche revendiquée',
+      message:
+        `Un membre a revendiqué la fiche « ${clip(provider.name, 60)} » (${clip(provider.trade, 40)}). ` +
+        'Ses propres recommandations ne comptent plus dans le score.',
+      link: `/annuaire/${provider.id}`,
+      excludeUserId: req.session!.role === 'admin' ? req.session!.sub : null,
+    })
   } catch (err) {
     next(err)
   }

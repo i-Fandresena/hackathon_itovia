@@ -1,0 +1,123 @@
+/* Saisie des missions d'une offre (formulaire recruteur). */
+.mission-editor {
+  border: 0;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mission-editor > legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+}
+
+.mission-editor-optional {
+  font-weight: 500;
+  color: var(--color-ink-muted);
+}
+
+.mission-editor-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mission-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.mission-row-num {
+  min-width: 1.4rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mission-row-input {
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+}
+
+.mission-row-input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.mission-row-actions {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.mission-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease-out),
+    color 0.15s var(--ease-out);
+}
+
+.mission-icon-btn:hover:not(:disabled) {
+  background: var(--color-bg-subtle);
+  color: var(--color-ink);
+}
+
+.mission-icon-btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.mission-icon-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.mission-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mission-row-error {
+  grid-column: 2 / -1;
+}
+
+.mission-editor-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mission-editor-count {
+  font-size: 0.75rem;
+  color: var(--color-ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 420px) {
+  .mission-row-num {
+    min-width: 1rem;
+  }
+
+  .mission-icon-btn {
+    width: 1.9rem;
+  }
+}

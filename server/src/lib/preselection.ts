@@ -143,6 +143,19 @@ export const ADMIN_ALLOWED_TRANSITIONS: Record<MatchSuggestionStatus, MatchSugge
   ecartee: [],
 }
 
+/**
+ * Transitions qu'un recruteur déclenche lui-même sur un dossier de SON
+ * offre (décision 2026-10-14) : fixer un entretien met directement en
+ * relation, depuis un profil proposé ou une ligne déjà marquée « intérêt ».
+ * Même contrôle de consentement et de compte actif que côté admin
+ * (`checkMatchTransition`, lib/preselection-service.ts). Le retrait d'un
+ * profil (`ecartee`) reste dans match-suggestions.routes.ts.
+ */
+export const RECRUITER_ALLOWED_TRANSITIONS: Partial<Record<MatchSuggestionStatus, MatchSuggestionStatus[]>> = {
+  proposee_recruteur: ['mise_en_relation'],
+  interet_recruteur: ['mise_en_relation'],
+}
+
 const BLOCKED_REASONS: Partial<Record<MatchSuggestionStatus, string>> = {
   proposee_recruteur: 'Déjà transmis au recruteur.',
   interet_recruteur: 'Déjà transmis : le recruteur a marqué son intérêt.',
@@ -389,6 +402,7 @@ export function preselect(input: PreselectionInput): PreselectionResult {
       city: opportunity.city,
       opportunityType: opportunity.opportunityType,
       requiredSkills: opportunity.requiredSkills,
+      missions: opportunity.missions,
       level: opportunity.level,
       deadline: opportunity.deadline,
       open: closedReason === null,

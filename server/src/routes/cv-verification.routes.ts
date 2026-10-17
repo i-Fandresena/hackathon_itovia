@@ -3,6 +3,8 @@ import { prisma } from '../lib/prisma.js'
 import { requireCvVerifier } from '../middleware/rbac.js'
 import { cvQueueQuerySchema, cvVerificationDecisionSchema } from '../lib/validation.js'
 import { parseCvFlags } from '../lib/cv-flags.js'
+import { cvVerifierName, cvVerifierSelect } from '../lib/admin-candidates.js'
+import { actorLabel, clip, scheduleAdminNotification } from '../lib/notify.js'
 import { scheduleCandidateMatching } from '../lib/matching.js'
 
 /**
@@ -94,13 +96,7 @@ router.get('/candidates/:id', async (req, res, next) => {
                 note: true,
                 createdAt: true,
                 // `select` explicite : jamais de `passwordHash` ni d'email du vérificateur.
-                verifier: {
-                  select: {
-                    role: true,
-                    agentProfile: { select: { fullName: true } },
-                    individualProfile: { select: { fullName: true } },
-                  },
-                },
+                verifier: { select: cvVerifierSelect },
               },
             },
           },
@@ -137,10 +133,7 @@ router.get('/candidates/:id', async (req, res, next) => {
           decision: v.decision,
           note: v.note,
           // `verifier` est nul si son compte a été supprimé : la décision reste dans l'historique.
-          verifierName:
-            v.verifier?.agentProfile?.fullName ??
-            v.verifier?.individualProfile?.fullName ??
-            (v.verifier?.role === 'admin' ? 'Équipe OffRec' : 'Vérificateur OffRec'),
+          verifierName: cvVerifierName(v.verifier),
           createdAt: v.createdAt.toISOString(),
         })),
       },
@@ -219,6 +212,27 @@ router.post('/candidates/:id/decision', async (req, res, next) => {
     ])
 
     res.json({ verificationStatus: body.decision })
+    // Vérification déléguée (rôle habilité par l'admin) : les admins en sont
+    // informés. Une décision prise par un admin n'est pas notifiée — c'est
+    // déjà une action d'admin, tracée dans le journal d'audit.
+    if (req.session!.role !== 'admin') {
+      const verifierRole = req.session!.role
+      scheduleAdminNotification(async () => {
+        const candidate = await prisma.candidateProfile.findUnique({
+          where: { userId: candidateId },
+          select: { fullName: true },
+        })
+        return {
+          event: 'cv_verification_delegated',
+          category: verifierRole === 'agent' ? 'agent' : 'annuaire',
+          title: body.decision === 'verifie' ? 'CV vérifié par un vérificateur habilité' : 'CV rejeté par un vérificateur habilité',
+          message:
+            `${await actorLabel(verifierId)} a ${body.decision === 'verifie' ? 'vérifié' : 'rejeté'} le CV de ` +
+            `${clip(candidate?.fullName, 60) || 'un candidat'}.`,
+          link: '/verification-cv',
+        }
+      })
+    }
     // Un CV vérifié ouvre l'envoi direct au recruteur : les suggestions encore
     // en file dont le score atteint le seuil haut peuvent être promues.
     if (body.decision === 'verifie') {

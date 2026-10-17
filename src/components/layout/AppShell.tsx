@@ -5,7 +5,7 @@ import { useApp } from '../../context/AppContext'
 import { PageMotion } from '../motion/Motion'
 import { Logo } from '../brand/Logo'
 import { ThemeToggle } from '../ui/ThemeToggle'
-import { Sidebar, getLinksByRole } from './Sidebar'
+import { Sidebar, countInterviewBadge, getLinksByRole } from './Sidebar'
 import { TabBar, type TabBarItem } from './TabBar'
 import './AppShell.css'
 
@@ -16,7 +16,7 @@ import './AppShell.css'
  * coulissant ouvert par l'onglet « Menu » de la barre d'onglets.
  */
 export function AppShell() {
-  const { logout, currentUser, unreadCount } = useApp()
+  const { logout, currentUser, unreadCount, receivedSuggestions, mySuggestions } = useApp()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -36,10 +36,14 @@ export function AppShell() {
 
   const role = currentUser?.role ?? 'candidate'
   const canVerifyCv = currentUser?.canVerifyCv === true
+  const interviewsToHandle = countInterviewBadge(role, receivedSuggestions, mySuggestions)
   const tabItems: TabBarItem[] = useMemo(() => {
-    const allLinks = getLinksByRole(role, unreadCount, canVerifyCv)
-    const primary = allLinks.slice(0, 4)
-    const hiddenBadgeTotal = allLinks.slice(4).reduce((sum, l) => sum + (l.badge ?? 0), 0)
+    const allLinks = getLinksByRole(role, unreadCount, canVerifyCv, interviewsToHandle)
+    // Les entrées `menuOnly` restent sous « Menu » (leur pastille compte dans la sienne).
+    const primary = allLinks.filter((l) => !l.menuOnly).slice(0, 4)
+    const hiddenBadgeTotal = allLinks
+      .filter((l) => !primary.includes(l))
+      .reduce((sum, l) => sum + (l.badge ?? 0), 0)
     return [
       ...primary.map((l) => ({ key: l.to, label: l.label, icon: l.icon, to: l.to, end: l.end, badge: l.badge })),
       {
@@ -51,7 +55,7 @@ export function AppShell() {
         onClick: () => setMenuOpen(true),
       },
     ]
-  }, [role, unreadCount, menuOpen, canVerifyCv])
+  }, [role, unreadCount, menuOpen, canVerifyCv, interviewsToHandle])
 
   return (
     <div className="shell">

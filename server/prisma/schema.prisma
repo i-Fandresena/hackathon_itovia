@@ -69,6 +69,14 @@ enum ReportTargetType {
   provider
   recommendation
   user
+  /// Recommandation d'un talent ou d'une entreprise.
+  endorsement
+  /// Fiche publique d'un talent (« Talents recommandés ») ; `targetId` = id
+  /// du TalentProfile (le client envoie le `publicRef`, résolu côté serveur).
+  talent
+  /// Fiche publique d'une entreprise (`/entreprises/:id`) ; `targetId` = id
+  /// de la Company.
+  company
 }
 
 enum ReportStatus {
@@ -187,30 +195,31 @@ model User {
   status       UserStatus @default(active)
   createdAt    DateTime   @default(now())
 
-  candidateProfile      CandidateProfile?
-  recruiterProfile      RecruiterProfile?
-  individualProfile     IndividualProfile?
-  agentProfile          AgentProfile?
-  talentAccountProfile  TalentAccountProfile?
-  member                Member?
+  candidateProfile     CandidateProfile?
+  recruiterProfile     RecruiterProfile?
+  individualProfile    IndividualProfile?
+  agentProfile         AgentProfile?
+  talentAccountProfile TalentAccountProfile?
+  member               Member?
 
-  opportunities Opportunity[]  @relation("RecruiterOpportunities")
-  applications  Application[]
+  opportunities    Opportunity[]     @relation("RecruiterOpportunities")
+  applications     Application[]
   matchSuggestions MatchSuggestion[]
-  bookmarks     Bookmark[]
-  notifications Notification[]
-  auditLogs     AuditLog[]
+  bookmarks        Bookmark[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
 
   talentsManaged        TalentProfile[]
   sourcingLeads         SourcingLead[]
+  talentSignalsHandled  TalentSignal[]  @relation("TalentSignalAgent")
   placementsAsRecruiter Placement[]     @relation("PlacementsAsRecruiter")
   placementsAsCandidate Placement[]     @relation("PlacementsAsCandidate")
 
-  subscription        Subscription?
-  transactions        Transaction[]
-  sentMessages        Message[]      @relation("SentMessages")
-  conversationsAsA    Conversation[] @relation("ConversationParticipantA")
-  conversationsAsB    Conversation[] @relation("ConversationParticipantB")
+  subscription     Subscription?
+  transactions     Transaction[]
+  sentMessages     Message[]      @relation("SentMessages")
+  conversationsAsA Conversation[] @relation("ConversationParticipantA")
+  conversationsAsB Conversation[] @relation("ConversationParticipantB")
 
   reportsFiled      Report[]           @relation("ReportsFiled")
   reportsAgainst    Report[]           @relation("ReportsAgainst")
@@ -220,6 +229,12 @@ model User {
   cvSubmissions        CvSubmission[]
   cvVerifications      CvVerification[] @relation("CvVerificationsReceived")
   cvVerificationsGiven CvVerification[] @relation("CvVerificationsGiven")
+
+  talentContactRequestsMade    TalentContactRequest[] @relation("TalentContactRequestsMade")
+  talentContactRequestsHandled TalentContactRequest[] @relation("TalentContactRequestsHandled")
+
+  /// Fiche entreprise liée à ce compte recruteur (par un admin uniquement).
+  linkedCompany Company? @relation("CompanyRecruiter")
 }
 
 model CandidateProfile {
@@ -242,53 +257,53 @@ model CandidateProfile {
 
   // === Données extraites du CV (JSON) ===
   /// Informations personnelles extraites du CV (nom, prénom, email, téléphone, etc.)
-  cvExtractedInfo         Json?
+  cvExtractedInfo        Json?
   /// Titre professionnel extrait du CV
-  cvProfessionalTitle     String?
+  cvProfessionalTitle    String?
   /// Résumé professionnel extrait du CV
-  cvProfessionalSummary   String?
+  cvProfessionalSummary  String?
   /// Expériences professionnelles extraites du CV (JSON array)
-  cvExperiences           Json?
+  cvExperiences          Json?
   /// Formation académique extraite du CV (JSON array)
-  cvEducation             Json?
+  cvEducation            Json?
   /// Certifications extraites du CV (JSON array)
-  cvCertifications        Json?
+  cvCertifications       Json?
   /// Projets/réalisations extraits du CV (JSON array)
-  cvProjects              Json?
+  cvProjects             Json?
   /// Langues extraites du CV (JSON array)
-  cvLanguages             Json?
+  cvLanguages            Json?
   /// Technologie/outils extraits du CV (liste plate)
-  cvTechnologies          String[]          @default([])
+  cvTechnologies         String[]  @default([])
   /// Années d'expérience calculées à partir du CV
-  cvYearsOfExperience     Int?
+  cvYearsOfExperience    Int?
   /// Localisation souhaitée extraite du CV (liste)
-  cvDesiredLocations      String[]          @default([])
+  cvDesiredLocations     String[]  @default([])
   /// Disponibilité extraite du CV
-  cvAvailability          String?
+  cvAvailability         String?
   /// Niveau de confiance de l'extraction (high/medium/low)
-  cvExtractionConfidence  String            @default("low")
+  cvExtractionConfidence String    @default("low")
   /// Date d'extraction du CV
-  cvExtractionDate        DateTime?
+  cvExtractionDate       DateTime?
 
   // === Lutte contre les faux CV ===
   /// Empreinte sha256 du dernier fichier accepté (détection de doublons).
-  cvFileHash              String?
+  cvFileHash           String?
   /// Date de l'attestation sur l'honneur cochée au dépôt.
-  cvAttestedAt            DateTime?
+  cvAttestedAt         DateTime?
   /// Drapeaux des contrôles automatiques (`{ code, severity, message }[]`) —
   /// jamais décisionnels : ils éclairent la vérification humaine.
-  cvFlags                 Json?
+  cvFlags              Json?
   /// Remis à `non_verifie` à chaque nouveau dépôt.
-  cvVerificationStatus    CvVerificationStatus @default(non_verifie)
-  cvVerifiedAt            DateTime?
-  cvVerifiedById          String?
-  cvVerificationNote      String?
+  cvVerificationStatus CvVerificationStatus @default(non_verifie)
+  cvVerifiedAt         DateTime?
+  cvVerifiedById       String?
+  cvVerificationNote   String?
 
   // === Consentement de matching (décision produit 2026-10-08) ===
   /// Date à laquelle le candidat a accepté qu'OffRec propose son profil aux
   /// entreprises. `null` = jamais donné, ou retiré. Vérifié côté serveur avant
   /// toute transmission à un recruteur ; jamais exposé au recruteur.
-  matchingConsentAt       DateTime?
+  matchingConsentAt DateTime?
 }
 
 /// Historique append-only de chaque dépôt de CV accepté — jamais modifié ni
@@ -384,16 +399,24 @@ model Opportunity {
   province        String
   city            String
   opportunityType OpportunityType
+  /// Suggestions (`COMMON_SKILLS`) ou saisies libres du recruteur, libellé
+  /// de la suggestion repris pour une saisie équivalente (casse, accents) —
+  /// règles partagées dans `src/lib/opportunityFields.ts`.
   requiredSkills  String[]
+  /// Missions du poste, dans l'ordre du recruteur (facultatives, 15 au plus,
+  /// 3 à 200 caractères). Montrées au candidat avant la mise en relation :
+  /// ni nom d'entreprise ni coordonnées (emails, téléphones et sites refusés
+  /// par le serveur).
+  missions        String[]        @default([])
   level           ExperienceLevel
   deadline        DateTime
   featured        Boolean         @default(false)
   createdAt       DateTime        @default(now())
 
-  applications Application[]
-  bookmarks    Bookmark[]
-  talentProposals TalentOpportunityProposal[]
-  placements      Placement[]
+  applications     Application[]
+  bookmarks        Bookmark[]
+  talentProposals  TalentOpportunityProposal[]
+  placements       Placement[]
   matchSuggestions MatchSuggestion[]
 
   @@index([province])
@@ -403,8 +426,10 @@ model Opportunity {
 /// Statut de mise en relation (diplômés). Chaîne en vigueur depuis la
 /// décision produit 2026-10-08 : `suggeree` (file de validation admin) →
 /// `proposee_recruteur` → `interet_recruteur` → `mise_en_relation`, ou
-/// `ecartee`. C'est toujours l'admin qui fait avancer vers
-/// `mise_en_relation`.
+/// `ecartee`. Depuis la décision 2026-10-14, le recruteur passe lui-même un
+/// dossier `proposee_recruteur` ou `interet_recruteur` en `mise_en_relation`
+/// en fixant un entretien (`Interview`) ; l'admin peut toujours confirmer
+/// une ligne `interet_recruteur` existante.
 enum MatchSuggestionStatus {
   /// Créée par le moteur ou par l'admin, en attente de validation admin.
   suggeree
@@ -435,27 +460,100 @@ enum MatchSuggestionOrigin {
 /// consentement global (`CandidateProfile.matchingConsentAt`) au lieu de
 /// postuler offre par offre.
 model MatchSuggestion {
-  id            String                @id @default(uuid())
-  opportunityId String
-  opportunity   Opportunity           @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  candidateId   String
-  candidate     User                  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  score         Int
-  reasons       String[]
-  status        MatchSuggestionStatus @default(suggeree)
+  id               String                @id @default(uuid())
+  opportunityId    String
+  opportunity      Opportunity           @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  candidateId      String
+  candidate        User                  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  score            Int
+  reasons          String[]
+  status           MatchSuggestionStatus @default(suggeree)
   /// Les lignes antérieures à 2026-10-08 ont toutes été créées par un admin.
-  origin        MatchSuggestionOrigin @default(admin)
+  origin           MatchSuggestionOrigin @default(admin)
   /// Rang du candidat dans la présélection ATS de l'offre au moment où un
   /// admin l'a transmis au recruteur depuis cette présélection
   /// (`lib/preselection.ts`). `null` pour un envoi direct du moteur ou une
   /// transmission unitaire. Instantané : jamais recalculé ensuite.
   preselectionRank Int?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  /// Entretien fixé par le recruteur (décision 2026-10-14) — un seul par
+  /// dossier, reprogrammé ou annulé en place.
+  interview        Interview?
 
   @@unique([opportunityId, candidateId])
   @@index([status])
   @@index([candidateId])
+}
+
+/// Statut d'un entretien (décision produit 2026-10-14).
+enum InterviewStatus {
+  /// Fixé (ou reprogrammé) par le recruteur, en attente de la réponse du candidat.
+  planifie
+  /// Le candidat a confirmé sa présence.
+  confirme
+  /// Le candidat a signalé un empêchement : le recruteur reprogramme ou annule.
+  empechement
+  /// Annulé par le recruteur.
+  annule
+}
+
+/// Fournisseur de l'agenda au moment de la dernière synchronisation.
+enum InterviewProvider {
+  /// Vrai événement dans l'agenda Google d'OffRec (`lib/google-calendar.ts`).
+  google
+  /// Identifiants Google absents : aucun événement, aucun lien (développement).
+  simule
+}
+
+/// État du lien de visioconférence affiché au candidat et au recruteur.
+enum InterviewMeetStatus {
+  /// Un lien Google Meet a été généré.
+  disponible
+  /// Google a échoué : la mise en relation est enregistrée, le lien est à
+  /// régulariser par un admin.
+  en_attente
+  /// Mode simulé : aucun lien n'existe (jamais de faux `meet.google.com`).
+  simule
+}
+
+/// Entretien fixé par le recruteur en cliquant « Ce profil m'intéresse »
+/// (décision produit 2026-10-14). Sa création fait passer le dossier en
+/// `mise_en_relation`. L'événement Google vit dans l'agenda d'OffRec, sans
+/// aucun invité : OffRec transmet lui-même le lien à chacun (intermédiaire).
+model Interview {
+  id              String              @id @default(uuid())
+  suggestionId    String              @unique
+  suggestion      MatchSuggestion     @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  /// Instant de début, en UTC (saisi en heure de Madagascar, UTC+3 fixe).
+  scheduledAt     DateTime
+  /// 30, 45 ou 60.
+  durationMinutes Int
+  /// Message optionnel du recruteur au candidat.
+  message         String?
+  status          InterviewStatus     @default(planifie)
+  provider        InterviewProvider
+  meetStatus      InterviewMeetStatus
+  meetUrl         String?
+  googleEventId   String?
+  /// Dernier échec de synchronisation avec Google (message court, sans
+  /// secret) ; `null` quand l'agenda est à jour.
+  calendarError   String?
+  /// Motif court donné par le candidat avec son empêchement.
+  declineReason   String?
+  /// Dernière réponse du candidat (confirmation ou empêchement).
+  respondedAt     DateTime?
+  cancelledAt     DateTime?
+  rescheduleCount Int                 @default(0)
+  /// Recruteur auteur (identifiant de compte, sans clé étrangère).
+  createdById     String
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status])
+  @@index([meetStatus])
+  /// Listes « Entretiens » (recruteur, admin) : tri et périodes par date.
+  @@index([scheduledAt])
 }
 
 model Application {
@@ -481,17 +579,32 @@ model Bookmark {
   @@id([candidateId, opportunityId])
 }
 
+/// Origine d'une notification destinée aux administrateurs (`notifyAdmins()`)
+/// — sert uniquement à filtrer la page `/admin/notifications`. Reflétée par
+/// `NotificationCategory` dans `src/types/index.ts`.
+enum NotificationCategory {
+  candidat
+  recruteur
+  agent
+  systeme
+  moderation
+  annuaire
+}
+
 model Notification {
-  id        String   @id @default(uuid())
+  id        String                @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   message   String
+  /// `null` pour les notifications personnelles (candidat, recruteur…) et
+  /// pour toutes celles créées avant l'ajout de la colonne.
+  category  NotificationCategory?
   /// Chemin frontend (ex. `/messages?c=...`, `/candidat/offres/...`) — la
   /// notification navigue vers sa source au clic, jamais générique.
   link      String?
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  read      Boolean               @default(false)
+  createdAt DateTime              @default(now())
 
   @@index([userId])
 }
@@ -506,10 +619,12 @@ model Member {
   phoneVerified Boolean  @default(false)
   joinedAt      DateTime @default(now())
 
-  providersAdded  Provider[]                   @relation("AddedByMember")
-  providersClaimed Provider[]                  @relation("ClaimedByMember")
-  recommendations Recommendation[]
-  confirmations   RecommendationConfirmation[]
+  providersAdded   Provider[]                   @relation("AddedByMember")
+  providersClaimed Provider[]                   @relation("ClaimedByMember")
+  recommendations  Recommendation[]
+  confirmations    RecommendationConfirmation[]
+  endorsements     Endorsement[]
+  companiesCreated Company[]                    @relation("CompaniesCreated")
 }
 
 model Provider {
@@ -535,21 +650,21 @@ model Provider {
 }
 
 model Recommendation {
-  id              String    @id @default(uuid())
-  providerId      String
-  provider        Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  authorMemberId  String
-  authorMember    Member    @relation(fields: [authorMemberId], references: [id], onDelete: Cascade)
-  authorDistrict  String
-  rating          Int
-  wouldUseAgain   Boolean
-  jobLabel        String
-  jobDate         DateTime
-  pricePaid       Int?
-  priceUnit       String?
-  comment         String
-  proof           ProofType @default(aucune)
-  createdAt       DateTime  @default(now())
+  id             String    @id @default(uuid())
+  providerId     String
+  provider       Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  authorMemberId String
+  authorMember   Member    @relation(fields: [authorMemberId], references: [id], onDelete: Cascade)
+  authorDistrict String
+  rating         Int
+  wouldUseAgain  Boolean
+  jobLabel       String
+  jobDate        DateTime
+  pricePaid      Int?
+  priceUnit      String?
+  comment        String
+  proof          ProofType @default(aucune)
+  createdAt      DateTime  @default(now())
 
   confirmations RecommendationConfirmation[]
 
@@ -590,14 +705,14 @@ model AiInteraction {
 // Messagerie interne (candidat <-> recruteur, particulier <-> annuaire…)
 
 model Conversation {
-  id              String   @id @default(uuid())
-  participantAId  String
-  participantA    User     @relation("ConversationParticipantA", fields: [participantAId], references: [id], onDelete: Cascade)
-  participantBId  String
-  participantB    User     @relation("ConversationParticipantB", fields: [participantBId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid())
+  participantAId String
+  participantA   User     @relation("ConversationParticipantA", fields: [participantAId], references: [id], onDelete: Cascade)
+  participantBId String
+  participantB   User     @relation("ConversationParticipantB", fields: [participantBId], references: [id], onDelete: Cascade)
   /// Contexte optionnel : l'offre à l'origine de la conversation.
-  opportunityId   String?
-  createdAt       DateTime @default(now())
+  opportunityId  String?
+  createdAt      DateTime @default(now())
 
   messages Message[]
 
@@ -693,31 +808,78 @@ model ModerationAction {
 /// Créé et modifié uniquement par l'agent qui le suit (§7.3 règle 14) :
 /// pas de compte de connexion propre au MVP.
 model TalentProfile {
-  id           String       @id @default(uuid())
-  agentId      String
-  agent        User         @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  fullName     String
-  phone        String
-  province     String
-  city         String
-  gender       Gender
+  id              String       @id @default(uuid())
+  agentId         String
+  agent           User         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  fullName        String
+  phone           String
+  province        String
+  city            String
+  gender          Gender
   /// Métier déclaré à la création (repris d'un TalentLead ou saisi par
   /// l'agent) — pilote la grille de vérification standardisée (§7.3.15).
-  trade        String       @default("")
-  sector       Sector       @default(autre)
-  skills       String[]
-  availability Availability
-  status       TalentStatus @default(en_attente)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  trade           String       @default("")
+  sector          Sector       @default(autre)
+  skills          String[]
+  availability    Availability
+  status          TalentStatus @default(en_attente)
+  /// Accord de la personne pour avoir un profil OffRec et être proposée à
+  /// des entreprises, recueilli par l'agent à la création (obligatoire
+  /// depuis le lot 3). `null` : profil antérieur, accord non tracé.
+  consentAt       DateTime?
+  /// Quartier déclaré (facultatif) — affiché à côté de la ville.
+  district        String?
+  /// 9 derniers chiffres normalisés du téléphone (`phoneKeyOf`) — rattache
+  /// une nouvelle recommandation au talent existant. Jamais affiché.
+  phoneKey        String?
+  /// Accord EXPLICITE de la personne pour une fiche publique (« Talents
+  /// recommandés »), distinct de `consentAt`, recueilli par l'agent,
+  /// révocable. Historique dans `AuditLog` (`talent_consent_public_*`).
+  publicConsentAt DateTime?
+  /// Identifiant public aléatoire de la fiche (jamais l'id), régénéré à
+  /// chaque nouvel accord, remis à `null` au retrait : l'ancien lien meurt.
+  publicRef       String?      @unique
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
-  verifications TalentVerification[]
-  proposals     TalentOpportunityProposal[]
-  placements    Placement[]
-  accountProfile TalentAccountProfile?
-  sourcedFrom    SourcingLead[]
+  verifications   TalentVerification[]
+  contactRequests TalentContactRequest[]
+  proposals       TalentOpportunityProposal[]
+  placements      Placement[]
+  accountProfile  TalentAccountProfile?
+  sourcedFrom     SourcingLead[]
+  signals         TalentSignal[]
 
   @@index([agentId])
+  @@index([phoneKey])
+}
+
+enum ContactRequestStatus {
+  nouvelle
+  transmise
+  close
+}
+
+/// Demande de contact envoyée depuis la fiche publique d'un talent : OffRec
+/// reste l'intermédiaire — l'agent du talent la traite et organise le
+/// contact hors ligne ; la plateforme ne met jamais les deux en relation.
+model TalentContactRequest {
+  id          String               @id @default(uuid())
+  talentId    String
+  talent      TalentProfile        @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  requesterId String
+  requester   User                 @relation("TalentContactRequestsMade", fields: [requesterId], references: [id], onDelete: Cascade)
+  /// Besoin décrit par le demandeur (≤ 1000 caractères), lu par l'agent.
+  need        String
+  status      ContactRequestStatus @default(nouvelle)
+  handledById String?
+  handledBy   User?                @relation("TalentContactRequestsHandled", fields: [handledById], references: [id], onDelete: SetNull)
+  handledAt   DateTime?
+  createdAt   DateTime             @default(now())
+
+  @@index([talentId])
+  @@index([status])
+  @@index([requesterId])
 }
 
 /// Demande de contact "je n'ai pas de diplôme mais je sais faire un
@@ -783,17 +945,17 @@ model SourcingLead {
 /// (`talent`). Le profil vérifié et la grille de compétences restent
 /// exclusivement créés/remplis par l'agent (§7.3.14 inchangé).
 model TalentAccountProfile {
-  userId   String  @id
-  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String @id
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   fullName String
   phone    String
   province String
   city     String
   gender   Gender
 
-  leadId   String?     @unique
-  lead     TalentLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  talentId String?     @unique
+  leadId   String?        @unique
+  lead     TalentLead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  talentId String?        @unique
   talent   TalentProfile? @relation(fields: [talentId], references: [id], onDelete: SetNull)
 }
 
@@ -814,12 +976,12 @@ model TalentVerification {
 /// Historique des opportunités proposées à ce talent (cahier MVP §4.1) ;
 /// côté « vérifié humain » d'une shortlist (§7.3 règle 17).
 model TalentOpportunityProposal {
-  id            String      @id @default(uuid())
+  id            String        @id @default(uuid())
   talentId      String
   talent        TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
   opportunityId String
-  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  proposedAt    DateTime    @default(now())
+  opportunity   Opportunity   @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  proposedAt    DateTime      @default(now())
 
   @@unique([talentId, opportunityId])
   @@index([opportunityId])
@@ -843,4 +1005,144 @@ model Placement {
   updatedAt       DateTime       @updatedAt
 
   @@index([recruiterId])
+}
+
+// Recommandations de talents (et, plus tard, d'entreprises) : un membre
+// connecté recommande une personne qu'il a vue travailler. La recommandation
+// ne crée jamais de profil : elle alimente un signal privé, traité par un
+// agent de terrain qui seul crée le TalentProfile (§7.3.14).
+
+enum EndorsementSubject {
+  talent
+  entreprise
+}
+
+enum EndorsementRelation {
+  client
+  employeur
+  collegue
+  salarie
+  stagiaire
+  prestataire
+}
+
+/// Cycle de vie d'un signal : `nouveau` (file partagée des agents) ->
+/// `pris_en_charge` -> `converti` | `refuse` | `injoignable` | `expire` |
+/// `fusionne`. Transitions contrôlées côté serveur (`lib/talent-signals.ts`).
+enum TalentSignalStatus {
+  nouveau
+  pris_en_charge
+  converti
+  refuse
+  injoignable
+  expire
+  fusionne
+}
+
+/// Personne recommandée qui n'a pas (encore) de profil : regroupe les
+/// recommandations qui la concernent. Le contact (`subjectName`,
+/// `contactPhone`, `contactHint`) n'est visible que par l'agent qui a pris
+/// le signal et par les admins ; il est purgé 60 jours après la dernière
+/// activité, ou immédiatement si le signal est refusé.
+model TalentSignal {
+  id              String             @id @default(uuid())
+  trade           String
+  sector          Sector
+  province        String
+  city            String
+  district        String
+  /// « Comment l'appelez-vous ? » — PRIVÉ (agents/admins).
+  subjectName     String?
+  /// PRIVÉ.
+  contactPhone    String?
+  /// 9 derniers chiffres normalisés — dédoublonnage, jamais affiché.
+  phoneKey        String?
+  /// « Atelier près du marché… » — PRIVÉ.
+  contactHint     String?
+  status          TalentSignalStatus @default(nouveau)
+  agentId         String?
+  agent           User?              @relation("TalentSignalAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  talentId        String?
+  talent          TalentProfile?     @relation(fields: [talentId], references: [id], onDelete: SetNull)
+  mergedIntoId    String?
+  mergedInto      TalentSignal?      @relation("TalentSignalMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom      TalentSignal[]     @relation("TalentSignalMerge")
+  expiresAt       DateTime
+  contactPurgedAt DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  endorsements Endorsement[]
+
+  @@index([status])
+  @@index([phoneKey])
+  @@index([talentId])
+  @@index([expiresAt])
+}
+
+/// Recommandation positive d'un talent (`subjectType = talent`, rattachée à
+/// un signal) ou d'une entreprise (`subjectType = entreprise`, `companyId`).
+/// Jamais supprimée : un agent (un admin pour une entreprise) peut l'écarter
+/// (`excludedAt`), elle ne compte alors plus. `comment` n'est jamais public ni montré au
+/// recruteur.
+model Endorsement {
+  id             String              @id @default(uuid())
+  subjectType    EndorsementSubject
+  talentSignalId String?
+  talentSignal   TalentSignal?       @relation(fields: [talentSignalId], references: [id], onDelete: Restrict)
+  companyId      String?
+  company        Company?            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  authorMemberId String
+  authorMember   Member              @relation(fields: [authorMemberId], references: [id], onDelete: Cascade)
+  authorDistrict String
+  relation       EndorsementRelation
+  jobLabel       String
+  jobDate        DateTime
+  /// Liste fermée positive (`src/data/endorsements.ts`).
+  highlights     String[]
+  comment        String?
+  proof          ProofType           @default(aucune)
+  /// `/uploads/preuves/<uuid>.<ext>` — servi avec contrôle d'accès.
+  proofFileUrl   String?
+  /// Revue de l'agent : seule une preuve acceptée pèse dans la confiance.
+  proofAccepted  Boolean?
+  reviewedAt     DateTime?
+  hiddenJobLabel Boolean             @default(false)
+  excludedAt     DateTime?
+  excludedReason String?
+  excludedById   String?
+  createdAt      DateTime            @default(now())
+
+  @@unique([talentSignalId, authorMemberId])
+  @@unique([companyId, authorMemberId])
+  @@index([authorMemberId])
+}
+
+/// Entreprise / employeur recommandé par d'anciens salariés, stagiaires ou
+/// prestataires (`candidate`, `particulier`, `talent` uniquement). Créée à la
+/// première recommandation ; dédoublonnée par `nameKey` + `city`
+/// (`lib/companies.ts`). Jamais d'auteur ni de commentaire publics ; la preuve
+/// (contrat, bulletin…) est revue par un admin puis supprimée du disque.
+/// Liée à un compte recruteur par un admin seulement (pas d'auto-revendication).
+model Company {
+  id                String    @id @default(uuid())
+  name              String
+  /// Nom normalisé (minuscules, sans accents, ponctuation ni forme juridique).
+  nameKey           String
+  sector            Sector    @default(autre)
+  city              String
+  province          String
+  recruiterUserId   String?   @unique
+  recruiterUser     User?     @relation("CompanyRecruiter", fields: [recruiterUserId], references: [id], onDelete: SetNull)
+  createdByMemberId String?
+  createdByMember   Member?   @relation("CompaniesCreated", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+  /// Masquée par un admin : n'apparaît plus nulle part (public, recherche, recruteur).
+  hiddenAt          DateTime?
+  hiddenReason      String?
+  createdAt         DateTime  @default(now())
+
+  endorsements Endorsement[]
+
+  @@unique([nameKey, city])
+  @@index([nameKey])
 }

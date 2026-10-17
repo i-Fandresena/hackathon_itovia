@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, FileCheck2, FileText, ShieldCheck, UserCog, XCircle } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -76,6 +77,8 @@ function cvPeriod(start: string | null, end: string | null, isCurrent: boolean):
 export function CvVerification() {
   const { currentUser } = useApp()
   const isAdmin = currentUser?.role === 'admin'
+  const [searchParams, setSearchParams] = useSearchParams()
+  const linkedCandidateId = searchParams.get('candidat')
 
   const [status, setStatus] = useState<CvVerificationStatus>('non_verifie')
   const [queue, setQueue] = useState<CvQueueEntry[] | null>(null)
@@ -148,7 +151,15 @@ export function CvVerification() {
     setDetailError('')
     setFeedback('')
     resetDecision()
+    if (linkedCandidateId) setSearchParams({}, { replace: true })
   }
+
+  // Lien direct vers la fiche d'un candidat (`?candidat=<id>`, depuis
+  // « Candidats » de l’espace admin) : la fiche s’ouvre comme depuis la file,
+  // à l’arrivée du paramètre seulement.
+  useEffect(() => {
+    if (linkedCandidateId && linkedCandidateId !== selectedId) openCandidate(linkedCandidateId)
+  }, [linkedCandidateId])
 
   const noteMissing = pendingDecision === 'rejete' && note.trim().length === 0
 

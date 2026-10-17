@@ -1,0 +1,111 @@
+/* Annuaire à onglets (préfixe dtabs-) : en-tête commun + sous-navigation. */
+
+.dtabs-page {
+  min-width: 0;
+}
+
+.dtabs-head {
+  margin-bottom: 1.25rem;
+}
+
+.dtabs-head h1 {
+  font-size: clamp(1.625rem, 3vw, 2rem);
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.dtabs-head p:not(.eyebrow) {
+  color: var(--color-ink-muted);
+  font-size: 0.9375rem;
+  max-width: 40rem;
+  line-height: 1.6;
+}
+
+/* Sous-navigation : une ligne qui défile horizontalement quand elle ne tient
+   pas (mobile), sans jamais élargir la page. */
+.dtabs-nav {
+  display: flex;
+  gap: 0.25rem;
+  max-width: 100%;
+  margin-bottom: 1.75rem;
+  padding: 0.3rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-xs);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  width: fit-content;
+}
+
+.dtabs-nav::-webkit-scrollbar {
+  display: none;
+}
+
+/* Fondu au bord quand des onglets sont hors champ (classes posées par
+   `DirectoryTabs` selon la position de défilement). */
+.dtabs-nav.dtabs-fade-right {
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+
+.dtabs-nav.dtabs-fade-left {
+  mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+}
+
+.dtabs-nav.dtabs-fade-left.dtabs-fade-right {
+  mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+}
+
+.dtabs-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  padding: 0.55rem 0.95rem;
+  border-radius: var(--radius-full);
+  color: var(--color-ink-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background 0.15s var(--ease-out),
+    color 0.15s var(--ease-out);
+}
+
+.dtabs-tab svg {
+  flex-shrink: 0;
+}
+
+.dtabs-tab:hover {
+  color: var(--color-ink);
+  background: var(--color-bg-subtle);
+}
+
+.dtabs-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.dtabs-tab.active {
+  color: var(--color-accent);
+  background: var(--color-accent-muted);
+}
+
+.dtabs-panel {
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .dtabs-nav {
+    width: auto;
+    border-radius: var(--radius-md);
+  }
+
+  .dtabs-tab {
+    padding: 0.5rem 0.8rem;
+    border-radius: var(--radius-sm);
+  }
+}

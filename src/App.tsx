@@ -11,20 +11,27 @@ import { TalentSpace } from './pages/talent/TalentSpace'
 import { CandidateDashboard } from './pages/candidate/CandidateDashboard'
 import { CandidateProfile } from './pages/candidate/CandidateProfile'
 import { CandidateNotifications } from './pages/candidate/CandidateNotifications'
+import { CandidateInterviews } from './pages/candidate/CandidateInterviews'
 import { OpportunityDetail } from './pages/OpportunityDetail'
 import { Directory } from './pages/directory/Directory'
+import { DirectoryTabs, LegacyDirectoryRedirect } from './pages/directory/DirectoryTabs'
 import { ProviderDetail } from './pages/directory/ProviderDetail'
 import { RecommendationForm } from './pages/directory/RecommendationForm'
 import { RecruiterDashboard } from './pages/recruiter/RecruiterDashboard'
 import { RecruiterOpportunityForm } from './pages/recruiter/RecruiterOpportunityForm'
 import { RecruiterOpportunityList } from './pages/recruiter/RecruiterOpportunityList'
 import { RecruiterApplications } from './pages/recruiter/RecruiterApplications'
+import { RecruiterInterviews } from './pages/recruiter/RecruiterInterviews'
 import { IndividualDashboard } from './pages/individual/IndividualDashboard'
 import { AdminDashboard } from './pages/admin/AdminDashboard'
 import { AdminModeration } from './pages/admin/AdminModeration'
 import { AdminPlacements } from './pages/admin/AdminPlacements'
 import { AdminAgents } from './pages/admin/AdminAgents'
+import { AdminTalents } from './pages/admin/AdminTalents'
+import { AdminNotifications } from './pages/admin/AdminNotifications'
+import { AdminActivity } from './pages/admin/AdminActivity'
 import { AdminMatching } from './pages/admin/AdminMatching'
+import { AdminInterviews } from './pages/admin/AdminInterviews'
 import { Messages } from './pages/messages/Messages'
 import { RecruiterBilling } from './pages/recruiter/RecruiterBilling'
 import { RecruiterShortlist } from './pages/recruiter/RecruiterShortlist'
@@ -35,7 +42,22 @@ import { TalentForm } from './pages/agent/TalentForm'
 import { TalentDetail } from './pages/agent/TalentDetail'
 import { Leads } from './pages/agent/Leads'
 import { Sourcing } from './pages/agent/Sourcing'
+import { TalentSignals } from './pages/agent/TalentSignals'
+import { AgentNotifications } from './pages/agent/AgentNotifications'
+import { TalentSignalDetail } from './pages/agent/TalentSignalDetail'
+import { RecommendTalent } from './pages/endorsements/RecommendTalent'
+import { MyEndorsements } from './pages/endorsements/MyEndorsements'
 import { CvVerification } from './pages/verification/CvVerification'
+import { TALENT_RECOMMENDER_ROLES } from './lib/roles'
+import { PublicTalents } from './pages/talents/PublicTalents'
+import { PublicTalentDetail } from './pages/talents/PublicTalentDetail'
+import { ContactRequests } from './pages/agent/ContactRequests'
+import { PublicCompanies } from './pages/companies/PublicCompanies'
+import { PublicCompanyDetail } from './pages/companies/PublicCompanyDetail'
+import { RecommendCompany } from './pages/companies/RecommendCompany'
+import { AdminCompanies } from './pages/admin/AdminCompanies'
+import { AdminRecruiters } from './pages/admin/AdminRecruiters'
+import { AdminCandidates } from './pages/admin/AdminCandidates'
 
 export default function App() {
   return (
@@ -66,10 +88,59 @@ export default function App() {
               }
             />
 
-            {/* Annuaire de confiance : la consultation est publique,
-                seule la contribution demande un compte. */}
-            <Route path="annuaire" element={<Directory />} />
+            {/* Annuaire : point d'entrée unique de l'affichage des
+                recommandations. La consultation est publique, seule la
+                contribution demande un compte. Onglets = sous-routes ; les
+                segments fixes (`talents`, `entreprises`…) passent avant
+                `annuaire/:id` (fiche prestataire, id uuid). */}
+            <Route path="annuaire" element={<DirectoryTabs />}>
+              <Route index element={<Directory />} />
+              {/* Talents ayant donné leur accord explicite ; la demande de
+                  contact demande un compte. */}
+              <Route path="talents" element={<PublicTalents />} />
+              {/* Aucun auteur, aucun commentaire ; recommander demande un compte. */}
+              <Route path="entreprises" element={<PublicCompanies />} />
+              <Route
+                path="mes-recommandations"
+                element={
+                  <ProtectedRoute role={TALENT_RECOMMENDER_ROLES}>
+                    <MyEndorsements />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
+            <Route path="annuaire/talents/:ref" element={<PublicTalentDetail />} />
+            <Route path="annuaire/entreprises/:id" element={<PublicCompanyDetail />} />
+            {/* Recommander un talent : jamais l'agent ni l'admin (garde serveur
+                identique dans endorsements.routes.ts). */}
+            <Route
+              path="annuaire/recommander-un-talent"
+              element={
+                <ProtectedRoute role={TALENT_RECOMMENDER_ROLES}>
+                  <RecommendTalent />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="annuaire/recommander-une-entreprise"
+              element={
+                <ProtectedRoute role={['candidate', 'particulier', 'talent']}>
+                  <RecommendCompany />
+                </ProtectedRoute>
+              }
+            />
             <Route path="annuaire/:id" element={<ProviderDetail />} />
+
+            {/* Anciennes adresses (en-tête, notifications `/talents#mes-demandes`,
+                liens déjà partagés) : redirigées sous `/annuaire` avec le
+                même chemin, filtres et ancre conservés. */}
+            <Route path="talents" element={<LegacyDirectoryRedirect />} />
+            <Route path="talents/:ref" element={<LegacyDirectoryRedirect />} />
+            <Route path="entreprises" element={<LegacyDirectoryRedirect />} />
+            <Route path="entreprises/:id" element={<LegacyDirectoryRedirect />} />
+            <Route path="mes-recommandations" element={<LegacyDirectoryRedirect />} />
+            <Route path="recommander-un-talent" element={<LegacyDirectoryRedirect />} />
+            <Route path="recommander-une-entreprise" element={<LegacyDirectoryRedirect />} />
             <Route
               path="annuaire/:id/recommander"
               element={
@@ -104,6 +175,14 @@ export default function App() {
               element={
                 <ProtectedRoute role="candidate">
                   <OpportunityDetail backLabel="Retour au tableau de bord" backTo="/candidat" candidate />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="candidat/entretiens"
+              element={
+                <ProtectedRoute role="candidate">
+                  <CandidateInterviews />
                 </ProtectedRoute>
               }
             />
@@ -153,6 +232,14 @@ export default function App() {
               element={
                 <ProtectedRoute role="recruiter">
                   <RecruiterApplications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="recruteur/entretiens"
+              element={
+                <ProtectedRoute role="recruiter">
+                  <RecruiterInterviews />
                 </ProtectedRoute>
               }
             />
@@ -224,6 +311,30 @@ export default function App() {
               }
             />
             <Route
+              path="admin/entretiens"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminInterviews />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/notifications"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminNotifications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/activite"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminActivity />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="admin/moderation"
               element={
                 <ProtectedRoute role="admin">
@@ -236,6 +347,38 @@ export default function App() {
               element={
                 <ProtectedRoute role="admin">
                   <AdminAgents />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/talents"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminTalents />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/candidats"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminCandidates />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/recruteurs"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminRecruiters />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/entreprises"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminCompanies />
                 </ProtectedRoute>
               }
             />
@@ -272,6 +415,38 @@ export default function App() {
               element={
                 <ProtectedRoute role="agent">
                   <Leads />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="agent/recommandations"
+              element={
+                <ProtectedRoute role="agent">
+                  <TalentSignals />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="agent/demandes-talents"
+              element={
+                <ProtectedRoute role="agent">
+                  <ContactRequests />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="agent/notifications"
+              element={
+                <ProtectedRoute role="agent">
+                  <AgentNotifications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="agent/recommandations/:id"
+              element={
+                <ProtectedRoute role="agent">
+                  <TalentSignalDetail />
                 </ProtectedRoute>
               }
             />

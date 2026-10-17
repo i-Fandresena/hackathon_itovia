@@ -1,0 +1,135 @@
+/* Admin : talents et signaux recommandés (lecture seule) */
+
+.adt-tabs,
+.adt-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.adt-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  margin-left: 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.adt-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.adt-private {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+}
+
+.adt-private svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.adt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.adt-card {
+  min-width: 0;
+}
+
+.adt-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.adt-card-main {
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.adt-card-title {
+  font-weight: 700;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.adt-muted {
+  margin-top: 0.15rem;
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.adt-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.adt-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0.85rem 0 0;
+}
+
+.adt-facts dt {
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-muted);
+}
+
+.adt-facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.adt-notice {
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-muted);
+  color: var(--color-ink);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.adt-link {
+  color: var(--color-success);
+  font-weight: 650;
+}
+
+.adt-inline-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-danger);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}

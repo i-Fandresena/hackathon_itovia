@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Clock, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Clock, Globe, ShieldCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Loading } from '../../components/ui/Loading'
+import { TrustLevelBadge } from '../../components/trust/TrustLevelBadge'
+import { TALENT_STATUS_LABELS } from '../../data/endorsements'
 import { apiTalentAccountMe, type TalentAccountMe } from '../../lib/api'
 import { formatDate } from '../../lib/format'
 import type { LeadStatus, TalentStatus } from '../../types'
@@ -15,12 +18,6 @@ const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   ignore: 'Votre demande n’a pas été retenue',
 }
 
-const TALENT_STATUS_LABELS: Record<TalentStatus, string> = {
-  en_attente: 'En attente de vérification',
-  verifie: 'Vérifié',
-  recommande: 'Recommandé à une entreprise',
-  place: 'Placé',
-}
 
 const TALENT_STATUS_VARIANT: Record<TalentStatus, 'muted' | 'primary' | 'success'> = {
   en_attente: 'muted',
@@ -100,6 +97,44 @@ export function TalentSpace() {
               <p style={{ color: 'var(--color-ink-muted)', fontSize: '0.9rem', marginTop: '0.75rem' }}>
                 Métier suivi : <strong>{talent.trade}</strong>
               </p>
+              <div style={{ marginTop: '1rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <p style={{ fontSize: '0.85rem', fontWeight: 600 }}>Recommandations reçues</p>
+                  <TrustLevelBadge level={talent.trust.level} />
+                </div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)', marginTop: '0.35rem' }}>
+                  {talent.trust.recommendationCount === 0
+                    ? 'Pas encore de recommandation. Les personnes pour qui vous avez travaillé peuvent vous recommander depuis OffRec.'
+                    : `Recommandé·e par ${talent.trust.recommendationCount} personne${talent.trust.recommendationCount > 1 ? 's' : ''}. Leur identité et leurs messages restent confidentiels.`}
+                </p>
+              </div>
+              {/* Fiche publique : lecture seule — seul l'agent recueille ou
+                  retire l'accord (§7.3.14). */}
+              <div style={{ marginTop: '1rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <p style={{ fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Globe size={15} aria-hidden /> Fiche publique « Talents recommandés »
+                  </p>
+                  <Badge variant={talent.publicVisibility.visible ? 'success' : 'muted'}>
+                    {talent.publicVisibility.visible ? 'En ligne' : 'Non publiée'}
+                  </Badge>
+                </div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)', marginTop: '0.35rem', lineHeight: 1.55 }}>
+                  {talent.publicVisibility.visible
+                    ? `Avec votre accord (donné le ${formatDate(talent.publicVisibility.publicConsentAt!)}), votre métier, votre quartier et vos points forts sont présentés aux visiteurs — jamais votre nom ni votre téléphone. Pour la retirer, demandez-le à votre agent.`
+                    : talent.publicVisibility.publicConsentAt
+                      ? 'Votre accord est enregistré, mais la fiche n’est pas affichée pour le moment. Votre agent peut vous expliquer pourquoi.'
+                      : 'Votre profil n’est pas présenté publiquement. Si vous le souhaitez, votre agent peut recueillir votre accord pour vous mettre en avant.'}
+                </p>
+                {talent.publicVisibility.visible && talent.publicVisibility.publicRef && (
+                  <Link
+                    to={`/annuaire/talents/${talent.publicVisibility.publicRef}`}
+                    style={{ display: 'inline-block', marginTop: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-accent)' }}
+                  >
+                    Voir ma fiche publique
+                  </Link>
+                )}
+              </div>
               {talent.verifications.length > 0 && (
                 <div style={{ marginTop: '1rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem' }}>
                   <p style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>

@@ -19,7 +19,16 @@ const RECRUITER_LINK_PATTERNS = [
   '/recruteur/abonnement',
   '/messages',
   '/annuaire',
+  '/annuaire/talents',
+  '/annuaire/talents/:ref',
+  '/annuaire/entreprises',
+  '/annuaire/entreprises/:id',
+  '/annuaire/mes-recommandations',
   '/annuaire/:id',
+  // Ancienne adresse des demandes de contact (« /talents#mes-demandes »,
+  // envoyée par le serveur à l'étape « transmise ») : redirigée vers
+  // l'onglet Talents de l'Annuaire.
+  '/talents',
   '/offres/:id',
 ]
 
@@ -30,11 +39,7 @@ function isRecruiterLink(link: string): boolean {
 }
 
 export function RecruiterNotifications() {
-  const { notifications, markNotificationRead } = useApp()
-
-  const markAllRead = () => {
-    notifications.filter((n) => !n.read).forEach((n) => markNotificationRead(n.id))
-  }
+  const { notifications, markNotificationRead, markAllNotificationsRead } = useApp()
 
   return (
     <div className="page">
@@ -50,7 +55,7 @@ export function RecruiterNotifications() {
           notifications={notifications}
           onRead={markNotificationRead}
           isKnownLink={isRecruiterLink}
-          onMarkAllRead={markAllRead}
+          onMarkAllRead={markAllNotificationsRead}
           emptyTitle="Aucune notification"
           emptyDescription="Vous serez prévenu ici dès qu’OffRec vous proposera un profil, confirmera une mise en relation ou répondra à vos messages."
         />
