@@ -338,6 +338,12 @@ export interface Opportunity {
   deadline: string
   createdAt: string
   featured?: boolean
+  /** Nombre de postes à pourvoir (décision D1 du 2026-10-16, 1 par défaut).
+   *  Absent des vues qui ne le reprennent pas (dossier du candidat). */
+  positions?: number
+  /** Offre pourvue (ISO) — fermée au matching et aux propositions ; `null`
+   *  si ouverte. Absent des vues qui ne le reprennent pas. */
+  filledAt?: string | null
 }
 
 export interface Application {
@@ -416,6 +422,8 @@ export type InterviewPeriod = 'a_venir' | 'passes' | 'annules' | 'tous'
 export interface Interview {
   id: string
   suggestionId: string
+  /** Numéro de tour (1 pour tout entretien antérieur aux tours multiples). */
+  round: number
   /** Instant de début (ISO, UTC) — à afficher en heure de Madagascar. */
   scheduledAt: string
   durationMinutes: number
@@ -439,6 +447,52 @@ export interface AdminInterview extends Interview {
   calendarError: string | null
   hasGoogleEvent: boolean
 }
+
+/* -------------------------------------------------------------------------
+ * Après l'entretien (plan du 2026-10-16) — miroirs des enums Prisma.
+ * Le statut du dossier reste `mise_en_relation` : l'issue est portée par le
+ * tour d'entretien, l'embauche par `HireProposal` et `Placement`.
+ * ---------------------------------------------------------------------- */
+
+/** Issue d'un tour, renseignée par le recruteur après l'heure de fin. Jamais
+ *  montrée brute au candidat (textes neutres d'OffRec). */
+export type InterviewResult = 'retenu' | 'second_entretien' | 'non_retenu' | 'absent'
+
+/** Motif de l'issue, en liste fermée : `points_forts` pour `retenu` et
+ *  `second_entretien`, les autres pour `non_retenu`. */
+export type InterviewResultReason =
+  | 'competences_techniques'
+  | 'experience'
+  | 'disponibilite'
+  | 'pretentions_salariales'
+  | 'savoir_etre'
+  | 'autre_candidat_retenu'
+  | 'poste_modifie'
+  | 'points_forts'
+  | 'autre'
+
+export type HireProposalStatus = 'envoyee' | 'acceptee' | 'refusee' | 'expiree' | 'retiree'
+
+export type HireProposalWithdrawReason = 'recruteur' | 'poste_pourvu' | 'compte_inactif'
+
+export type ContractType = 'cdi' | 'cdd' | 'stage' | 'alternance' | 'freelance'
+
+/** Motif (facultatif) d'un refus de proposition par le candidat. */
+export type HireDeclineReason =
+  | 'salaire'
+  | 'date_debut'
+  | 'type_contrat'
+  | 'autre_offre_acceptee'
+  | 'localisation'
+  | 'raisons_personnelles'
+  | 'autre'
+
+/** `declaration` : déclaré par le recruteur (talents, historique) ;
+ *  `proposition_acceptee` : créé à l'acceptation d'une proposition. */
+export type PlacementOrigin = 'declaration' | 'proposition_acceptee'
+
+/** Raison d'une clôture automatique d'un dossier non mis en relation. */
+export type MatchClosedReason = 'offre_pourvue'
 
 /* -------------------------------------------------------------------------
  * Présélection ATS par offre (couche au-dessus de `scoreOpportunity`)

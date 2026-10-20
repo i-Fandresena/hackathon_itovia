@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
 import {
+  adminHireProposalQuerySchema,
   adminInterviewQuerySchema,
   createMatchSuggestionSchema,
   matchSuggestionQuerySchema,
@@ -15,8 +16,13 @@ import { parseCvFlags } from '../lib/cv-flags.js'
 import { adminCandidateProfileSelect, toAdminCandidateProfile } from '../lib/admin-candidates.js'
 import { getMatchingConfig, runMatchingForOpportunity } from '../lib/matching.js'
 import { applyAdminTransition, loadPreselection, transmitPreselection } from '../lib/preselection-service.js'
-import { loadInterviewsBySuggestion, resyncInterviewCalendar, toAdminInterviewView } from '../lib/interviews.js'
+import { loadHiringContexts, resyncInterviewCalendar, toAdminInterviewView } from '../lib/interviews.js'
 import { listAdminInterviews } from '../lib/interview-list.js'
+import { resetInterviewOutcome } from '../lib/hiring-service.js'
+import { runHiringJobs, scheduleHiringJobs } from '../lib/hiring-jobs.js'
+import { HIRING_SUPPORTED, HIRING_UNAVAILABLE_ERROR, displayedRound, loadLinkedPlacements } from '../lib/hiring-store.js'
+import { listAdminHireProposals, loadProposalRows, proposalView } from '../lib/hire-proposals.js'
+import { hiringPhase } from '../../../src/lib/hiring.js'
 
 const router = Router()
 
@@ -87,7 +93,7 @@ router.post('/opportunities/:id/run-matching', async (req, res, next) => {
       actorId: req.session!.sub,
     })
     if (!result.eligible) {
-      res.status(409).json({ error: 'Le matching ne peut pas être lancé : offre expirée ou compte recruteur inactif.' })
+      res.status(409).json({ error: 'Le matching ne peut pas être lancé : offre pourvue, expirée ou compte recruteur inactif.' })
       return
     }
     res.json({ result, config: getMatchingConfig() })
@@ -214,15 +220,25 @@ router.get('/match-suggestions', async (req, res, next) => {
       orderBy: status === 'suggeree' ? [{ score: 'desc' }, { createdAt: 'asc' }] : { updatedAt: 'desc' },
     })
     // Entretien fixé par le recruteur (décision 2026-10-14) : date, statut,
-    // fournisseur et état de l'agenda Google, pour suivre et régulariser.
-    const interviews = await loadInterviewsBySuggestion(
-      rows.filter((row) => row.status === 'mise_en_relation').map((row) => row.id),
-    )
+    // fournisseur et état de l'agenda Google, pour suivre et régulariser ;
+    // issue du tour affiché et phase dérivée du dossier (sous-lot 3) ;
+    // propositions d'embauche (vue admin, D3) et placement lié (sous-lot 5).
+    const connected = rows.filter((row) => row.status === 'mise_en_relation')
+    const [contexts, proposalRows, placements] = await Promise.all([
+      loadHiringContexts(connected),
+      loadProposalRows(connected.map((row) => row.id)),
+      loadLinkedPlacements(connected.map((row) => row.id)),
+    ])
+    const now = new Date()
     const suggestions = rows.map(({ candidate, ...suggestion }) => {
       const profile = candidate.candidateProfile
-      const interview = interviews.get(suggestion.id)
+      const context = contexts.get(suggestion.id)
+      const interview = context ? displayedRound(context.rows) : undefined
       return {
         interview: interview ? toAdminInterviewView(interview) : null,
+        phase: HIRING_SUPPORTED && context ? hiringPhase(context.state, now) : null,
+        proposals: (proposalRows.get(suggestion.id) ?? []).map((row) => proposalView(row, 'admin', '', now)),
+        placement: placements.get(suggestion.id) ?? null,
         ...suggestion,
         candidate: {
           id: candidate.id,
@@ -279,9 +295,13 @@ router.patch('/match-suggestions/:id', async (req, res, next) => {
 /**
  * Onglet « Entretiens » de l'admin : tous les entretiens de la plateforme,
  * filtrés par `?period=` (défaut `a_venir`), `?status=`, `?opportunityId=`,
- * `?recruiterId=`, `?calendarIssue=true` ; page de `?limit=` (30, 100 au plus)
- * à partir de `?offset=`. Ordre : à venir du plus proche au plus lointain,
- * puis passés et annulés du plus récent au plus ancien.
+ * `?recruiterId=`, `?calendarIssue=true`,
+ * `?outcome=a_renseigner|retenu|second_entretien|non_retenu|absent` ; page de
+ * `?limit=` (30, 100 au plus) à partir de `?offset=`. Ordre : à venir du plus
+ * proche au plus lointain, puis passés et annulés du plus récent au plus
+ * ancien. Chaque tour porte son issue, son motif et l'explication d'absence
+ * du candidat — jamais la note privée du recruteur (D3) — et la phase du
+ * dossier ; compteurs `toRecord` (issues à renseigner) et `noShows` (absences).
  */
 router.get('/interviews', async (req, res, next) => {
   try {
@@ -289,6 +309,75 @@ router.get('/interviews', async (req, res, next) => {
     const outcome = await listAdminInterviews(query)
     if (outcome.ok) res.status(outcome.httpStatus).json(outcome.body)
     else res.status(outcome.httpStatus).json({ error: outcome.error })
+    scheduleHiringJobs()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Annuler l'issue d'un tour (erreur de saisie), seulement si rien n'en
+ * découle : ni tour suivant, ni proposition, ni placement (409 sinon). Le
+ * tour redevient actif ; le recruteur est prévenu de la renseigner de
+ * nouveau. Journalisé (`interview_outcome_reset`).
+ */
+router.post('/interviews/:id/outcome/reset', async (req, res, next) => {
+  try {
+    const outcome = await resetInterviewOutcome({ interviewId: req.params.id, adminId: req.session!.sub })
+    if (outcome.ok) res.status(outcome.httpStatus).json(outcome.body)
+    else res.status(outcome.httpStatus).json({ error: outcome.error })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Propositions d'embauche de la plateforme (sous-lot 5) :
+ * `?status=envoyee|acceptee|refusee|expiree|retiree` (statut effectif : une
+ * proposition échue compte comme `expiree` même avant le passage des
+ * tâches). Chaque ligne : la proposition (vue admin — catégorie et
+ * précision d'un refus, raison d'un retrait), le dossier, l'offre,
+ * l'entreprise, le nom du candidat et la phase. 200 lignes au plus.
+ */
+router.get('/hire-proposals', async (req, res, next) => {
+  try {
+    const { status } = adminHireProposalQuerySchema.parse(req.query)
+    const outcome = await listAdminHireProposals(status)
+    if (outcome.ok) res.status(outcome.httpStatus).json(outcome.body)
+    else res.status(outcome.httpStatus).json({ error: outcome.error })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Lance à la demande les tâches « après l'entretien » (lib/hiring-jobs.ts) :
+ * rappel au recruteur 24 h après la fin d'un tour sans issue (une fois par
+ * tour), résumé aux admins des issues en souffrance depuis plus de 7 jours
+ * (une fois par jour), expiration des propositions échues et rappel J-2 au
+ * candidat (une fois par échéance). Idempotent. Journalisé (`hiring_jobs_run`).
+ */
+router.post('/hiring-jobs/run', async (req, res, next) => {
+  try {
+    if (!HIRING_SUPPORTED) {
+      res.status(503).json({ error: HIRING_UNAVAILABLE_ERROR })
+      return
+    }
+    const report = await runHiringJobs()
+    await prisma.auditLog.create({
+      data: {
+        userId: req.session!.sub,
+        action: 'hiring_jobs_run',
+        metadata: {
+          outcomeReminders: report.outcomeReminders,
+          overdueOutcomes: report.overdueOutcomes,
+          digestSent: report.digestSent,
+          proposalsExpired: report.proposalsExpired,
+          proposalReminders: report.proposalReminders,
+        },
+      },
+    })
+    res.json({ report })
   } catch (err) {
     next(err)
   }

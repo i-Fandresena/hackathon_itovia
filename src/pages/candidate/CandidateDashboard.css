@@ -246,3 +246,63 @@
     gap: 1.25rem;
   }
 }
+
+/* Dossiers clos (après l'entretien) : section repliée, sans action. */
+.dash-closed {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 1rem;
+}
+
+.dash-closed-summary {
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--color-ink-secondary);
+}
+
+.dash-closed-summary:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.dash-closed-text,
+.dash-closed-empty {
+  margin: 0.5rem 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--color-ink-muted);
+}
+
+/* Sous-lot 6 : propositions d'embauche à traiter, en tête du tableau de bord. */
+.dash-proposals {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.dash-proposal-card {
+  border-left: 3px solid var(--color-warning);
+}
+
+/* Compteurs : 3 à 5 cartes, sur une ou plusieurs lignes selon la largeur. */
+.dash-stats-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.dash-stat-warning {
+  border-left: 3px solid var(--color-warning);
+}
+
+.dossier-hired {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-success);
+}

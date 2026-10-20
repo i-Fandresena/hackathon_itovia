@@ -54,6 +54,7 @@ import { apiRecruiterStats, type RecruiterStats } from '../../lib/api'
 import { formatDate, formatDateTime } from '../../lib/format'
 import { INTERVIEW_STATUS_LABELS, formatMadagascarDateTime } from '../../lib/interview'
 import { LinkedCompanyCard } from '../companies/LinkedCompanyCard'
+import { RecruiterHiringSection } from './RecruiterHiringSection'
 import './RecruiterDashboard.css'
 
 /* ------------------------------------------------------------------ */
@@ -484,11 +485,17 @@ export function RecruiterDashboard() {
               </>
             )}
 
+            {!noOffer && (
+              <FadeUp eager index={3}>
+                <RecruiterHiringSection />
+              </FadeUp>
+            )}
+
             <div className="rdash-company">
               <LinkedCompanyCard />
             </div>
 
-            <FadeUp eager index={3}>
+            <FadeUp eager index={4}>
               <section className="odash-section" aria-labelledby="rdash-sec-suivi">
                 <div className="odash-section-head">
                   <h2 id="rdash-sec-suivi">{model.follow.title}</h2>

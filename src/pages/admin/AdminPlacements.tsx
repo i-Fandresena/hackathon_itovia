@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
-import { ClipboardCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ClipboardCheck, ExternalLink } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Select } from '../../components/ui/Form'
 import { Loading } from '../../components/ui/Loading'
-import { apiAdminPlacements, apiUpdatePlacementStage, type AdminPlacement } from '../../lib/api'
-import { formatDate } from '../../lib/format'
+import { PLACEMENT_ORIGIN_LABELS } from '../../components/hiring/hiringState'
+import { ApiError, apiAdminPlacements, apiUpdatePlacementStage, type AdminPlacement } from '../../lib/api'
+import { formatAriary, formatDate } from '../../lib/format'
+import { CONTRACT_TYPE_LABELS, formatCivilDate } from '../../lib/hiring'
 import type { PlacementStage } from '../../types'
+import './AdminPlacements.css'
 
 const STAGE_LABELS: Record<PlacementStage, string> = {
   etape1_due: 'Étape 1 due (signature)',
@@ -18,16 +22,25 @@ const STAGE_LABELS: Record<PlacementStage, string> = {
   annule: 'Annulé',
 }
 
+/** Dossier d'un candidat diplômé : ses propositions dans « Mise en relation ». */
+function dossierPath(p: AdminPlacement): string | null {
+  if (!p.suggestionId) return null
+  return `/admin/mise-en-relation?onglet=propositions&dossier=${encodeURIComponent(p.suggestionId)}`
+}
+
 /**
- * Vue d'ensemble de tous les placements, tous recruteurs confondus — le
- * recruteur autodéclare et fait avancer ses propres placements sans
- * validation ; jusqu'ici, le seul écho côté admin était le compteur agrégé
- * du tableau de bord. Une correction faite ici est journalisée (voir
+ * Vue d'ensemble de tous les placements, tous recruteurs confondus. Un
+ * candidat diplômé est placé automatiquement à l'acceptation de la
+ * proposition d'embauche (« Proposition acceptée », poste, date de début et
+ * contrat repris de la proposition, lien vers le dossier) ; un talent est
+ * déclaré par le recruteur (« Déclaré »). Les étapes du success fee restent
+ * déclaratives ; une correction faite ici est journalisée (voir
  * `admin_corrected_placement_stage` dans le journal d'activité, `/admin/activite`).
  */
 export function AdminPlacements() {
   const [placements, setPlacements] = useState<AdminPlacement[] | null>(null)
   const [error, setError] = useState('')
+  const [stageError, setStageError] = useState('')
 
   const load = () => {
     setError('')
@@ -39,8 +52,15 @@ export function AdminPlacements() {
   useEffect(load, [])
 
   const handleStageChange = async (id: string, stage: PlacementStage) => {
+    const previous = placements
+    setStageError('')
     setPlacements((list) => list?.map((p) => (p.id === id ? { ...p, stage } : p)) ?? null)
-    await apiUpdatePlacementStage(id, stage)
+    try {
+      await apiUpdatePlacementStage(id, stage)
+    } catch (err) {
+      setPlacements(previous)
+      setStageError(err instanceof ApiError && err.message ? err.message : 'Mise à jour de l’étape impossible. Réessayez.')
+    }
   }
 
   if (error) {
@@ -73,43 +93,90 @@ export function AdminPlacements() {
           <p className="eyebrow">Back-office OffRec</p>
           <h1>Placements</h1>
           <p>
-            Tous les placements déclarés par les recruteurs, toutes offres confondues.
-            Le recruteur fait avancer ses étapes lui-même — une correction faite ici est
-            journalisée dans le journal d’activité.
+            Tous les placements, toutes offres confondues : créés automatiquement quand un candidat diplômé accepte une
+            proposition d’embauche, ou déclarés par le recruteur pour un talent. Le recruteur fait avancer ses étapes
+            lui-même — une correction faite ici est journalisée dans le journal d’activité.
           </p>
         </header>
+
+        {stageError && (
+          <p className="apl-error" role="alert">
+            {stageError}
+          </p>
+        )}
 
         {placements.length === 0 ? (
           <EmptyState
             icon={ClipboardCheck}
-            title="Aucun placement déclaré"
-            description="Les placements déclarés par les recruteurs depuis une shortlist apparaîtront ici."
+            title="Aucun placement"
+            description="Un placement apparaît ici quand un candidat accepte une proposition d’embauche, ou quand un recruteur déclare un talent depuis une shortlist."
           />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {placements.map((p) => (
-              <Card key={p.id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                      <strong>
-                        {p.candidate?.candidateProfile?.fullName ?? p.talent?.fullName ?? 'Profil supprimé'}
-                      </strong>
+          <div className="apl-list">
+            {placements.map((p) => {
+              const origin = p.origin ?? 'declaration'
+              const path = dossierPath(p)
+              const person = p.candidate?.candidateProfile?.fullName ?? p.talent?.fullName ?? 'Profil supprimé'
+              return (
+                <Card key={p.id} className="apl-card">
+                  <div className="apl-main">
+                    <div className="apl-head">
+                      <strong>{person}</strong>
                       <Badge variant={p.talentId ? 'success' : 'primary'}>
                         {p.talentId ? 'Talent vérifié' : 'Candidat diplômé'}
                       </Badge>
+                      <Badge variant={origin === 'proposition_acceptee' ? 'success' : 'muted'}>
+                        {PLACEMENT_ORIGIN_LABELS[origin]}
+                      </Badge>
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)' }}>
-                      {p.opportunity?.title ?? 'Offre supprimée'} — {p.recruiter.recruiterProfile?.companyName ?? p.recruiter.email}
+                    <p className="apl-muted">
+                      {p.opportunity?.title ?? 'Offre supprimée'} —{' '}
+                      {p.recruiter.recruiterProfile?.companyName ?? p.recruiter.email}
                     </p>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--color-ink-muted)' }}>
-                      {p.monthlySalaryAr ? `${p.monthlySalaryAr.toLocaleString('fr-FR')} Ar / mois` : 'Salaire non précisé'}
-                      {' · '}
-                      <time>{formatDate(p.createdAt)}</time>
+                    <dl className="apl-facts">
+                      {p.jobTitle && (
+                        <div>
+                          <dt>Poste</dt>
+                          <dd>{p.jobTitle}</dd>
+                        </div>
+                      )}
+                      <div>
+                        <dt>Salaire mensuel</dt>
+                        <dd>{p.monthlySalaryAr ? formatAriary(p.monthlySalaryAr) : 'Non précisé'}</dd>
+                      </div>
+                      {p.startDate && (
+                        <div>
+                          <dt>Début</dt>
+                          <dd>{formatCivilDate(p.startDate)}</dd>
+                        </div>
+                      )}
+                      {p.contractType && (
+                        <div>
+                          <dt>Contrat</dt>
+                          <dd>{CONTRACT_TYPE_LABELS[p.contractType]}</dd>
+                        </div>
+                      )}
+                    </dl>
+                    <p className="apl-muted">
+                      {origin === 'proposition_acceptee' ? 'Créé le ' : 'Déclaré le '}
+                      <time dateTime={p.createdAt}>{formatDate(p.createdAt)}</time>
+                      {path && (
+                        <>
+                          {' · '}
+                          <Link to={path} className="apl-link">
+                            Voir le dossier
+                            <ExternalLink size={13} aria-hidden />
+                          </Link>
+                        </>
+                      )}
                     </p>
                   </div>
-                  <div style={{ minWidth: 210 }}>
-                    <Select value={p.stage} onChange={(e) => handleStageChange(p.id, e.target.value as PlacementStage)}>
+                  <div className="apl-stage">
+                    <Select
+                      value={p.stage}
+                      aria-label={`Étape du success fee pour ${person}`}
+                      onChange={(e) => handleStageChange(p.id, e.target.value as PlacementStage)}
+                    >
                       {(Object.keys(STAGE_LABELS) as PlacementStage[]).map((s) => (
                         <option key={s} value={s}>
                           {STAGE_LABELS[s]}
@@ -117,9 +184,9 @@ export function AdminPlacements() {
                       ))}
                     </Select>
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              )
+            })}
           </div>
         )}
       </div>

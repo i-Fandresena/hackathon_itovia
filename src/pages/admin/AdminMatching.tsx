@@ -24,6 +24,11 @@ import { CvFlagCount, CvFlagList, CvStatusBadge } from '../../components/cv/CvSt
 import { MatchFitDetail } from '../../components/matching/MatchFitDetail'
 import { OpportunityMissions } from '../../components/opportunity/OpportunityMissions'
 import { InterviewSummary } from '../../components/interview/InterviewSummary'
+import { HiringPhaseBadge } from '../../components/hiring/HiringPhaseBadge'
+import { stateText } from '../../components/hiring/HireProposalSummary'
+import { DOSSIER_GROUP_LABELS, dossierGroup, latestProposal, type DossierGroup } from '../../components/hiring/hiringState'
+import { INTERVIEW_RESULT_LABELS, RESULT_REASON_LABELS } from '../../lib/hiring'
+import { AdminHireProposals } from './AdminHireProposals'
 import { calendarActionLabel } from '../../lib/interview'
 import {
   ApiError,
@@ -161,10 +166,20 @@ function describeRun(result: MatchingRunResult): string {
  * transmettre. OffRec reste l'unique intermédiaire : c'est aussi ici que la
  * mise en relation est confirmée, seul moment où le candidat est notifié.
  */
+/** Onglets de la page (`?onglet=propositions`) — sous-lot 6. */
+type MatchingTab = 'dossiers' | 'propositions'
+
+const CONNECTED_GROUPS: DossierGroup[] = ['en_cours', 'embauche', 'clos']
+
 export function AdminMatching() {
   /** `?offre=<id>` (lien depuis « Recruteurs ») : offre présélectionnée à l'ouverture. */
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const requestedOpp = searchParams.get('offre')
+  const tab: MatchingTab = searchParams.get('onglet') === 'propositions' ? 'propositions' : 'dossiers'
+  /** `?dossier=<id>` (lien depuis « Placements ») : propositions de ce dossier. */
+  const requestedDossier = searchParams.get('dossier')
+  /** Dossiers mis en relation : « En cours / Embauchés / Clos » (phase du serveur). */
+  const [connectedGroup, setConnectedGroup] = useState<DossierGroup>('en_cours')
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [selectedOpp, setSelectedOpp] = useState('')
   const [top, setTop] = useState<PreselectionTop>(5)
@@ -189,6 +204,44 @@ export function AdminMatching() {
   const [viewingCandidateId, setViewingCandidateId] = useState<string | null>(null)
   const [candidateDetail, setCandidateDetail] = useState<AdminCandidateDetail | null>(null)
   const [candidateDetailError, setCandidateDetailError] = useState('')
+
+  const selectTab = (value: MatchingTab) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (value === 'propositions') next.set('onglet', 'propositions')
+        else next.delete('onglet')
+        next.delete('dossier')
+        return next
+      },
+      { replace: true },
+    )
+  }
+
+  const clearDossier = () => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('dossier')
+        return next
+      },
+      { replace: true },
+    )
+  }
+
+  /** « Voir dans Propositions » depuis la carte d'un dossier mis en relation. */
+  const openProposals = (suggestionId: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('onglet', 'propositions')
+        next.set('dossier', suggestionId)
+        return next
+      },
+      { replace: false },
+    )
+    window.scrollTo({ top: 0 })
+  }
 
   const loadQueue = () => {
     setQueueError('')
@@ -396,6 +449,8 @@ export function AdminMatching() {
   const toConfirm = all.filter((s) => s.status === 'interet_recruteur')
   const withRecruiter = all.filter((s) => s.status === 'proposee_recruteur')
   const connected = all.filter((s) => s.status === 'mise_en_relation')
+  const connectedShown = connected.filter((s) => dossierGroup(s.phase) === connectedGroup)
+  const groupCount = (group: DossierGroup) => connected.filter((s) => dossierGroup(s.phase) === group).length
 
   const renderSuggestion = (s: AdminMatchSuggestion) => {
     const legacy = s.status === 'interet_candidat' || s.status === 'proposee_candidat'
@@ -416,6 +471,8 @@ export function AdminMatching() {
 
         <div className="match-chips">
           {legacy && <Badge variant="muted">{STATUS_LABELS[s.status]}</Badge>}
+          {/* Après l'entretien : phase dérivée du dossier (sous-lot 3). */}
+          {s.status === 'mise_en_relation' && s.phase && <HiringPhaseBadge audience="admin" phase={s.phase} />}
           <OriginChip origin={s.origin} />
           {/* CV et accord éclairent une décision à prendre : inutiles une
               fois la mise en relation faite (état terminal). */}
@@ -440,7 +497,11 @@ export function AdminMatching() {
         {/* Entretien fixé par le recruteur (décision 2026-10-14). */}
         {s.status === 'mise_en_relation' &&
           (s.interview ? (
-            <InterviewSummary interview={s.interview} audience="admin">
+            <InterviewSummary
+              interview={s.interview}
+              audience="admin"
+              title={(s.interview.round ?? 1) > 1 ? `Entretien — tour ${s.interview.round}` : 'Entretien'}
+            >
               {calendarAction && (
                 <Button
                   size="sm"
@@ -456,6 +517,23 @@ export function AdminMatching() {
           ) : (
             <p className="match-hint">Aucun entretien fixé par le recruteur.</p>
           ))}
+
+        {/* Issue du tour affiché : motif et explication d'absence, jamais la
+            note privée du recruteur (décision D3). Détail et annulation dans
+            « Entretiens ». */}
+        {s.status === 'mise_en_relation' && s.interview?.outcome && (
+          <p className="match-hint match-outcome">
+            Issue du tour {s.interview.round ?? 1} : <strong>{INTERVIEW_RESULT_LABELS[s.interview.outcome]}</strong>
+            {s.interview.outcomeReason && <> · motif : {RESULT_REASON_LABELS[s.interview.outcomeReason]}</>}
+            {s.interview.absenceReply && <> · explication du candidat : « {s.interview.absenceReply} »</>}
+          </p>
+        )}
+
+        {/* Dernière proposition d'embauche (vue admin, sous-lot 6) ; détail et
+            filtres dans l'onglet « Propositions ». */}
+        {s.status === 'mise_en_relation' && s.proposals && s.proposals.length > 0 && (
+          <ProposalLine suggestionId={s.id} proposal={latestProposal(s.proposals)!} onOpen={openProposals} />
+        )}
 
         <div className="match-actions">
           {canTransmit && (
@@ -567,18 +645,62 @@ export function AdminMatching() {
 
   const offer = presel?.opportunity
 
+  const header = (
+    <header className="page-header">
+      <p className="eyebrow">Back-office OffRec</p>
+      <h1>Mise en relation</h1>
+      <p>
+        Pour chaque offre, la présélection filtre puis classe les candidats qui ont déposé un CV et donné leur
+        accord. Transmettez les meilleurs profils au recruteur, puis confirmez la mise en relation quand il est
+        intéressé : le candidat n’est prévenu qu’à ce moment-là.
+      </p>
+    </header>
+  )
+
+  const tabs = (
+    <div className="match-tabs" role="tablist" aria-label="Sections de la mise en relation">
+      {(
+        [
+          ['dossiers', 'Présélection et dossiers'],
+          ['propositions', 'Propositions d’embauche'],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          id={`match-tab-${value}`}
+          aria-selected={tab === value}
+          aria-controls={`match-panel-${value}`}
+          className={`match-tab${tab === value ? ' is-active' : ''}`}
+          onClick={() => selectTab(value)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (tab === 'propositions') {
+    return (
+      <div className="page">
+        <div className="container">
+          {header}
+          {tabs}
+          <div id="match-panel-propositions" role="tabpanel" aria-labelledby="match-tab-propositions">
+            <AdminHireProposals dossierId={requestedDossier} onClearDossier={clearDossier} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page">
       <div className="container">
-        <header className="page-header">
-          <p className="eyebrow">Back-office OffRec</p>
-          <h1>Mise en relation</h1>
-          <p>
-            Pour chaque offre, la présélection filtre puis classe les candidats qui ont déposé un CV et donné leur
-            accord. Transmettez les meilleurs profils au recruteur, puis confirmez la mise en relation quand il est
-            intéressé : le candidat n’est prévenu qu’à ce moment-là.
-          </p>
-        </header>
+        {header}
+        {tabs}
+        <div id="match-panel-dossiers" role="tabpanel" aria-labelledby="match-tab-dossiers">
 
         <Card className="presel">
           <h2 className="presel-title">
@@ -870,12 +992,33 @@ export function AdminMatching() {
             </Section>
 
             {connected.length > 0 && (
-              <Section title="Mis en relation" count={connected.length} empty="">
-                {connected.map(renderSuggestion)}
-              </Section>
+              <section className="match-section">
+                <h2 className="match-section-title">
+                  Mis en relation <span className="match-section-count">{connected.length}</span>
+                </h2>
+                <div className="match-connected-filters" role="group" aria-label="Filtrer les dossiers mis en relation">
+                  {CONNECTED_GROUPS.map((group) => (
+                    <button
+                      key={group}
+                      type="button"
+                      className={`chip ${connectedGroup === group ? 'active' : ''}`}
+                      aria-pressed={connectedGroup === group}
+                      onClick={() => setConnectedGroup(group)}
+                    >
+                      {DOSSIER_GROUP_LABELS[group]} <span className="match-section-count">{groupCount(group)}</span>
+                    </button>
+                  ))}
+                </div>
+                {connectedShown.length === 0 ? (
+                  <p className="match-empty">Aucun dossier dans cette catégorie.</p>
+                ) : (
+                  <div className="match-grid">{connectedShown.map(renderSuggestion)}</div>
+                )}
+              </section>
             )}
           </>
         )}
+        </div>
 
         {confirmTransmit && offer && (
           <Modal title="Transmettre la sélection" onClose={() => setConfirmTransmit(false)}>
@@ -1038,6 +1181,28 @@ function Section({
       {intro && <p className="match-section-intro">{intro}</p>}
       {count === 0 ? <p className="match-empty">{empty}</p> : <div className="match-grid">{children}</div>}
     </section>
+  )
+}
+
+/** Dernière proposition d'embauche d'un dossier (vue admin), avec un lien vers l'onglet « Propositions ». */
+function ProposalLine({
+  suggestionId,
+  proposal,
+  onOpen,
+}: {
+  suggestionId: string
+  proposal: NonNullable<AdminMatchSuggestion['proposals']>[number]
+  onOpen: (suggestionId: string) => void
+}) {
+  return (
+    <p className="match-hint match-proposal">
+      <span>
+        Proposition (version {proposal.version}) : {stateText(proposal, 'admin')}
+      </span>
+      <Button variant="ghost" size="sm" onClick={() => onOpen(suggestionId)}>
+        Voir dans « Propositions »
+      </Button>
+    </p>
   )
 }
 

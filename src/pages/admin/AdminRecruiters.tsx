@@ -357,8 +357,9 @@ function RecruiterDetail({ detail }: { detail: AdminRecruiterDetail }) {
   const r = detail.recruiter
   const c = r.counts
   const counters: { label: string; value: number; hint?: string }[] = [
-    { label: 'Offres ouvertes', value: c.openOffers },
-    { label: 'Offres expirées', value: c.expiredOffers },
+    { label: 'Offres ouvertes', value: c.openOffers, hint: 'non pourvues, date limite à venir, compte actif' },
+    ...(c.filledOffers !== undefined ? [{ label: 'Offres pourvues', value: c.filledOffers }] : []),
+    { label: 'Offres expirées', value: c.expiredOffers, hint: 'date limite dépassée, non pourvues' },
     { label: 'À valider', value: c.awaitingValidation, hint: 'profils en attente de validation admin' },
     { label: 'Profils transmis', value: c.proposedProfiles, hint: 'actuellement chez le recruteur' },
     { label: 'Intérêts', value: c.interests, hint: 'mises en relation comprises' },
@@ -491,10 +492,25 @@ function RecruiterDetail({ detail }: { detail: AdminRecruiterDetail }) {
   )
 }
 
+/**
+ * État d'une offre (sous-lot 6) : la définition unique du serveur
+ * (`opportunityClosedReason`) via `open` / `closedReason` / `filled` ; repli
+ * sur la date limite avec un serveur plus ancien.
+ */
+function offerState(o: AdminRecruiterOpportunity): { label: string; tone: 'open' | 'filled' | 'closed'; title?: string } {
+  const open = o.open ?? !o.expired
+  if (open) return { label: 'Ouverte', tone: 'open' }
+  if (o.filled) return { label: 'Pourvue', tone: 'filled', title: o.closedReason ?? undefined }
+  if (o.expired) return { label: 'Expirée', tone: 'closed', title: o.closedReason ?? undefined }
+  return { label: 'Fermée', tone: 'closed', title: o.closedReason ?? undefined }
+}
+
 function OfferCard({ offer: o }: { offer: AdminRecruiterOpportunity }) {
   const legacy = o.suggestions.legacy
+  const state = offerState(o)
+  const closed = state.tone !== 'open'
   return (
-    <Card className={`arec-card arec-offer${o.expired ? ' arec-offer-expired' : ''}`}>
+    <Card className={`arec-card arec-offer${closed ? ' arec-offer-expired' : ''}`}>
       <div className="arec-offer-head">
         <div className="arec-offer-main">
           <p className="arec-offer-title">{o.title}</p>
@@ -503,13 +519,17 @@ function OfferCard({ offer: o }: { offer: AdminRecruiterOpportunity }) {
             {(EXPERIENCE_LABELS[o.level] ?? o.level).replace(/\s*\(.*\)$/, '')} · {o.city}
           </p>
         </div>
-        <span className={`arec-offer-state ${o.expired ? 'arec-offer-state-expired' : 'arec-offer-state-open'}`}>
-          {o.expired ? 'Expirée' : 'Ouverte'}
+        <span
+          className={`arec-offer-state ${state.tone === 'open' ? 'arec-offer-state-open' : state.tone === 'filled' ? 'arec-offer-state-filled' : 'arec-offer-state-expired'}`}
+          title={state.title}
+        >
+          {state.label}
         </span>
       </div>
 
       <p className="arec-offer-dates">
         Publiée le {formatDate(o.createdAt)} · date limite {formatDate(o.deadline)}
+        {closed && o.closedReason ? ` · ${o.closedReason}` : ''}
       </p>
 
       {o.requiredSkills.length > 0 && (
@@ -557,7 +577,7 @@ function OfferCard({ offer: o }: { offer: AdminRecruiterOpportunity }) {
       <div className="arec-actions">
         <Link to={`/admin/mise-en-relation?offre=${o.id}`} className="btn btn-outline btn-sm">
           <Handshake size={14} aria-hidden />
-          {o.expired ? 'Voir dans Mise en relation' : 'Présélection et mise en relation'}
+          {closed ? 'Voir dans Mise en relation' : 'Présélection et mise en relation'}
         </Link>
         <Link to={`/offres/${o.id}`} className="btn btn-ghost btn-sm">
           <ExternalLink size={14} aria-hidden />

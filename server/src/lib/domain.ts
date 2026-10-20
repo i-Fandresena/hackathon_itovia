@@ -1,5 +1,6 @@
 import type { CandidateProfile, Opportunity } from '../../../src/types/index.js'
 import { missionsOf } from './opportunity-missions.js'
+import { filledAtOf, positionsOf } from './hiring-store.js'
 
 export interface DbOpportunity {
   id: string
@@ -16,6 +17,9 @@ export interface DbOpportunity {
   requiredSkills: string[]
   /** Absent tant que le client Prisma n'est pas régénéré (voir opportunity-missions.ts). */
   missions?: string[]
+  /** Absents tant que le client Prisma n'est pas régénéré (voir hiring-store.ts). */
+  positions?: number
+  filledAt?: Date | null
   level: string
   deadline: Date
   createdAt: Date
@@ -41,6 +45,8 @@ export function toDomainOpportunity(o: DbOpportunity): Opportunity {
     deadline: o.deadline.toISOString(),
     createdAt: o.createdAt.toISOString(),
     featured: o.featured,
+    positions: positionsOf(o),
+    filledAt: filledAtOf(o)?.toISOString() ?? null,
   }
 }
 

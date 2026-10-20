@@ -15,6 +15,7 @@ import type {
   Sector,
 } from '../../../src/types/index.js'
 import { scoreOpportunity } from '../../../src/lib/recommendation.js'
+import { OPPORTUNITY_FILLED_ERROR } from '../../../src/lib/hiring.js'
 
 /**
  * Présélection ATS par offre — logique PURE (aucun accès base, aucun appel
@@ -72,15 +73,22 @@ export function candidateIneligibility(candidate: {
   return null
 }
 
+/** Raison de fermeture d'une offre pourvue (D1) : même texte que `OPPORTUNITY_FILLED_ERROR` (src/lib/hiring.ts). */
+export const OPPORTUNITY_FILLED_REASON = OPPORTUNITY_FILLED_ERROR
+
 /**
- * Une offre est ouverte si sa date limite n'est pas dépassée et si le compte
- * de son recruteur est actif. Retourne la raison de fermeture, ou `null`.
+ * Une offre est ouverte si elle n'est pas pourvue (`filledAt`, décision D1),
+ * si sa date limite n'est pas dépassée et si le compte de son recruteur est
+ * actif. Retourne la raison de fermeture, ou `null`. Définition UNIQUE de
+ * l'offre ouverte : moteur de matching (et son pendant SQL
+ * `openOpportunityWhere`), présélection, transitions admin, tableaux de bord.
  */
 export function opportunityClosedReason(
-  opportunity: { deadline: Date | string },
+  opportunity: { deadline: Date | string; filledAt?: Date | string | null },
   recruiter: { role: string; status: string } | null,
   now: Date,
 ): string | null {
+  if (opportunity.filledAt) return OPPORTUNITY_FILLED_REASON
   if (new Date(opportunity.deadline).getTime() < startOfUtcDay(now).getTime()) {
     return 'La date limite de l’offre est dépassée.'
   }
@@ -156,6 +164,22 @@ export const RECRUITER_ALLOWED_TRANSITIONS: Partial<Record<MatchSuggestionStatus
   interet_recruteur: ['mise_en_relation'],
 }
 
+/**
+ * Transitions du SYSTÈME (clôture « offre pourvue », décision D1) : un
+ * dossier qui n'a pas encore été mis en relation est écarté
+ * (`closedReason: offre_pourvue`) — jamais réactivé ensuite (règle
+ * `ecartee`), et le candidat reste dans le vivier des autres offres. Même
+ * écriture conditionnelle que l'admin et le recruteur
+ * (`commitMatchTransition`, lib/preselection-service.ts).
+ */
+export const SYSTEM_ALLOWED_TRANSITIONS: Partial<Record<MatchSuggestionStatus, MatchSuggestionStatus[]>> = {
+  suggeree: ['ecartee'],
+  proposee_candidat: ['ecartee'],
+  interet_candidat: ['ecartee'],
+  proposee_recruteur: ['ecartee'],
+  interet_recruteur: ['ecartee'],
+}
+
 const BLOCKED_REASONS: Partial<Record<MatchSuggestionStatus, string>> = {
   proposee_recruteur: 'Déjà transmis au recruteur.',
   interet_recruteur: 'Déjà transmis : le recruteur a marqué son intérêt.',
@@ -224,7 +248,7 @@ export function computeMatchFit(
 
 /** Ordre d'évaluation de l'entonnoir, et libellés affichés à l'admin. */
 export const PRESELECTION_MOTIFS: readonly { motif: PreselectionMotif; label: string }[] = [
-  { motif: 'offre_fermee', label: 'Offre fermée (date limite dépassée ou recruteur inactif)' },
+  { motif: 'offre_fermee', label: 'Offre fermée (pourvue, date limite dépassée ou recruteur inactif)' },
   { motif: 'compte_inactif', label: 'Compte candidat inactif' },
   { motif: 'sans_consentement', label: 'Accord de matching non donné ou retiré' },
   { motif: 'sans_cv', label: 'Aucun CV déposé' },

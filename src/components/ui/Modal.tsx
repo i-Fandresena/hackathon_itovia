@@ -22,7 +22,9 @@ export function Modal({ title, onClose, children }: ModalProps) {
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const card = cardRef.current
-    const firstField = card?.querySelector<HTMLElement>('input, select, textarea')
+    const firstField = card?.querySelector<HTMLElement>(
+      'input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    )
     ;(firstField ?? card)?.focus()
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {

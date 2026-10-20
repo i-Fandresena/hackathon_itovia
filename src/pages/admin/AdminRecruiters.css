@@ -455,6 +455,12 @@
   color: var(--color-ink-muted);
 }
 
+/* Offre pourvue (sous-lot 6) : fermée, mais pas expirée. */
+.arec-offer-state-filled {
+  background: var(--color-accent-muted);
+  color: var(--color-accent-hover);
+}
+
 .arec-offer-dates {
   margin-top: 0.5rem;
   font-size: 0.8rem;

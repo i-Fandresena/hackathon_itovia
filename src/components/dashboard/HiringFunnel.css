@@ -1,0 +1,376 @@
+/*
+ * Entonnoir de recrutement et blocs « Recrutement » des tableaux de bord
+ * (sous-lot 7) — préfixes `ofunnel-` (graphique) et `hdash-` (sections admin
+ * et recruteur). Couleurs : jetons du thème uniquement (clair et sombre).
+ */
+
+/* ------------------------------------------------------------ entonnoir */
+
+.ofunnel {
+  margin: 0;
+}
+
+.ofunnel-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.95rem;
+}
+
+.ofunnel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.ofunnel-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.ofunnel-index {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--color-accent-muted);
+  color: var(--color-accent-hover);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ofunnel-text {
+  display: grid;
+  min-width: 0;
+}
+
+.ofunnel-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.ofunnel-hint {
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+}
+
+.ofunnel-figures {
+  flex-shrink: 0;
+  display: grid;
+  justify-items: end;
+  text-align: right;
+}
+
+.ofunnel-count {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.ofunnel-rate {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ofunnel-rate-note {
+  font-weight: 400;
+  color: var(--color-ink-muted);
+}
+
+.ofunnel-track {
+  height: 12px;
+  margin-left: 2rem;
+  border-radius: 4px;
+  background: var(--color-bg-subtle);
+  overflow: hidden;
+}
+
+.ofunnel-fill {
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--color-accent);
+  transform-origin: left center;
+  animation: ofunnel-grow 0.7s var(--ease-out) both;
+}
+
+/* Colonne étroite (téléphone) : le taux reste lisible, sa légende n'est plus
+   lue qu'aux lecteurs d'écran (le libellé de l'étape garde la place). */
+@container odash (max-width: 560px) {
+  .ofunnel-rate-note {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .ofunnel-track {
+    margin-left: 0;
+  }
+}
+
+@keyframes ofunnel-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ofunnel-fill {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ofunnel-fill {
+    background: CanvasText;
+  }
+}
+
+/* ------------------------------------------------------------ sections « Recrutement » */
+
+.hdash-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.hdash-filters .field {
+  flex: 1 1 170px;
+  min-width: 0;
+  margin: 0;
+}
+
+.hdash-filters .select {
+  width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.hdash-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  font-size: 0.875rem;
+  color: var(--color-ink-secondary);
+  cursor: pointer;
+}
+
+.hdash-check input {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+}
+
+.hdash-stack {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.hdash-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+}
+
+.hdash-empty {
+  margin: 0;
+  padding: 1rem;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-size: 0.875rem;
+}
+
+.hdash-note {
+  margin: 0.9rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+}
+
+.hdash-warning {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-warning-bg);
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+}
+
+/* Indicateur et délais */
+
+.hdash-figure {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.hdash-figure strong {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--color-ink);
+}
+
+.hdash-facts {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.hdash-facts div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.hdash-facts dt {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+}
+
+.hdash-facts dd {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.hdash-facts dd strong {
+  font-size: 1.05rem;
+}
+
+/* Export de recherche */
+
+.hdash-export p {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-ink-secondary);
+}
+
+.hdash-export ul {
+  margin: 0 0 0.9rem;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+  color: var(--color-ink-secondary);
+  display: grid;
+  gap: 0.3rem;
+}
+
+.hdash-export-result {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-ink-secondary);
+}
+
+.hdash-error {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-danger);
+}
+
+/* Classement par offre (recruteur) */
+
+.hdash-table-wrap {
+  overflow-x: auto;
+  margin: 0 -0.25rem;
+  padding: 0 0.25rem;
+}
+
+.hdash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.hdash-table caption {
+  text-align: left;
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+  padding-bottom: 0.5rem;
+}
+
+.hdash-table th,
+.hdash-table td {
+  padding: 0.5rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.hdash-table th:first-child,
+.hdash-table td:first-child {
+  text-align: left;
+  white-space: normal;
+  min-width: 9rem;
+  padding-left: 0;
+}
+
+.hdash-table thead th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.hdash-table tbody th {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.hdash-table td {
+  color: var(--color-ink-secondary);
+}
+
+.hdash-table td.is-key {
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.hdash-table tbody th a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.hdash-table tbody th a:hover {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+}
+
+.hdash-table-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+}
+
+.hdash-table-wrap:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}

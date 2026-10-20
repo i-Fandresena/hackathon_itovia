@@ -2,13 +2,22 @@ import bcrypt from 'bcryptjs'
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
-import { adminPublicVisibilitySchema, createAgentSchema, cvVerifierRolesSchema, moderationResolveSchema } from '../lib/validation.js'
+import {
+  adminHiringStatsQuerySchema,
+  adminPublicVisibilitySchema,
+  createAgentSchema,
+  cvVerifierRolesSchema,
+  moderationResolveSchema,
+  researchExportSchema,
+} from '../lib/validation.js'
 import { PUBLIC_TALENT_WHERE } from '../lib/public-talents.js'
 import { clip, notifyUser } from '../lib/notify.js'
 import { GRANTABLE_CV_VERIFIER_ROLES, listCvVerifierRoles } from '../lib/cv-access.js'
 import { loadSignalTrust, loadTalentTrust, verificationSummary } from '../lib/talent-trust.js'
 import { purgeExpiredSignalsLazily } from '../lib/talent-signals.js'
 import { loadAdminDashboard } from '../lib/admin-dashboard.js'
+import { buildAdminResearchExport, loadAdminHiringStats } from '../lib/hiring-stats.js'
+import { HIRING_UNAVAILABLE_ERROR } from '../lib/hiring-store.js'
 
 const ACTION_TO_STATUS = {
   warning: 'warned',
@@ -113,6 +122,48 @@ router.get('/stats', async (req, res, next) => {
         activePartnerCompanies: activeRecruiters.length,
       },
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Entonnoir de recrutement de toute la plateforme (sous-lot 7,
+ * lib/hiring-stats.ts) : cohorte des dossiers transmis pendant la période,
+ * suivis jusqu'à l'embauche, filtrable par recruteur, par offre et sans les
+ * comptes de test ; indicateur « issue renseignée sous 7 jours » (plan §11).
+ */
+router.get('/stats/hiring', async (req, res, next) => {
+  try {
+    const query = adminHiringStatsQuerySchema.parse(req.query)
+    const stats = await loadAdminHiringStats(query)
+    res.setHeader('Cache-Control', 'no-store')
+    if (!stats) {
+      res.status(503).json({ error: HIRING_UNAVAILABLE_ERROR })
+      return
+    }
+    res.json(stats)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Export de recherche pseudonymisé (mémoire, chapitre évaluation) : une
+ * ligne par dossier transmis, sans nom, email, téléphone, entreprise, note,
+ * texte libre, salaire, date exacte ni identifiant interne. POST : chaque
+ * export est journalisé (`research_export`, volume et filtre seulement).
+ */
+router.post('/stats/research-export', async (req, res, next) => {
+  try {
+    const { excludeTest } = researchExportSchema.parse(req.body ?? {})
+    const result = await buildAdminResearchExport(req.session!.sub, excludeTest)
+    res.setHeader('Cache-Control', 'no-store')
+    if (!result) {
+      res.status(503).json({ error: HIRING_UNAVAILABLE_ERROR })
+      return
+    }
+    res.json(result)
   } catch (err) {
     next(err)
   }

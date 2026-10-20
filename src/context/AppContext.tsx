@@ -86,6 +86,10 @@ interface AppContextValue {
   mySuggestions: MatchSuggestionWithOpportunity[]
   /** Côté recruteur : candidats transmis par OffRec sur ses offres. */
   receivedSuggestions: ReceivedSuggestion[]
+  /** Le dernier chargement des dossiers et notifications du compte a échoué
+   *  (les données affichées sont alors celles du dernier chargement réussi,
+   *  ou vides). Repasse à `false` au prochain chargement réussi. */
+  dossiersLoadFailed: boolean
   notifications: Notification[]
   members: Member[]
   providers: Provider[]
@@ -159,6 +163,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [providers, setProviders] = useState<Provider[]>([])
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [hydrated, setHydrated] = useState(false)
+  const [dossiersLoadFailed, setDossiersLoadFailed] = useState(false)
 
   const loadDirectory = useCallback(async () => {
     const { providers: p, recommendations: r, members: m } = await apiDirectoryRaw()
@@ -167,7 +172,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setMembers(m)
   }, [])
 
+  /** Charge les dossiers et notifications du compte ; mémorise l'échec dans
+   *  `dossiersLoadFailed` puis relance l'erreur (les appelants gardent leur
+   *  propre traitement). */
   const loadRoleScopedData = useCallback(async (user: ApiUser | null) => {
+    try {
+      await fetchRoleScopedData(user)
+      setDossiersLoadFailed(false)
+    } catch (err) {
+      setDossiersLoadFailed(true)
+      throw err
+    }
+  }, [])
+
+  /** N'utilise que des setters d'état (stables) : la version capturée par
+   *  `loadRoleScopedData` reste valable. */
+  async function fetchRoleScopedData(user: ApiUser | null) {
     if (!user) {
       setMySuggestions([])
       setReceivedSuggestions([])
@@ -190,7 +210,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReceivedSuggestions([])
       setNotifications(notifs)
     }
-  }, [])
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -515,6 +535,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     opportunities,
     mySuggestions,
     receivedSuggestions,
+    dossiersLoadFailed,
     notifications,
     members,
     providers,

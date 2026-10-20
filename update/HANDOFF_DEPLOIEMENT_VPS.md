@@ -19,8 +19,10 @@ OffRec est composé de **deux projets dans un seul repo** :
   process long-running (API + auth + IA + upload de CV).
 
 Le backend importe directement certains fichiers du frontend
-(`src/lib/trust.ts`, `src/lib/recommendation.ts`, `src/types/index.ts`,
-`src/data/constants.ts`) via des chemins relatifs (`../../../src/...`). **Le
+(`src/types/index.ts`, `src/lib/trust.ts`, `src/lib/recommendation.ts`,
+`src/data/constants.ts`, `src/data/endorsements.ts`, `src/lib/interview.ts`,
+`src/lib/opportunityFields.ts`, `src/lib/hiring.ts`) via des chemins
+relatifs (`../../../src/...`). **Le
 repo doit donc être cloné dans son intégralité** — ne clone pas seulement
 `server/`, et ne déplace pas `server/` hors de l'arborescence du repo.
 
@@ -202,14 +204,17 @@ persister entre les déploiements** (ne pas le supprimer lors d'un futur
 
 Aucun fichier `pm2.config.js`/unité `systemd` n'existe dans le repo — à
 créer selon l'outil choisi sur ce VPS. Le point d'entrée compilé est
-`server/dist/index.js` (`npm start` dans `server/` équivaut à `node
-dist/index.js`), et lit ses variables depuis `server/.env` via `dotenv`.
+`server/dist/server/src/index.js` : `tsconfig.json` inclut des fichiers de
+`../src`, donc `tsc` écrit sous `dist/server/src/` (et `dist/src/`). Le
+script `npm start` (`node dist/index.js`) ne fonctionne pas tel quel
+(vérifié en recette). Le backend lit ses variables depuis `server/.env` via
+`dotenv` et doit être lancé depuis `server/` (dossier `uploads/` relatif).
 
 Exemple minimal avec `pm2` :
 
 ```bash
 cd server
-pm2 start dist/index.js --name offrec-api
+pm2 start dist/server/src/index.js --name offrec-api
 pm2 save
 ```
 
@@ -258,3 +263,81 @@ dans `CAHIER_DES_CHARGES.md` / `STRATEGIE_OFFREC_2026.md` à la racine du
 repo. Rien de tout cela n'affecte les étapes de déploiement ci-dessus — ce
 sont des routes/pages applicatives supplémentaires, pas des changements
 d'infrastructure.
+
+## 14. Mise à jour « après l'entretien » (sous-lots 0 à 7, octobre 2026)
+
+À faire **une fois**, sur une instance qui tourne déjà avec une version
+antérieure. Cette mise à jour ajoute l'issue des entretiens, les tours
+multiples, les propositions d'embauche, le placement automatique, l'offre
+pourvue et l'entonnoir de recrutement. Deux migrations, appliquées dans cet
+ordre par une seule commande `prisma migrate deploy` (ordre des noms) :
+
+- `20261016090000_hiring_expand` — **temps A**, additif : nouvelles colonnes,
+  tables et enums ; ne remplit que les colonnes vides (chaque entretien
+  existant devient le tour 1 actif, date de mise en relation reprise du
+  journal, plus ancien placement non annulé relié à son dossier) ;
+- `20261016100000_interview_rounds` — **temps B** : l'unicité « un entretien
+  par dossier » devient « un tour n par dossier ».
+
+**Règle : `prisma migrate deploy` (A puis B) avant de redémarrer le backend
+sur le client Prisma régénéré.** Un client régénéré sur une base sans le
+temps A fait échouer toute lecture d'offre (500 « The column
+`Opportunity.positions` does not exist », vérifié en recette) ; l'ancien code
+sur une base au temps B perd l'unicité d'entretien par dossier. Attention :
+`npm install` / `npm ci` dans `server/` régénère aussi le client
+(`postinstall` de `@prisma/client`). D'où, backend **arrêté** pendant la mise
+à jour (quelques minutes) :
+
+```bash
+cd server
+# Sauvegarde : DATABASE_URL de server/.env exportée, sans « ?schema=public ».
+# Base en conteneur : docker compose exec -T db pg_dump -U <user> -Fc <db> > ../offrec-avant-apres-entretien.dump
+pg_dump -Fc -d "${DATABASE_URL%%\?*}" -f ../offrec-avant-apres-entretien.dump
+pm2 stop offrec-api            # ou l'équivalent systemd
+git pull origin update
+npm ci                         # dépendances (+ prisma generate)
+npx prisma migrate deploy      # applique A puis B
+npx prisma migrate status      # attendu : « Database schema is up to date! »
+npx prisma generate            # client aligné sur le schéma (explicite)
+npm run build
+cd .. && npm ci && npm run build   # frontend (VITE_API_URL, §5)
+# compléter server/.env (variables ci-dessous), puis :
+pm2 start offrec-api
+```
+
+Au redémarrage, le journal peut afficher `[hiring] Réparation au démarrage :
+…` (idempotent : réactive le dernier tour sans issue d'un dossier qui n'a
+plus de tour actif, reprend une date de mise en relation manquante). Sans
+`HIRING_JOBS_ENABLED=true`, il affiche que les rappels sont désactivés.
+
+Variables de `server/.env` (commentées dans `server/.env.example`) :
+
+| Variable | Valeur en prod |
+|---|---|
+| `HIRING_JOBS_ENABLED` | `true` : rappels d'issue au recruteur, résumé admin quotidien des issues en souffrance, expiration des propositions et rappel J-2 au candidat (au démarrage puis toutes les 15 min). Absente : désactivé (un admin peut les lancer : `POST /api/admin/matching/hiring-jobs/run`). |
+| `RESEARCH_EXPORT_SECRET` | Recommandé : `openssl rand -hex 32`. Clé des pseudonymes de l'export de recherche ; à défaut dérivée de `JWT_SECRET` (changer celui-ci changerait alors tous les pseudonymes). |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID` | Agenda Google et lien Meet des entretiens (un événement par tour, sans invité). Vides : mode simulé. `GOOGLE_CALENDAR_TIMEOUT_MS` facultatif (8000). **Ne jamais renseigner** `GOOGLE_OAUTH_TOKEN_URL` ni `GOOGLE_CALENDAR_API_BASE` (recette seulement, ignorées en production). |
+| `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_NOTIFICATION_FROM_EMAIL` | Emails d'inscription et notifications au candidat. |
+| `EMAIL_SENDING_DISABLED` | `false` (`true` coupe tout email). Une adresse en `.invalid` (comptes de test) ne reçoit jamais d'email. |
+
+**Fins de ligne des deux migrations (CRLF / LF).** Prisma enregistre dans
+`_prisma_migrations.checksum` le SHA-256 des octets du fichier appliqué. Sur
+le poste de développement (Windows, `core.autocrlf=true`, pas de
+`.gitattributes`), ces deux fichiers sont en CRLF et la base locale a déjà
+enregistré leurs sommes CRLF ; au commit, git les stocke en LF, et le VPS
+(Linux) les récupère en LF puis enregistre la somme LF en les appliquant :
+chaque base garde la somme du fichier qu'elle a appliqué, sans conflit.
+Prisma 5.22 tolère d'ailleurs un écart limité aux fins de ligne (vérifié en
+recette : somme CRLF en base, fichiers repassés en LF → `migrate status`,
+`migrate deploy` et `migrate dev` ne signalent rien) ; une vraie modification
+du contenu, elle, est détectée et `migrate dev` exige alors de réinitialiser
+la base. Parade : **ne jamais modifier ni « normaliser » à la main ces deux
+fichiers** (ni les migrations déjà appliquées) ; ne jamais lancer
+`migrate dev` sur la prod ; si `migrate dev` propose un jour de
+réinitialiser une base parce qu'une migration « a été modifiée », répondre
+non et comparer le fichier à sa version commitée (`git diff`).
+
+Vérifications en plus du §12 : `GET /api/admin/stats/hiring` (session admin)
+répond 200 et non 503 ; `/recruteur/entretiens`, `/admin/entretiens` et la
+section « Recrutement » des tableaux de bord s'affichent ; aucune ligne
+`[hiring]` d'erreur dans le journal du backend.

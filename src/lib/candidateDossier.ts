@@ -1,3 +1,4 @@
+import type { CandidateHiringPhase } from './hiring'
 import type { MatchSuggestionStatus } from '../types'
 
 /**
@@ -64,4 +65,32 @@ export function isTransmitted(status: MatchSuggestionStatus): boolean {
  *  confirmée — le serveur refuse ensuite (400). */
 export function canWithdrawFromDossier(status: MatchSuggestionStatus): boolean {
   return status !== 'mise_en_relation' && status !== 'ecartee'
+}
+
+/**
+ * Après l'entretien (sous-lot 4) : texte NEUTRE de chaque phase vue par le
+ * candidat (`candidatePhase`, calculée par le serveur avec
+ * `candidateHiringPhase`). Jamais l'issue brute, le motif, la note, le score
+ * ni le rang : seulement ce qu'OffRec lui a déjà écrit (plan §6.4).
+ */
+export const CANDIDATE_PHASE_TEXT: Record<CandidateHiringPhase, string> = {
+  entretien_a_planifier:
+    'La mise en relation est confirmée. L’entreprise va vous proposer une date d’entretien : OffRec vous prévient ici et par email.',
+  entretien_prevu: 'Un entretien est prévu. Confirmez votre présence ou signalez un empêchement.',
+  entretien_annule:
+    'L’entreprise a annulé l’entretien. Votre mise en relation reste active : OffRec revient vers vous pour la suite.',
+  suite_en_attente:
+    'L’entretien a eu lieu. OffRec vous informe ici et par email dès que l’entreprise a fait connaître la suite.',
+  suite_favorable:
+    'L’entreprise souhaite poursuivre avec vous. OffRec vous tient informé·e de la prochaine étape ici et par email.',
+  entretien_manque:
+    'L’entreprise nous indique que l’entretien n’a pas pu avoir lieu en votre présence. Si vous avez rencontré un empêchement, expliquez-le à OffRec : nous reviendrons vers vous.',
+  proposition_recue: 'Une proposition d’embauche vous attend. OffRec vous la présente dans votre espace.',
+  embauche: 'Embauche confirmée. OffRec vous accompagne pour la suite.',
+  clos: 'Ce dossier est clos. Votre profil reste proposé par OffRec pour d’autres offres qui correspondent à vos compétences.',
+}
+
+/** Dossier clos (« Dossier clos ») : rangé à part dans le tableau de bord. */
+export function isClosedDossier(dossier: { status: MatchSuggestionStatus; candidatePhase?: CandidateHiringPhase | null }): boolean {
+  return dossier.status === 'mise_en_relation' && dossier.candidatePhase === 'clos'
 }

@@ -1,8 +1,10 @@
 # 📚 Documentation Complète des APIs - OffRec Backend
 
-**Dernière mise à jour** : 30 septembre 2026  
+**Dernière mise à jour** : 19 octobre 2026 (sous-lots 0 à 8 « après l'entretien »)  
 **Version** : 1.0.0  
 **Base URL** : `http://localhost:4000/api`
+
+**Authentification** : cookie de session httpOnly signé (JWT, nom `COOKIE_NAME`, `secure` en production) posé par `POST /auth/login`. Les blocs « Headers : `Authorization: Bearer {token}` » de ce document sont historiques : le serveur ne lit pas cet en-tête.
 
 ---
 
@@ -27,6 +29,9 @@
 14. [Billing](#billing)
 15. [Reports](#reports)
 16. [Public](#public)
+17. [Talents recommandés](#talents-recommandés-vitrine-publique)
+18. [Entreprises recommandées](#entreprises-recommandées)
+19. [Admin Matching](#admin-matching) (présélection, entretiens, issues, propositions d'embauche, tâches)
 
 ---
 
@@ -480,45 +485,49 @@ Authorization: Bearer {token} (optionnel)
 ```
 
 **Description** : 
-- Liste toutes les offres avec score de compatibilité pour candidat connecté
-- Scoring automatique si candidat authentifié
-- Classement par score décroissant pour candidat
+- Liste toutes les offres, de la plus récente à la plus ancienne ; le serveur ignore les paramètres ci-dessus (le filtrage se fait dans l'interface)
+- `match` : score de compatibilité (`scoreOpportunity()`) pour un candidat connecté, sinon `null`
 
 **Response** (200) :
 ```json
 {
   "opportunities": [
     {
-      "id": "uuid",
-      "recruiterId": "uuid",
-      "companyName": "Tech Solutions Madagascar",
-      "title": "Développeur React",
-      "category": "IT / Digital",
-      "sector": "digital",
-      "description": "Rejoignez notre équipe...",
-      "province": "Antananarivo",
-      "city": "Antananarivo",
-      "opportunityType": "emploi",
-      "requiredSkills": ["React", "TypeScript", "Git"],
-      "level": "junior",
-      "deadline": "2026-12-31T23:59:59Z",
-      "featured": true,
-      "createdAt": "2026-09-30T10:00:00Z",
-      "score": 87,
-      "reasons": ["Compétences React alignées", "Basé à Antananarivo"]
+      "opportunity": {
+        "id": "uuid",
+        "recruiterId": "uuid",
+        "companyName": "Tech Solutions Madagascar",
+        "title": "Développeur React",
+        "category": "IT / Digital",
+        "sector": "digital",
+        "description": "Rejoignez notre équipe...",
+        "province": "Antananarivo",
+        "city": "Antananarivo",
+        "opportunityType": "emploi",
+        "requiredSkills": ["React", "TypeScript", "Git"],
+        "missions": [],
+        "level": "junior",
+        "deadline": "2026-12-31T23:59:59Z",
+        "featured": true,
+        "createdAt": "2026-09-30T10:00:00Z",
+        "positions": 1,
+        "filledAt": null
+      },
+      "match": { "score": 87, "reasons": ["Compétences React alignées", "Basé à Antananarivo"] }
     }
-  ],
-  "total": 45,
-  "page": 1,
-  "limit": 20
+  ]
 }
 ```
 
 ---
 
+**Offre pourvue (sous-lot 5, D1)** : chaque offre porte `positions` (nombre de postes, 1 à 50) et `filledAt` (date ISO à laquelle l'offre est passée pourvue, `null` si ouverte) — le catalogue public et la page de l'offre (`GET /opportunities/{id}`) reflètent ainsi son état. `filledBy` (auto ou recruteur) n'est jamais renvoyé.
+
 ### 2. Get My Opportunities (Mes offres - Recruteur)
 
 **Endpoint** : `GET /opportunities/mine`
+
+Chaque offre porte aussi `positions`, `filledAt` et `activePlacements` (placements non annulés de l'offre : « Pourvue (n/n) »).
 
 **Headers** :
 ```
@@ -527,11 +536,7 @@ Authorization: Bearer {token}
 
 **Rôle requis** : `recruiter`
 
-**Query Parameters** :
-```
-?status=draft|published|closed
-?page=1&limit=20
-```
+Aucun paramètre : toutes les offres du recruteur connecté, de la plus récente à la plus ancienne.
 
 **Response** (200) :
 ```json
@@ -540,12 +545,13 @@ Authorization: Bearer {token}
     {
       "id": "uuid",
       "title": "Développeur React",
-      "status": "published",
-      "applicationCount": 12,
-      "createdAt": "2026-09-30T10:00:00Z"
+      "…": "mêmes champs que GET /opportunities/{id} (sans score)",
+      "positions": 2,
+      "filledAt": "2026-10-19T09:00:00.000Z",
+      "applicationCount": 0,
+      "activePlacements": 2
     }
-  ],
-  "total": 5
+  ]
 }
 ```
 
@@ -580,6 +586,8 @@ Authorization: Bearer {token} (optionnel)
     "deadline": "2026-12-31T23:59:59Z",
     "featured": true,
     "createdAt": "2026-09-30T10:00:00Z",
+    "positions": 1,
+    "filledAt": null,
     "score": 87,
     "reasons": ["Compétences React alignées"]
   },
@@ -592,6 +600,8 @@ Authorization: Bearer {token} (optionnel)
 ```
 
 ---
+
+**`positions` et `filledAt`** (« après l'entretien », décision D1) : nombre de postes à pourvoir (`1` par défaut) et date à laquelle l'offre a été pourvue (`null` = ouverte). Présents dans toutes les réponses construites par `toDomainOpportunity()` (liste, détail, mes offres, création, modification) ; absents de la vue « dossier » du candidat (`GET /match-suggestions/mine`). `positions` se fixe à la création et en modification (§4, §5) ; `filledAt` change seulement par la clôture automatique, « Marquer comme pourvue » ou « Rouvrir » (§5b). Avec un client Prisma non régénéré : `1` et `null`. `filledBy` (interne) n'est jamais renvoyé.
 
 ### 4. Create Opportunity (Créer une offre)
 
@@ -624,6 +634,7 @@ Content-Type: application/json
   "level": "intermediaire",
   "deadline": "2026-12-31T23:59:59Z",
   "featured": false,
+  "positions": 2,
   "sectorDetails": {
     "stack": "React, Node.js, PostgreSQL",
     "teamSize": 5
@@ -631,17 +642,21 @@ Content-Type: application/json
 }
 ```
 
-**Response** (201) :
+**Response** (201) : l'offre complète (`toDomainOpportunity()`, mêmes champs que `GET /opportunities/{id}` sans score), publiée immédiatement ; le moteur de matching part après la réponse.
 ```json
 {
   "opportunity": {
     "id": "uuid",
     "title": "Développeur Full Stack",
-    "status": "published",
+    "…": "…",
+    "positions": 2,
+    "filledAt": null,
     "createdAt": "2026-09-30T10:00:00Z"
   }
 }
 ```
+
+`positions` (facultatif, entier de 1 à 50, défaut 1 — décision D1) : nombre de postes ; l'offre passe pourvue quand ses placements non annulés l'atteignent (§5b).
 
 **Règles `requiredSkills`** (partagées avec le formulaire, `src/lib/opportunityFields.ts`) :
 - Suggestions (`COMMON_SKILLS`) **ou saisie libre** ; espaces nettoyés, 2 à 50 caractères, ni email, ni téléphone, ni adresse web.
@@ -675,6 +690,8 @@ Content-Type: application/json
 
 **Body** : Mêmes champs que la création. `missions` absent : les missions enregistrées sont conservées ; `missions: []` les efface. Mêmes règles et mêmes erreurs (`400`, `503`) que la création.
 
+**`positions`** (sous-lot 5, D1 ; facultatif, entier de 1 à 50) : absent → 1 à la création, inchangé en modification. En modification, jamais sous le nombre de placements non annulés de l'offre (`400` « 2 postes sont déjà pourvus : indiquez au moins 2. », `positionsUpdateError`) ; s'il devient égal à ce nombre, l'offre passe pourvue automatiquement et ses autres dossiers sont clos (même transaction, offre verrouillée — voir §5b).
+
 **Response** (200) :
 ```json
 {
@@ -692,6 +709,24 @@ Content-Type: application/json
 
 ---
 
+### 5b. Offre pourvue — `POST` / `DELETE /opportunities/{id}/filled` (sous-lot 5, D1)
+
+Logique : `server/src/lib/opportunity-fill.ts`. **Rôle requis** : `recruiter`, propriétaire de l'offre (`404` « Offre introuvable. » sinon).
+
+Une offre est **pourvue** (`filledAt`) quand ses placements non annulés atteignent `positions` — automatiquement après l'acceptation d'une proposition (Match Suggestions §5i), la déclaration du placement d'un talent (Placements §1) ou une baisse du nombre de postes — ou à la main. Une offre pourvue est **fermée** : `opportunityClosedReason()` renvoie « Tous les postes de cette offre sont pourvus. » (moteur de matching, présélection — motif `offre_fermee` —, transitions admin vers `proposee_recruteur` / `mise_en_relation` → `409`), et elle refuse les nouvelles propositions, le tour suivant et les issues `retenu` / `second_entretien` (`409`).
+
+**Clôture des autres dossiers**, dans la transaction qui pourvoit l'offre (offre puis chaque dossier verrouillés) :
+- dossier non mis en relation (`suggeree`, `proposee_*`, `interet_*`) → `ecartee` + `closedReason: offre_pourvue`, par `commitMatchTransition` (acteur `system`, `SYSTEM_ALLOWED_TRANSITIONS`) ; jamais réactivé ensuite ;
+- dossier mis en relation non terminal → tour actif à venir annulé (événement Google supprimé après la réponse) et proposition en attente retirée (`withdrawReason: poste_pourvu`) ; le dossier reste `mise_en_relation`, sa phase devient `poste_pourvu` ;
+- dossier embauché ou déjà clos : inchangé.
+Après la réponse : candidat d'un dossier mis en relation → in-app + email « Poste pourvu » (avec le nom de l'entreprise) ; profil seulement transmis → in-app **sans** nom d'entreprise ; file de validation → rien ; recruteur → in-app « Offre pourvue » (clôture automatique seulement) ; admins → **un** résumé `opportunity_filled`. Les candidats restent dans le vivier des autres offres.
+
+**`POST /opportunities/{id}/filled`** — « Marquer comme pourvue » (embauche faite hors OffRec) : `filledBy` = le recruteur. → `200 { opportunity }` (avec `activePlacements`). `409` « Cette offre est déjà marquée comme pourvue. » · `503` suite non activée. `AuditLog` `opportunity_filled { opportunityId, source: "manuel", positions, activePlacements }` (`source: "auto"` pour la clôture automatique).
+
+**`DELETE /opportunities/{id}/filled`** — « Rouvrir ». Body facultatif `{ positions? }` (`opportunityReopenSchema`). L'offre garde au moins un poste libre : `positions` demandé (≥ placements + 1), sinon max(postes actuels, placements + 1). Les dossiers clos ne sont **pas** réactivés ; le moteur de matching repart après la réponse. → `200 { opportunity }`. `400` nombre de postes invalide · `409` « Cette offre n’est pas pourvue. ». `AuditLog` `opportunity_reopened { opportunityId, previousPositions, positions, activePlacements }`, admins `opportunity_reopened`.
+
+---
+
 ### 6. Delete Opportunity (Supprimer une offre)
 
 **Endpoint** : `DELETE /opportunities/{id}`
@@ -706,6 +741,7 @@ Authorization: Bearer {token}
 **Description** : 
 - Supprime l'offre et toutes les candidatures associées
 - Les favoris sont aussi supprimés
+- Les dossiers de matching, leurs tours et leurs propositions partent avec elle ; les **placements survivent** (`opportunityId`, `suggestionId` et `hireProposalId` passent à `null`) pour le suivi du success fee
 
 **Response** (204) : Pas de contenu
 
@@ -1017,10 +1053,10 @@ C'est une **sélection** d'événements, pas un miroir du journal d'audit :
 
 | Catégorie | Événements (`event`) | `link` |
 |-----------|----------------------|--------|
-| `candidat` | `candidate_registered`, `cv_upload` / `cv_upload_with_consent`, `matching_consent_given`, `matching_consent_withdrawn`, `candidate_declined` | `/admin`, `/verification-cv`, `/admin/mise-en-relation` |
-| `recruteur` | `recruiter_registered`, `opportunity_created`, `opportunity_updated`, `opportunity_deleted`, `recruiter_interested`, `recruiter_declined`, `subscription_created` / `subscription_changed`, `placement_declared`, `placement_stage_updated`, « Nouveau message » d'un recruteur | `/admin`, `/admin/mise-en-relation`, `/admin/placements`, `/messages?c=…` |
+| `candidat` | `candidate_registered`, `cv_upload` / `cv_upload_with_consent`, `matching_consent_given`, `matching_consent_withdrawn`, `candidate_declined`, `interview_unavailable`, `interview_absence_reply` (« Explication d’absence déposée », sans le texte), `hire_proposal_declined` (catégorie du refus, jamais la précision) | `/admin`, `/verification-cv`, `/admin/mise-en-relation`, `/admin/entretiens` |
+| `recruteur` | `recruiter_registered`, `opportunity_created`, `opportunity_updated`, `opportunity_deleted`, `recruiter_interested`, `recruiter_declined`, `subscription_created` / `subscription_changed`, `placement_declared`, `placement_stage_updated`, « Nouveau message » d'un recruteur, `interview_scheduled`, `interview_rescheduled`, `interview_cancelled`, `interview_next_round` (« Nouveau tour d’entretien »), `interview_no_show` (« Absence à un entretien »), `hire_proposal_sent`, `hire_proposal_withdrawn`, `hire_proposal_accepted` (« Embauche confirmée » : placement créé, étape 1 du success fee due), `opportunity_reopened` | `/admin`, `/admin/mise-en-relation`, `/admin/entretiens`, `/admin/placements`, `/messages?c=…` |
 | `agent` | `talent_created`, `talent_verified`, `talent_proposed`, `sourcing_lead_created`, `talent_lead_received`, `talent_account_registered`, `cv_verification_delegated` | `/admin/agents`, `/admin/placements`, `/verification-cv` |
-| `systeme` | `matching_run_summary` — **une** notification récapitulative par exécution du moteur qui a mis des suggestions en file ou envoyé des profils ; rien si l'exécution ne produit rien | `/admin/mise-en-relation` |
+| `systeme` | `matching_run_summary` — **une** notification récapitulative par exécution du moteur qui a mis des suggestions en file ou envoyé des profils ; rien si l'exécution ne produit rien · `interview_calendar_failed` (« Agenda Google à régulariser ») · `interview_outcome_overdue` — résumé « n issues d’entretien non renseignées plus de 7 jours après la fin », **au plus un par jour** (lib/hiring-jobs.ts), sans nom · `hire_proposal_expired` (une fois par proposition) · `opportunity_filled` — **un** résumé par offre pourvue (dossiers écartés, entretiens annulés, propositions retirées) | `/admin/mise-en-relation`, `/admin/entretiens` |
 | `moderation` | `report_created` | `/admin/moderation` |
 | `annuaire` | `individual_registered`, `provider_created`, `provider_claimed` | `/admin`, `/annuaire/{id}` |
 
@@ -1599,7 +1635,7 @@ Unique source du tableau de bord `/admin`. Tout est lu en base au moment de l'ap
 Conventions :
 - **Jours** : calendrier de Madagascar, UTC+3 fixe. `seriesDays` = les 30 jours `AAAA-MM-JJ` (aujourd'hui inclus, du plus ancien au plus récent) ; chaque série a 30 valeurs alignées, jour sans événement = 0. « 30 derniers jours » = ces 30 jours entiers.
 - **Tendances** : `last7` = événements des 7 × 24 h précédant `computedAt`, `prev7` = les 7 × 24 h d'avant (fenêtres glissantes, jamais une journée partielle comparée à une pleine).
-- **Offre ouverte** : `deadline` ≥ début du jour UTC (même définition que le moteur de matching et la présélection).
+- **Offre ouverte** : `deadline` ≥ début du jour UTC **et** non pourvue (`filledAt` vide), comme le moteur de matching et la présélection. `offers.filled` = offres pourvues (quelle que soit leur date limite) ; `offers.expired` = date limite dépassée sur une offre non pourvue (`open + filled + expired = total`).
 
 **Response** (200) — champs historiques conservés tels quels, plus les indicateurs du tableau de bord :
 ```json
@@ -1626,7 +1662,7 @@ Conventions :
     "connectedSeries": ["… 30"], "connectedLast30": 4, "connectedLast7": 3, "connectedPrev7": 1,
     "createdLast7": 9, "createdPrev7": 4
   },
-  "offers": { "total": 12, "open": 9, "expired": 3, "recruitersWithOpenOffer": 7, "newLast7": 5, "newPrev7": 5 },
+  "offers": { "total": 12, "open": 8, "filled": 1, "expired": 3, "recruitersWithOpenOffer": 7, "newLast7": 5, "newPrev7": 5 },
   "verifiedEmployment": {
     "talentsTotal": 6,
     "talentsByStatus": { "en_attente": 1, "verifie": 2, "recommande": 2, "place": 1 },
@@ -1645,6 +1681,14 @@ Conventions :
     "inProgress": 3, "completed": 0, "cancelled": 0, "last30": 3
   },
   "notifications": { "adminUnread": 0 },
+  "hiring": {
+    "outcomeRecordedWithin7dPercent": 60,
+    "outcomeIndicator": {
+      "windowDays": 30, "graceDays": 7,
+      "last30": { "eligible": 10, "recordedWithin7d": 6, "percent": 60, "targetPercent": 80, "met": false },
+      "allTime": { "eligible": 14, "recordedWithin7d": 9, "percent": 64.3, "targetPercent": 80, "met": false }
+    }
+  },
 
   "users": { "candidates": 25, "recruiters": 15, "individuals": 19, "agents": 2 },
   "opportunities": 12,
@@ -1664,13 +1708,116 @@ Conventions :
 Définitions :
 - `candidates.withCv` / `cvToVerify` / `cvVerified` / `cvRejected` : profils candidats avec un CV déposé, par `cvVerificationStatus` (même périmètre que la file `/cv-verification/queue`). `withConsent` : `matchingConsentAt` renseigné.
 - `matching.toValidate` : `suggeree` + statuts hérités `proposee_candidat` / `interet_candidat` (même file que « À valider » de la page Mise en relation). `sentToRecruiter` = `proposee_recruteur` + `interet_recruteur` + `mise_en_relation` ; `conversionPercent` = `mise_en_relation` / `sentToRecruiter` (une décimale, `null` si rien n'a été transmis) — les dossiers transmis puis écartés n'y sont pas comptés (leur passé n'est pas conservé sur la ligne).
-- `matching.connectedSeries` / `connectedLast7` / `connectedPrev7` : lignes `mise_en_relation` datées par `updatedAt` — statut terminal, donc date de la mise en relation.
+- `matching.connectedSeries` / `connectedLast7` / `connectedPrev7` : lignes `mise_en_relation` datées par `connectedAt` (écrit par `commitMatchTransition`, sous-lot 7 : remplace l'approximation `updatedAt`, qui ne sert plus que pour une ligne sans date avec un ancien client).
+- `hiring` (sous-lot 7) : indicateur « issue renseignée sous 7 jours » de toute la plateforme (comptes de test compris), définition au § 1b ; `outcomeRecordedWithin7dPercent` = `outcomeIndicator.last30.percent`. `outcomeIndicator` vaut `null` sans le schéma « après l'entretien » (client Prisma ou migration).
 - `verifiedEmployment.signalsToProcess` / `signalsInProgress` : signaux `nouveau` / `pris_en_charge` non expirés (`expiresAt` ≥ maintenant ; la purge n'est pas déclenchée par cet appel). `contactRequestsOpen` = `nouvelle` + `transmise`. `talentLeadsNew` : `TalentLead` au statut `nouveau`.
 - `trust.companyProofsToReview` : recommandations d'entreprise avec un document joint pas encore examiné (même périmètre que `pendingProofs` de `GET /admin/companies`). `companiesVisible` : fiches non masquées. `talentEndorsements` / `companyEndorsements` : recommandations non écartées.
 - `billing` : **paiements simulés**, prix issus de `SubscriptionPlan` ; `monthlyCatalogAr` = Σ prix catalogue × abonnements en cours (revenu théorique, pas un encaissement). `placements` : suivi **déclaratif** du success fee, aucun montant calculé.
 - `notifications.adminUnread` : notifications non lues de l'admin qui appelle.
 
 Le journal d'activité n'est plus renvoyé par cet endpoint (champs `recentActivity` et `recentLoginCount` retirés) : il a sa page dédiée, voir § 11 `GET /admin/activity`.
+
+---
+
+### 1b. Entonnoir de recrutement (`GET /admin/stats/hiring`, sous-lot 7)
+
+**Authentification** : `requireRole('admin')` — 401 sans session, 403 pour tout autre rôle.
+
+**Query** (Zod `adminHiringStatsQuerySchema`) : `period` = `30` | `90` | `365` | `all` (défaut `all`) · `recruiterId` (uuid, facultatif) · `opportunityId` (uuid, facultatif) · `excludeTest` = `true` | `false` (défaut `false`). Valeur invalide → 400 `details.fieldErrors`.
+
+Calcul : `server/src/lib/hiring-stats.ts` (cinq requêtes groupées pour tout le périmètre, jamais une par dossier, 20 000 dossiers au plus — au-delà `truncated: true`) puis règles pures `server/src/lib/hiring-metrics.ts`, **une seule définition** partagée avec `GET /recruiter/stats/hiring` et l'export de recherche. `Cache-Control: no-store`. 503 `HIRING_UNAVAILABLE_ERROR` sans le schéma « après l'entretien ».
+
+**Cohorte** : les dossiers **transmis** pendant la période (date de transmission ≥ minuit, heure de Madagascar, du jour J-(n-1) ; `all` = sans borne), suivis jusqu'à maintenant. Les taux d'une période se lisent donc « sur les dossiers transmis pendant la période », jamais « événements de la période ».
+
+**Étapes** (emboîtées : un dossier ne compte à une étape que s'il compte à la précédente ; un dossier écarté ou clos s'arrête à la dernière étape atteinte) :
+
+| Étape | Un dossier y compte si… | Date |
+|---|---|---|
+| `proposes` | il a été **transmis** au recruteur : statut `proposee_recruteur`, `interet_recruteur` ou `mise_en_relation`, ou `ecartee` avec une preuve de transmission (même définition que « Profils reçus » de `GET /recruiter/stats`). `suggeree`, les statuts hérités d'avant transmission et un écarté de la file interne ne comptent jamais | transmission journalisée, sinon `updatedAt` d'un dossier encore `proposee_recruteur`, sinon `createdAt` ; jamais après `connectedAt` |
+| `mis_en_relation` | `status = mise_en_relation` | `connectedAt` (`updatedAt` pour une ligne sans date) |
+| `entretien_passe` | au moins un tour avec une issue, ou ni annulé ni en `empechement` dont la fin (début + durée) est passée | fin du premier de ces tours |
+| `retenus` | au moins un tour d'issue `retenu` | `outcomeAt` du premier |
+| `proposition` | au moins une `HireProposal` (tout statut) | création de la première |
+| `embauches` | placement lié (`Placement.suggestionId`) d'origine `proposition_acceptee`, non `annule` | `respondedAt` de la proposition acceptée |
+
+Hors entonnoir : un placement **déclaré** (`origin: declaration`, historique) ne compte pas comme embauche ; une embauche dont le placement est passé à `annule` non plus (case « Embauche annulée »).
+
+**Response** (200) :
+```json
+{
+  "computedAt": "…", "timezone": "UTC+3", "period": "all", "since": null,
+  "filters": { "recruiterId": null, "opportunityId": null, "excludeTest": false },
+  "funnel": {
+    "stages": [
+      { "key": "proposes", "count": 26, "ratePrevious": null, "rateFromStart": 100 },
+      { "key": "mis_en_relation", "count": 20, "ratePrevious": 76.9, "rateFromStart": 76.9 },
+      { "key": "entretien_passe", "count": 14, "ratePrevious": 70, "rateFromStart": 53.8 },
+      { "key": "retenus", "count": 8, "ratePrevious": 57.1, "rateFromStart": 30.8 },
+      { "key": "proposition", "count": 7, "ratePrevious": 87.5, "rateFromStart": 26.9 },
+      { "key": "embauches", "count": 2, "ratePrevious": 28.6, "rateFromStart": 7.7 }
+    ],
+    "situations": { "embauche": 2, "en_cours": 15, "ecarte_avant_mise_en_relation": 2, "non_retenu": 3,
+                    "proposition_declinee": 1, "poste_pourvu": 0, "embauche_annulee": 1, "placement_declare": 2 },
+    "closedByFilledOffer": 1,
+    "delays": {
+      "connectionToHire": { "count": 2, "medianDays": 15.5, "meanDays": 15.5 },
+      "transmissionToConnection": { "count": 20, "medianDays": 1.5, "meanDays": 2.5 },
+      "connectionToFirstInterview": { "count": 17, "medianDays": 7, "meanDays": 6.9 },
+      "interviewToOutcome": { "count": 12, "medianDays": 1.7, "meanDays": 3.7 }
+    }
+  },
+  "outcomeIndicator": { "windowDays": 30, "graceDays": 7, "last30": { "…": "…" }, "allTime": { "…": "…" } },
+  "truncated": false,
+  "options": { "recruiters": [{ "id": "uuid", "companyName": "…" }], "opportunities": [{ "id": "uuid", "title": "…", "recruiterId": "uuid", "companyName": "…" }] }
+}
+```
+
+- `ratePrevious` = effectif / effectif de l'étape précédente, `rateFromStart` = effectif / proposés (%, une décimale, `null` sur un total nul).
+- `situations` : situation **actuelle** de chaque dossier proposé, une seule case : `embauche` (étape 6 atteinte), `ecarte_avant_mise_en_relation` (`ecartee`, dont `closedByFilledOffer` avec `closedReason: offre_pourvue`), `non_retenu`, `proposition_declinee`, `poste_pourvu`, `embauche_annulee`, `placement_declare` (phase dérivée `hiringPhase()`) ; tout le reste est `en_cours` (décision du recruteur, entretien, issue, tour suivant, proposition ou réponse en attente, absence).
+- `delays` (jours, une décimale, sur les dossiers de la cohorte concernés) : mise en relation → acceptation de la proposition ; transmission → mise en relation ; mise en relation → début du tour 1 ; fin du dernier tour avec issue → `outcomeAt`.
+- `excludeTest` : exclut un dossier dont le candidat **ou** le recruteur a un email `@offrec-test.invalid` ou `@demo.mg` (les emails ne sont jamais renvoyés).
+
+**Indicateur « issue renseignée sous 7 jours »** (plan §11, `outcomeIndicator`, périmètre des filtres recruteur / offre / comptes de test, indépendant de `period`) :
+- dénominateur `eligible` : tours ni annulés ni en `empechement` dont la fin tombe entre J-37 et J-7 (`last30`, fenêtre glissante « mûrie » : chaque tour a eu ses 7 jours) ou à J-7 au plus tard (`allTime`) ;
+- numérateur `recordedWithin7d` : parmi eux, `outcomeAt − fin ≤ 7 jours` ;
+- `targetPercent` = 80, `met` = `percent ≥ 80` (`null` sans tour éligible).
+
+**Garde-fou** (plan §11, contrôle de recette, pas un affichage) : aucune exposition au candidat d'un motif brut, d'une note ou d'une coordonnée. Vérifié par les scripts de recette et, en production, à la main :
+```sql
+-- 0 attendu : libellé de motif dans une notification de candidat
+SELECT count(*) FROM "Notification" n JOIN "User" u ON u."id" = n."userId"
+WHERE u."role" = 'candidate' AND (n."title" || ' ' || n."message") ~* '(Compétences techniques insuffisantes|Expérience insuffisante|Disponibilité incompatible|Prétentions salariales|Savoir-être|Un autre candidat correspond mieux|Poste modifié|Profil convaincant)';
+-- 0 attendu : note privée recopiée dans le journal d'audit
+SELECT count(*) FROM "AuditLog" a WHERE EXISTS (SELECT 1 FROM "Interview" i
+  WHERE i."outcomeNote" IS NOT NULL AND a."metadata"::text LIKE '%' || i."outcomeNote" || '%');
+```
+
+**Erreurs** : `400` · `401` · `403` · `503`.
+
+### 1c. Export de recherche pseudonymisé (`POST /admin/stats/research-export`, sous-lot 7)
+
+**Authentification** : `requireRole('admin')` — 401 / 403. **Body** (Zod `researchExportSchema`, strict) : `{ "excludeTest": false }` (facultatif, défaut `false`) ; clé inconnue ou valeur non booléenne → 400. POST car chaque export est journalisé.
+
+Export pour le chapitre « évaluation » du mémoire : une ligne par dossier **transmis** (définition `proposes` du § 1b, toutes périodes), qui croise le score de matching et l'issue réelle. **Response** (200, `Cache-Control: no-store`) :
+```json
+{ "filename": "offrec-export-recherche-2026-10-19.csv", "generatedAt": "…", "rowCount": 26, "testRows": 8,
+  "excludeTest": false, "truncated": false,
+  "generalization": { "offerAttributes": 1, "quarter": 0, "year": 6, "masked": 2, "residualSmallGroups": 2 },
+  "csv": "\uFEFF# Export de recherche OffRec …\r\n…" }
+```
+
+`csv` : mêmes conventions que l'export du tableau de bord (BOM UTF-8, séparateur `;`, virgule décimale, fins de ligne CRLF). Cinq lignes d'en-tête commençant par `#` (nature des données — en partie des **comptes de test et de démonstration**, démonstration du dispositif de mesure et non résultats de terrain —, anonymisation, petits effectifs, lecture), puis la ligne de colonnes, puis les dossiers triés par pseudonyme. Lecture : `pandas.read_csv(f, sep=';', decimal=',', comment='#', encoding='utf-8-sig')`.
+
+Colonnes (liste blanche `RESEARCH_COLUMNS`, `server/src/lib/hiring-metrics.ts`) : `dossier`, `offre` (pseudonymes) · `periode_transmission` (`AAAA-MM`, ou généralisée) · `secteur`, `niveau_offre`, `type_offre` · `generalisation` · `score` (instantané figé à la transmission), `tranche_score` (`<60`, `60–69`, `70–79`, `80–89`, `90+`) · `rang_preselection`, `tranche_rang` (`1–3`, `4–5`, `6–10`, `non classé`) · `origine` (`systeme` / `admin`) · `cv_verifie` (état **actuel** du CV) · `statut_dossier`, `cloture_auto` · `mis_en_relation`, `nb_tours`, `entretien_passe`, `absent_au_moins_une_fois` · `derniere_issue`, `motif_derniere_issue` (code de la liste fermée), `motif_lie_au_score` (`oui` pour compétences / expérience / disponibilité) · `retenu` · `nb_propositions`, `derniere_proposition` (statut effectif), `categorie_refus` (code), `type_contrat` · `embauche`, `embauche_annulee`, `phase` · délais en jours `j_transmission_mise_en_relation`, `j_mise_en_relation_1er_entretien`, `j_fin_entretien_issue`, `j_mise_en_relation_proposition`, `j_proposition_reponse`, `j_mise_en_relation_embauche` · `compte_test`. La décomposition du score par critère n'est pas conservée par dossier (seul `score` est figé) : elle n'est pas exportée.
+
+**Anonymisation** :
+- `dossier` / `offre` = `d_` / `o_` + 12 caractères hexadécimaux de HMAC-SHA256(`type:id`), clé dérivée de `RESEARCH_EXPORT_SECRET` (ou, à défaut, de `JWT_SECRET`) : non réversible, **stable d'un export à l'autre** tant que ce secret ne change pas ;
+- jamais : nom, email, téléphone, entreprise, intitulé d'offre ou de poste, note privée, précision de refus, explication d'absence, message, texte libre, salaire (ni tranche), date exacte, identifiant interne (user, offre, dossier, tour, proposition, placement) ;
+- **petits effectifs** (k = 5 sur secteur × niveau × type d'offre × période) : une combinaison secteur/niveau/type de moins de 5 lignes est regroupée (`regroupé`, pour toute l'offre) ; une période de moins de 5 lignes passe au trimestre (`AAAA-Tn`), puis à l'année, puis est masquée ; les lignes encore isolées sont comptées dans l'en-tête (`residualSmallGroups`) : publier des agrégats, jamais une ligne isolée. Limite résiduelle : un recruteur qui connaît ses propres dossiers peut reconnaître ses lignes — l'export reste réservé à l'admin.
+
+**Journal** : `AuditLog` `research_export` `{ rowCount, excludeTest, truncated }` — aucun contenu, aucun pseudonyme.
+
+**Erreurs** : `400` · `401` · `403` · `503`.
 
 ---
 
@@ -1900,7 +2047,7 @@ Paramètre invalide -> 400 (`details.fieldErrors`). Sans session -> 401 ; autre 
       "subscription": { "planCode": "PRO", "planName": "…", "priceAr": 0, "startedAt": "…" },
       "linkedCompany": { "id": "uuid", "name": "…", "city": "…", "hidden": false,
                          "trust": { "level": "nouveau", "index": null, "independentSources": 0 } },
-      "counts": { "offers": 3, "openOffers": 2, "expiredOffers": 1, "awaitingValidation": 1,
+      "counts": { "offers": 3, "openOffers": 1, "filledOffers": 1, "expiredOffers": 1, "awaitingValidation": 1,
                   "proposedProfiles": 2, "interests": 1, "connections": 1, "discarded": 0,
                   "talentProposals": 1, "placements": 1, "openReports": 0 } }
   ]
@@ -1908,7 +2055,7 @@ Paramètre invalide -> 400 (`details.fieldErrors`). Sans session -> 401 ; autre 
 ```
 - `statusCounts` porte sur la recherche `q`, sans le filtre `status` (compteurs des puces de filtre) ; `total` = comptes filtrés, `totalRecruiters` = tous les recruteurs.
 - `displayName` = entreprise déclarée, à défaut l'email. `profile`, `subscription`, `linkedCompany` valent `null` s'ils n'existent pas ; `linkedCompany.trust` vient de `loadCompanyTrust()`.
-- `proposedProfiles` = suggestions actuellement `proposee_recruteur` + `interet_recruteur` + `mise_en_relation` ; `interests` = `interet_recruteur` + `mise_en_relation` ; `connections` = `mise_en_relation` ; `awaitingValidation` = `suggeree` ; `discarded` = `ecartee` ; `talentProposals` = talents proposés par les agents sur ses offres ; `openReports` = signalements ouverts visant le compte. Offre ouverte = date limite ≥ début du jour UTC (même borne que la présélection).
+- `proposedProfiles` = suggestions actuellement `proposee_recruteur` + `interet_recruteur` + `mise_en_relation` ; `interests` = `interet_recruteur` + `mise_en_relation` ; `connections` = `mise_en_relation` ; `awaitingValidation` = `suggeree` ; `discarded` = `ecartee` ; `talentProposals` = talents proposés par les agents sur ses offres ; `openReports` = signalements ouverts visant le compte. **Offre ouverte** = la définition unique `opportunityClosedReason()` (`lib/preselection.ts`, jumelle SQL `openOpportunityWhere()`) : non pourvue (`filledAt` vide), date limite ≥ début du jour UTC, compte recruteur actif — corrigé au sous-lot 6 (une offre pourvue comptait encore comme ouverte). `filledOffers` = offres pourvues ; `expiredOffers` = date limite dépassée sur une offre non pourvue (un compte suspendu ou banni n'a aucune offre ouverte). `filledOffers` est absent avant le sous-lot 6.
 - `lastActivityAt` = la plus récente des dates : inscription, publication d'offre, mise à jour d'une suggestion, proposition de talent, mise à jour d'un placement.
 
 **Endpoint** : `GET /admin/recruiters/:id`
@@ -1925,13 +2072,15 @@ Paramètre invalide -> 400 (`details.fieldErrors`). Sans session -> 401 ; autre 
     { "id": "uuid", "title": "…", "companyName": "…", "category": "…", "sector": "digital",
       "opportunityType": "emploi", "level": "junior", "province": "…", "city": "…",
       "requiredSkills": ["React"], "featured": false, "createdAt": "…", "deadline": "…", "expired": false,
+      "open": true, "closedReason": null, "filled": false,
       "suggestions": { "suggeree": 1, "proposee_recruteur": 1, "interet_recruteur": 0,
                        "mise_en_relation": 1, "ecartee": 0, "legacy": 0 },
       "talentProposals": 1, "placements": 1 }
   ]
 }
 ```
-- Offres ouvertes d'abord (date limite la plus proche en tête), puis expirées (les plus récentes en tête) ; 200 offres au plus (`opportunitiesTotal` donne le total, les compteurs portent sur toutes).
+- Par offre : `open` (même définition que `openOffers`), `closedReason` (raison affichable de la fermeture, sinon `null` : « Tous les postes de cette offre sont pourvus. », date limite dépassée, compte inactif), `filled` (offre pourvue), `expired` (date limite dépassée, offre non pourvue).
+- Offres ouvertes d'abord (date limite la plus proche en tête), puis fermées — pourvues ou expirées — (les plus récentes en tête) ; 200 offres au plus (`opportunitiesTotal` donne le total, les compteurs portent sur toutes).
 - `suggestions.legacy` regroupe les statuts hérités `proposee_candidat` / `interet_candidat`.
 - `conversationId` : conversation existante entre l'admin connecté et ce recruteur (ouvrir `/messages?c=<id>`), sinon `null`.
 
@@ -2080,14 +2229,14 @@ Familles et actions (`AuditLog.action`) :
 |---|---|
 | `comptes` — Comptes et connexions | `register`, `login`, `logout` |
 | `candidats` — Candidats et CV | `matching_consent_given`, `matching_consent_withdrawn`, `cv_upload`, `cv_verification`, `candidate_interested`, `candidate_declined` |
-| `matching` — Matching et mise en relation | `match_suggestion_created`, `match_suggestion_status`, `matching_run` (système), `interview_created`, `interview_rescheduled`, `interview_cancelled`, `interview_confirmed`, `interview_unavailable`, `interview_calendar_resync` (lien `/admin/entretiens?periode=tous&offre=…` ; jamais le motif d'un empêchement) |
-| `recruteurs` — Offres et recruteurs | `recruiter_interested`, `recruiter_declined` |
+| `matching` — Matching et mise en relation | `match_suggestion_created`, `match_suggestion_status`, `matching_run` (système), `interview_created`, `interview_rescheduled`, `interview_cancelled`, `interview_confirmed`, `interview_unavailable`, `interview_calendar_resync`, `interview_outcome_recorded` (issue et motif en libellés, tour), `interview_absence_reply`, `interview_outcome_reset`, `hiring_jobs_run`, `hiring_digest_sent` (système), `hire_proposal_sent`, `hire_proposal_revised`, `hire_proposal_withdrawn`, `hire_proposal_accepted`, `hire_proposal_declined`, `hire_proposal_expired` (système) (lien `/admin/entretiens?periode=tous&offre=…` ; jamais le motif d'un empêchement, la note privée d'une issue ni le texte d'une explication d'absence — aucun des trois n'est journalisé) |
+| `recruteurs` — Offres et recruteurs | `recruiter_interested`, `recruiter_declined`, `opportunity_filled` (« Offre pourvue », automatique ou manuelle), `opportunity_reopened` |
 | `talents` — Talents et agents de terrain | `talent_consent_profile`, `talent_signal_converted`, `talent_consent_public_granted`, `talent_consent_public_revoked`, `talent_signal_taken`, `talent_signal_status`, `talent_signal_merged`, `talent_contact_requested`, `talent_contact_request_transmise`, `talent_contact_request_close`, `talent_signals_purged` (système) |
 | `recommandations` — Recommandations et annuaire | `talent_endorsement_created` (acteur masqué), `endorsement_reviewed`, `endorsement_excluded` |
 | `entreprises` — Entreprises | `company_endorsement_created` (acteur masqué), `company_endorsement_proof_reviewed`, `company_endorsement_excluded`, `company_hidden`, `company_unhidden`, `company_recruiter_linked`, `company_recruiter_unlinked` |
 | `moderation` — Modération | `moderation:dismiss`, `moderation:warning`, `moderation:restriction`, `moderation:suspension`, `moderation:ban` (tout `moderation:*`) |
-| `placements` — Abonnements et placements | `placement_declared` (talent : métier et ville, jamais son nom), `placement_stage_updated`, `admin_corrected_placement_stage` |
-| `administration` — Administration | `admin:create_agent`, `admin:cv_verifier_roles`, `notification_dispatch` (système) |
+| `placements` — Abonnements et placements | `placement_declared` (talent : métier et ville, jamais son nom), `placement_created_auto` (acceptation d'une proposition), `placement_stage_updated`, `admin_corrected_placement_stage` |
+| `administration` — Administration | `admin:create_agent`, `admin:cv_verifier_roles`, `research_export` (volume et filtre « comptes de test » seulement), `notification_dispatch` (système) |
 | `autre` — Autres actions | toute action absente de cette table |
 
 Index : `AuditLog` n'a qu'un index sur `userId` ; un index `(createdAt)` ou `(action, createdAt)` accélérerait ce journal sur un gros volume (non ajouté : pas de migration).
@@ -2663,7 +2812,7 @@ Base `/agent` (rôle `agent`). Un signal `nouveau` est visible de tous les agent
 - `POST /agent/talent-signals/:id/merge` `{ "intoId": "uuid" }` — fusionne un doublon (ouvert, visible) dans un autre : statut `fusionne`, recommandations et contact gardés et visibles depuis la cible, purgés avec elle.
 - `PATCH /agent/endorsements/:id` `{ "proofAccepted"?: bool, "reviewed"?: true, "hiddenJobLabel"?: bool, "exclude"?: { "reason": "≥ 3 caractères" } }` — agent du signal (ou du talent rattaché). Seule une preuve acceptée pèse dans la confiance ; une recommandation écartée (auteur lié) reste en base et ne compte plus. Aucune route DELETE.
 
-La création du profil depuis un signal (`converti`, accord de la personne) n'existe pas encore : le lien « Créer le profil » ouvre `/agent/talents/nouveau?fromSignal=<id>` en préremplissage seulement.
+La création du profil depuis un signal passe par `POST /agent/talents` avec `fromSignalId` et `consent: true` (Agent §6 : signal `converti` dans la même transaction) ; le lien « Créer le profil » ouvre `/agent/talents/nouveau?fromSignal=<id>`.
 
 ### 4. Photo de preuve
 
@@ -2684,7 +2833,7 @@ OffRec est l'intermédiaire : candidat et recruteur ne se contactent jamais dire
 | `suggeree` | En file de validation admin — invisible du candidat et du recruteur |
 | `proposee_recruteur` | Profil transmis au recruteur (par l'admin, ou directement par le moteur si score ≥ seuil haut et CV vérifié) |
 | `interet_recruteur` | Intérêt marqué sans date (ancien parcours, plus produit depuis le 2026-10-14) — le recruteur fixe un entretien, ou l'admin confirme |
-| `mise_en_relation` | Mise en relation (terminal) : le recruteur a fixé un entretien (`POST /{id}/interview`, décision 2026-10-14) ou l'admin l'a confirmée — seul moment où le candidat est notifié |
+| `mise_en_relation` | Mise en relation (terminal) : le recruteur a fixé un entretien (`POST /{id}/interview`, décision 2026-10-14) ou l'admin l'a confirmée. Le statut **ne bouge plus** après l'entretien : tours et issue sont portés par `Interview`, la suite est une **phase dérivée** (`phase` côté recruteur / admin, `candidatePhase` côté candidat — `hiringPhase()` / `candidateHiringPhase()` de `src/lib/hiring.ts`, sous-lot 3 du 2026-10-16) ; proposition d'embauche, embauche et offre pourvue (sous-lot 5) n'ajoutent aucun statut |
 | `ecartee` | Écartée par l'admin, déclinée par le recruteur, ou retrait du candidat (terminal) |
 | `proposee_candidat`, `interet_candidat` | **Hérités** (parcours « postuler offre par offre ») : plus jamais produits, mais les lignes existantes restent valides et peuvent avancer |
 
@@ -2698,6 +2847,8 @@ OffRec est l'intermédiaire : candidat et recruteur ne se contactent jamais dire
 - Uniquement les dossiers à partir de `proposee_recruteur` (`proposee_recruteur`, `interet_recruteur`, `mise_en_relation`), plus les lignes héritées `proposee_candidat` / `interet_candidat` encore actives
 - Jamais les lignes `suggeree` ni `ecartee`
 - `opportunity` est une liste blanche : pas de `recruiterId`, et `companyName` vaut `null` tant que le statut n'est pas `mise_en_relation`
+- Pour un dossier `mise_en_relation` (sous-lot 3) : `interview` (tour actif, sinon le dernier), `interviews` (tous les tours, triés) et `candidatePhase` (`entretien_a_planifier` · `entretien_prevu` · `entretien_annule` · `suite_en_attente` · `suite_favorable` · `entretien_manque` · `proposition_recue` · `embauche` · `clos`). Vue candidat d'un tour : l'objet `interview` (§5) **plus** `absenceReply`, `absenceReplyAt` (sa propre explication) et `canExplainAbsence` — **jamais** `outcome`, `outcomeReason`, `outcomeNote`, `outcomeById` : « non retenu », « poste pourvu » et une proposition déclinée se lisent tous « Dossier clos ». Avant la mise en relation : `interviews: []`, `candidatePhase: null`. Ni `connectedAt` ni `closedReason`
+- Sous-lot 5 : `proposal`, la dernière proposition d'embauche du dossier (objet §5i, vue candidat : jamais `withdrawReason` ni l'auteur ; sa propre catégorie et précision de refus) ou `null` ; son `id` et sa `revision` servent à `accept` / `decline`. `score` et `preselectionRank` restent renvoyés comme avant (aucun texte au candidat ne les cite)
 
 **Response** (200) :
 ```json
@@ -2746,6 +2897,8 @@ OffRec est l'intermédiaire : candidat et recruteur ne se contactent jamais dire
 **Description** : profils transmis par OffRec (validation admin ou envoi direct du moteur) pour les offres de ce recruteur — statuts `proposee_recruteur`, `interet_recruteur`, `mise_en_relation`. Le profil candidat est une liste blanche : ni email, ni téléphone, ni CV, ni vérification du CV, ni consentement (l'email du compte candidat n'est plus renvoyé depuis le 2026-10-14).
 
 Triés par offre, de la plus récemment publiée à la plus ancienne (`opportunity.createdAt` décroissant, id de l'offre en départage), puis par score décroissant (id du dossier en départage). `opportunity` ne porte que `id`, `title` et `createdAt` (date de publication de l'offre). Chaque profil porte `fit`, son adéquation critère par critère avec l'offre du recruteur (même calcul que la présélection admin, uniquement dérivé des champs de la liste blanche et de sa propre offre ; `null` si le profil est introuvable), et `preselectionRank`, son rang dans la présélection au moment de la transmission groupée (`null` pour un envoi direct du moteur ou une transmission unitaire). Ne sont jamais transmis : l'origine de la suggestion, l'indice « présent dans le CV », le statut de vérification et les points relevés sur le CV.
+
+Pour un dossier `mise_en_relation` (sous-lot 3) : `interview` (tour actif, sinon le dernier — rétrocompatibilité), `interviews` (tous les tours, triés), `activeInterview` (tour sans issue, ou `null`) et `phase` (`entretien_a_planifier` · `tour_planifie` · `tour_annule` · `issue_a_renseigner` · `second_entretien_a_planifier` · `absent` · `retenu` · `proposition_envoyee` · `embauche` · `embauche_annulee` · `clos_proposition_refusee` · `non_retenu` · `poste_pourvu`, `null` hors mise en relation). Vue recruteur d'un tour (décision D3) : l'objet `interview` **plus** `outcome`, `outcomeReason`, `outcomeAt`, et `outcomeNote` **seulement pour son auteur** — jamais `absenceReply` ni `outcomeById`. Sous-lot 5 : `proposals` (toutes les versions, objet §5i vue recruteur — catégorie d'un refus, jamais sa précision ; raison d'un retrait), `proposal` (la dernière, ou `null`) et `placement` (`{ id, stage, origin, startDate }` du placement relié au dossier, ou `null`) ; `phase` couvre désormais `proposition_envoyee`, `embauche`, `clos_proposition_refusee`, `poste_pourvu` (une proposition expirée ou retirée ramène à `retenu`).
 
 **Response** (200) :
 ```json
@@ -2818,12 +2971,13 @@ Triés par offre, de la plus récemment publiée à la plus ancienne (`opportuni
 
 ### 5. Interviews (Entretiens — décision 2026-10-14)
 
-« Ce profil m'intéresse » = le recruteur fixe **une** date d'entretien ; le dossier passe aussitôt en `mise_en_relation`. Un seul entretien par dossier (reprogrammé ou annulé en place). Le candidat ne propose jamais de date : il **confirme** ou **signale un empêchement**. Logique : `server/src/lib/interviews.ts` ; la transition réutilise `checkMatchTransition` / `commitMatchTransition` / `notifyMiseEnRelation` (`lib/preselection-service.ts`, table `RECRUITER_ALLOWED_TRANSITIONS`).
+« Ce profil m'intéresse » = le recruteur fixe **une** date d'entretien ; le dossier passe aussitôt en `mise_en_relation`. Un seul **tour actif** par dossier, reprogrammé ou annulé en place (voir « Tours d'entretien » ci-dessous). Le candidat ne propose jamais de date : il **confirme** ou **signale un empêchement**. Logique : `server/src/lib/interviews.ts` ; la transition réutilise `checkMatchTransition` / `commitMatchTransition` / `notifyMiseEnRelation` (`lib/preselection-service.ts`, table `RECRUITER_ALLOWED_TRANSITIONS`).
 
 **Objet `interview`** (vue candidat et recruteur — liste blanche, jamais `googleEventId`, `calendarError` ni `createdById`) :
 ```json
 {
   "id": "uuid", "suggestionId": "uuid",
+  "round": 1,
   "scheduledAt": "2026-10-20T07:00:00.000Z",
   "durationMinutes": 45,
   "message": "Message du recruteur ou null",
@@ -2838,9 +2992,11 @@ Triés par offre, de la plus récemment publiée à la plus ancienne (`opportuni
 ```
 Il apparaît aussi dans `GET /match-suggestions/mine` (champ `interview`, **uniquement** pour un dossier `mise_en_relation`) et `GET /match-suggestions/received`.
 
+**Tours d'entretien et issue** (plan « après l'entretien » du 2026-10-16, sous-lots 1 et 3) : chaque ligne `Interview` est un tour (`round`, `1` pour tout entretien antérieur, **3 au plus** — décision D5) ; un seul tour **actif** par dossier (`activeSuggestionId` unique, `null` dès que le tour a une issue). Le dossier reste `mise_en_relation`. **Juge unique** de toutes les actions d'entretien (planifier un tour, reprogrammer, annuler, confirmer, empêchement, issue, explication d'absence, annulation d'une issue) : `checkHiringAction()` de `src/lib/hiring.ts`, sur l'état relu en base, puis écriture **conditionnelle** (le `where` relit le tour actif contrôlé) sous verrou du dossier quand plusieurs lignes sont touchées. Les actions 5b à 5e visent toujours le tour actif : un tour clos par une issue donne `404` « Aucun entretien en cours pour ce dossier. ». Le champ `interview` des listes de dossiers montre le tour actif, sinon le dernier. Ce que voit chacun (D3) : le **recruteur propriétaire** voit l'issue et le motif de chaque tour et sa **propre** note privée ; l'**admin** voit l'issue, le motif et l'explication d'absence, jamais la note ; le **candidat** ne voit jamais l'issue brute, le motif ni la note (seulement les textes neutres d'OffRec, `candidatePhase` et sa propre explication d'absence). Client Prisma non régénéré : les nouvelles routes répondent `503` (« La suite après l’entretien n’est pas encore activée… »), les anciennes gardent leur comportement d'avant (tour unique).
+
 **Horaires** : `scheduledAt` est un instant ISO 8601 **avec fuseau** (le client envoie l'heure de Madagascar avec `+03:00`, `Indian/Antananarivo`, UTC+3 fixe), stocké en UTC ; au moins 2 h après maintenant, au plus 60 jours. `durationMinutes` ∈ {30, 45, 60}. `message` (≤ 500) et `reason` (3 à 300) ne doivent contenir ni email ni numéro de téléphone (OffRec reste l'intermédiaire).
 
-**Agenda Google** (`lib/google-calendar.ts`, appels REST directs) : événement dans l'agenda d'OffRec (`GOOGLE_CALENDAR_ID`), lien Meet via `conferenceData.createRequest` (`hangoutsMeet`, `conferenceDataVersion=1`), **sans aucun `attendees`** et avec `sendUpdates=none` : Google n'écrit à personne et aucune adresse n'est exposée ; titre et description sans email ni téléphone. Délai de 8 s par appel, une seule nouvelle tentative. **Si Google échoue, la mise en relation et l'entretien sont enregistrés quand même** (`meetStatus: en_attente`, admins notifiés « Agenda Google à régulariser »). Sans `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN` : **mode simulé** (`provider: simule`, `meetStatus: simule`, `meetUrl: null` — jamais de faux lien).
+**Agenda Google** (`lib/google-calendar.ts`, appels REST directs) : événement dans l'agenda d'OffRec (`GOOGLE_CALENDAR_ID`), lien Meet via `conferenceData.createRequest` (`hangoutsMeet`, `conferenceDataVersion=1`), **sans aucun `attendees`** et avec `sendUpdates=none` : Google n'écrit à personne et aucune adresse n'est exposée ; titre et description sans email ni téléphone. Délai de 8 s par appel, une seule nouvelle tentative. **Si Google échoue, la mise en relation et l'entretien sont enregistrés quand même** (`meetStatus: en_attente`, admins notifiés « Agenda Google à régulariser »). Sans `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN` : **mode simulé** (`provider: simule`, `meetStatus: simule`, `meetUrl: null` — jamais de faux lien). **Un événement (et un lien Meet) par tour** : à partir du tour 2, titre « Entretien OffRec — {offre} (tour n) » et référence privée `{dossier}#r{n}` (le tour 1 garde la forme d'avant les tours) ; le tour suivant crée un nouvel événement sans toucher celui du tour précédent. **L'issue n'est jamais écrite chez Google** : à l'enregistrement d'une issue, aucun appel Google, l'événement du tour reste tel quel dans l'agenda d'OffRec.
 
 #### 5a. `POST /match-suggestions/{id}/interview` — fixer l'entretien (recruteur)
 
@@ -2848,19 +3004,21 @@ Il apparaît aussi dans `GET /match-suggestions/mine` (champ `interview`, **uniq
 
 - Recruteur **propriétaire de l'offre** ; dossier `proposee_recruteur` ou `interet_recruteur` (→ `mise_en_relation` dans la même transaction que la création de l'entretien), ou `mise_en_relation` sans entretien (confirmé par un admin : l'entretien est seulement ajouté)
 - Revérifie le compte candidat actif et son accord de matching (`matchingConsentAt`)
-- Écriture conditionnelle + contrainte unique : un double clic ou des requêtes simultanées ne créent jamais deux entretiens
+- Verrou de ligne sur le dossier (`SELECT … FOR UPDATE`) + écriture conditionnelle + contraintes uniques (`activeSuggestionId`, et `suggestionId` tant que le temps B n'est pas appliqué) : un double clic ou des requêtes simultanées ne créent jamais deux entretiens
+- L'entretien créé est le tour `1`, actif ; `connectedAt` du dossier est daté de la mise en relation (client Prisma régénéré ; sinon repris au démarrage)
+- **Tour suivant** (sous-lot 3) : sur un dossier `mise_en_relation` dont le dernier tour a l'issue `second_entretien` ou `absent` (nouvelle chance), crée le tour n+1, actif (`checkHiringAction('schedule_round')` : accord du candidat en vigueur, compte actif, offre non pourvue, 3 tours au plus). Candidat notifié **plateforme + email** avec le texte neutre « Second entretien proposé » (date, durée, lien Meet ou « à venir », message du recruteur dans l'email) ; admins : `interview_next_round`. Après `retenu` ou `non_retenu` : `409` « La suite de ce dossier ne prévoit pas de nouvel entretien. »
 - Candidat notifié **plateforme + email** (`notifyUser()`) : offre, entreprise, date et heure de Madagascar, durée, lien Meet ou « lien à venir », message, action Confirmer / Signaler un empêchement. Recruteur : notification de confirmation. Admins : `notifyAdmins` catégorie `recruteur` (sans email ni téléphone)
-- `AuditLog` `match_suggestion_status` (`source: recruiter_interview`) et `interview_created`
+- `AuditLog` `match_suggestion_status` (`source: recruiter_interview`) et `interview_created` (avec `round`)
 
 **Response** (201) : `{ "suggestion": { "id": "uuid", "status": "mise_en_relation", "…": "…" }, "interview": { … } }` — `suggestion` en liste blanche, sans `origin` (interne à OffRec, comme dans `/received`).
 
-**Erreurs** : `400` corps invalide (date passée, < 2 h, > 60 jours, sans fuseau, durée, coordonnées dans le message) ou dossier non éligible (`ecartee`, `suggeree`…) · `403` autre recruteur ou autre rôle · `404` dossier introuvable · `409` accord retiré, compte candidat suspendu/banni, entretien déjà fixé, dossier modifié entre-temps · `503` client Prisma non régénéré / migration absente (message avec la marche à suivre).
+**Erreurs** : `400` corps invalide (date passée, < 2 h, > 60 jours, sans fuseau, durée, coordonnées dans le message), dossier non éligible (`ecartee`, `suggeree`…) ou 4e tour (« Nombre maximal de tours atteint (3). ») · `403` autre recruteur ou autre rôle · `404` dossier introuvable · `409` accord retiré, compte candidat suspendu/banni, entretien déjà fixé (un tour est actif, ou requête concurrente), suite sans nouvel entretien (`retenu`, `non_retenu`), offre pourvue, dossier modifié entre-temps · `503` client Prisma non régénéré / migration absente (message avec la marche à suivre).
 
 #### 5b. `PATCH /match-suggestions/{id}/interview` — reprogrammer (recruteur)
 
 **Body** : `{ "scheduledAt": "…+03:00", "durationMinutes": 30, "message": "facultatif" }` — `message` omis = conservé, `""`/`null` = effacé.
 
-Depuis n'importe quel statut (après un empêchement, une annulation, ou pour changer). L'entretien repart à `planifie` (`declineReason`, `respondedAt`, `cancelledAt` remis à `null`, `rescheduleCount` + 1) ; l'événement Google est mis à jour (`PATCH`, `sendUpdates=none`) ou recréé. Candidat notifié plateforme + email. `AuditLog` `interview_rescheduled`. **Erreurs** : `400` · `403` · `404` aucun entretien · `409` accord retiré / compte inactif / modification concurrente.
+Depuis n'importe quel statut (après un empêchement, une annulation, ou pour changer). L'entretien repart à `planifie` (`declineReason`, `respondedAt`, `cancelledAt` remis à `null`, `rescheduleCount` + 1) ; l'événement Google est mis à jour (`PATCH`, `sendUpdates=none`) ou recréé. Candidat notifié plateforme + email. `AuditLog` `interview_rescheduled`. **Offre pourvue** (sous-lot 6) : plus aucune nouvelle date, même pour un tour annulé ou en empêchement — `checkHiringAction('reschedule_round')` refuse, et l'écriture relit `filledAt` sous le verrou du dossier (le même que prend la clôture « offre pourvue »), donc une clôture concurrente ne laisse jamais passer une reprogrammation ; annuler le tour et renseigner « Non retenu » / « Absent » restent possibles. **Erreurs** : `400` · `403` · `404` aucun entretien, ou aucun tour actif (« Aucun entretien en cours pour ce dossier. ») · `409` accord retiré / compte inactif / offre pourvue (« Tous les postes de cette offre sont pourvus. ») / modification concurrente.
 
 #### 5c. `POST /match-suggestions/{id}/interview/cancel` — annuler (recruteur)
 
@@ -2882,33 +3040,102 @@ La messagerie reste fermée aux candidats : ces endpoints ne l'ouvrent pas.
 
 **Rôle requis** : `recruiter`. Lecture seule (`server/src/lib/interview-list.ts`).
 
-Entretiens des **offres de ce recruteur uniquement**, sur des dossiers `mise_en_relation`. Chaque ligne est une liste blanche : l'objet `interview` ci-dessus, l'offre (`id`, `title`) et le **nom** du candidat — jamais son email, son téléphone ni rien de son CV.
+Entretiens des **offres de ce recruteur uniquement**, sur des dossiers `mise_en_relation` — une ligne par **tour** (numéro dans `interview.round`), les compteurs comptent des tours. Chaque ligne est une liste blanche : l'objet `interview` ci-dessus, l'offre (`id`, `title`) et le **nom** du candidat — jamais son email, son téléphone ni rien de son CV.
 
 **Query** (validée par Zod, `400` sinon) :
 - `period` : `a_venir` (défaut : non annulé et pas encore terminé, un entretien en cours compris) · `passes` (non annulé, terminé) · `annules` · `tous`
 - `status` : `planifie` · `confirme` · `empechement` · `annule` (facultatif)
 - `opportunityId` : uuid (facultatif ; l'offre d'un autre recruteur donne une liste vide)
+- `outcome` (sous-lot 3) : `a_renseigner` (tour actif, ni annulé ni en empêchement, heure de fin passée, **et dossier dans la phase `issue_a_renseigner`** — `outcomeToRecord`, corrigé au sous-lot 5 : ni un dossier embauché, même par un ancien placement déclaré relié au dossier, ni une offre pourvue) · `retenu` · `second_entretien` · `non_retenu` · `absent`
 
-**Tri** : à venir du plus proche au plus lointain, puis passés et annulés du plus récent au plus ancien (`compareInterviewsForList`, `src/lib/interview.ts`). Les compteurs (`counts`, et par offre dans `offers`) portent sur **tous** ses entretiens, indépendamment des filtres ; `toHandle` = empêchements signalés. Plafond de 1 000 entretiens (`truncated: true` au-delà).
+**Tri** : à venir du plus proche au plus lointain, puis passés et annulés du plus récent au plus ancien (`compareInterviewsForList`, `src/lib/interview.ts`). Les compteurs (`counts`, et par offre dans `offers`) portent sur **tous** ses entretiens, indépendamment des filtres ; `toHandle` = empêchements signalés ; `toRecord` = issues à renseigner, **même définition que le filtre `a_renseigner`** (phase du dossier `issue_a_renseigner`). Chaque ligne porte aussi `proposal`, la dernière proposition d'embauche du dossier (§5i, vue recruteur) ou `null`. Plafond de 1 000 entretiens (`truncated: true` au-delà). Chaque ligne porte la vue recruteur du tour (issue, motif, note privée s'il en est l'auteur, jamais l'explication d'absence) et `phase`, la phase dérivée du dossier. La lecture de la liste déclenche, après la réponse, les rappels d'issue (au plus une fois par minute, seulement avec `HIRING_JOBS_ENABLED=true` — voir Admin Matching §10).
 
 **Response** (200) :
 ```json
 {
   "interviews": [
     {
-      "interview": { "id": "uuid", "suggestionId": "uuid", "scheduledAt": "2026-10-21T07:00:00.000Z", "durationMinutes": 30, "status": "empechement", "provider": "simule", "meetStatus": "simule", "meetUrl": null, "declineReason": "…", "…": "…" },
+      "interview": { "id": "uuid", "suggestionId": "uuid", "round": 1, "scheduledAt": "2026-10-21T07:00:00.000Z", "durationMinutes": 30, "status": "confirme", "provider": "simule", "meetStatus": "simule", "meetUrl": null, "declineReason": null, "…": "…",
+                     "outcome": "non_retenu", "outcomeReason": "experience", "outcomeAt": "…", "outcomeNote": "note de l'auteur" },
       "suggestionId": "uuid",
       "opportunity": { "id": "uuid", "title": "Développeur React" },
-      "candidate": { "fullName": "…" }
+      "candidate": { "fullName": "…" },
+      "phase": "non_retenu"
     }
   ],
-  "offers": [{ "id": "uuid", "title": "Développeur React", "total": 3, "upcoming": 2, "toHandle": 1 }],
-  "counts": { "total": 6, "upcoming": 4, "toHandle": 1 },
+  "offers": [{ "id": "uuid", "title": "Développeur React", "total": 3, "upcoming": 2, "toHandle": 1, "toRecord": 1 }],
+  "counts": { "total": 6, "upcoming": 4, "toHandle": 1, "toRecord": 1 },
   "truncated": false
 }
 ```
 
-**Erreurs** : `400` filtre invalide · `401` · `403` autre rôle · `503` client Prisma non régénéré ou migration absente.
+**Erreurs** : `400` filtre invalide · `401` · `403` autre rôle · `503` client Prisma non régénéré ou migration absente (ou filtre `outcome` sans le client régénéré).
+
+#### 5g. `POST /match-suggestions/{id}/interview/outcome` — issue d'un tour (recruteur)
+
+**Rôle requis** : `recruiter`, propriétaire de l'offre. Logique : `server/src/lib/hiring-service.ts` (`recordInterviewOutcome`).
+
+**Body** (`interviewOutcomeSchema`) :
+```json
+{
+  "interviewId": "uuid du tour actif",
+  "result": "retenu | second_entretien | non_retenu | absent",
+  "reason": "motif en liste fermée (voir ci-dessous)",
+  "note": "note privée facultative (500 max, sans coordonnées)",
+  "nextRound": { "scheduledAt": "…+03:00", "durationMinutes": 45, "message": "facultatif" }
+}
+```
+- `reason` : **obligatoire** pour `non_retenu` (`competences_techniques`, `experience`, `disponibilite`, `pretentions_salariales`, `savoir_etre`, `autre_candidat_retenu`, `poste_modifie`, `autre`) ; facultatif et seulement `points_forts` pour `retenu` / `second_entretien` ; interdit pour `absent`
+- `nextRound` : seulement avec `second_entretien` (mêmes règles que 5a : 2 h à 60 jours) — le tour suivant est créé **dans la même transaction** (un seul tour actif), avec son propre événement Google
+- Conditions (`checkHiringAction('record_outcome')`) : heure de fin passée, tour actif ni annulé ni en empêchement ; `second_entretien` impossible au tour 3 ; `retenu` et `second_entretien` exigent l'accord de matching en vigueur, un compte candidat actif et une offre non pourvue (`non_retenu` et `absent` restent toujours possibles)
+- Écriture conditionnelle sous verrou du dossier : le tour doit être resté actif, sans issue, au même horaire et au même statut — un double clic ou deux onglets donnent une seule issue et `409` pour les autres
+- `AuditLog` `interview_outcome_recorded` `{ suggestionId, interviewId, round, result, reason, nextRound }` — **jamais la note** ; avec `nextRound`, en plus `interview_created` (`round`)
+- Notifications **après la réponse**, textes neutres de `src/lib/hiring.ts` (jamais le motif, la note, le score ni le rang) : `retenu` → candidat in-app « Suite de votre entretien » ; `second_entretien` + date → candidat in-app + email « Second entretien proposé », admins `interview_next_round` ; `second_entretien` sans date → personne (le candidat n'est prévenu qu'avec la date) ; `non_retenu` → candidat in-app + email ; `absent` → candidat in-app + email (bouton « Expliquer mon absence », lien `/candidat/entretiens`), admins `interview_no_show`. Aucun appel Google pour l'issue elle-même
+
+**Response** (200) : `{ "interview": { …vue recruteur du tour clos… }, "nextInterview": { …tour n+1… } | null, "phase": "retenu" }`
+
+**Erreurs** : `400` corps invalide, entretien pas encore terminé (« L’entretien n’est pas encore terminé : renseignez l’issue après le … (heure de Madagascar). »), tour annulé ou en empêchement, « Nombre maximal de tours atteint (3). » · `401` · `403` autre rôle ou dossier hors de ses offres · `404` dossier introuvable, tour inconnu ou non actif · `409` « L’issue de cet entretien est déjà renseignée. », tour modifié entre-temps, accord retiré / compte inactif, offre pourvue, tour suivant en conflit · `503` suite après l'entretien non activée.
+
+#### 5h. `POST /match-suggestions/{id}/interview/absence-reply` — expliquer une absence (candidat)
+
+**Rôle requis** : `candidate`. **Body** (`absenceReplySchema`) : `{ "interviewId": "uuid du tour absent", "reason": "3 à 300 caractères, sans coordonnées" }`.
+
+Une seule explication par tour `absent` (même si le recruteur a déjà fixé le tour suivant), écriture conditionnelle (`absenceReply` encore vide). Lue par les **admins seuls**, jamais par le recruteur ; jamais dans le journal d'audit ni dans une notification. Admins notifiés in-app (`interview_absence_reply`, sans le texte). `AuditLog` `interview_absence_reply` `{ suggestionId, interviewId, round }`.
+
+**Response** (200) : `{ "interview": { …vue candidat du tour, "absenceReply": "…", "absenceReplyAt": "…", "canExplainAbsence": false } }`
+
+**Erreurs** : `400` texte absent, trop court/long ou avec coordonnées · `401` · `403` autre rôle · `404` dossier d'un autre, pas mis en relation, ou tour sans absence (« Aucune absence à expliquer pour ce dossier. ») · `409` « Vous avez déjà répondu. » · `503` suite non activée.
+
+#### 5i. Propositions d'embauche (sous-lot 5 — décisions D1 à D3)
+
+Logique : `server/src/lib/hire-proposals.ts`, règles pures `checkHiringAction()` de `src/lib/hiring.ts`. Une seule proposition **en attente** par dossier (`HireProposal.pendingSuggestionId` unique), 3 **versions** au plus par dossier (une nouvelle version après un retrait ou une expiration) ; chaque modification d'une version incrémente sa `revision` et relance l'échéance à **7 jours** (D2). Toutes les écritures : transaction, verrou de l'offre (`FOR UPDATE`, envoi / modification / acceptation) puis du dossier, état relu sous verrou, écriture conditionnelle (statut, révision et échéance lus dans le `where`), `AuditLog` dans la transaction, notifications **après** la réponse avec les textes neutres de `src/lib/hiring.ts`. Client Prisma non régénéré : `503`.
+
+**Objet `proposal`** (`toHireProposalView`, liste blanche D3) :
+```json
+{
+  "id": "uuid", "version": 1, "revision": 0,
+  "jobTitle": "Développeur React", "monthlySalaryAr": 1500000, "startDate": "2026-11-02",
+  "contractType": "cdi | cdd | stage | alternance | freelance", "contractDurationMonths": null,
+  "message": "…", "status": "envoyee | acceptee | refusee | expiree | retiree",
+  "expiresAt": "…", "respondedAt": null, "withdrawnAt": null, "createdAt": "…", "updatedAt": "…",
+  "declineReason": "salaire | date_debut | type_contrat | autre_offre_acceptee | localisation | raisons_personnelles | autre | null",
+  "declineNote": "précision du refus (candidat et admin seulement)",
+  "withdrawReason": "recruteur | poste_pourvu | compte_inactif (recruteur et admin seulement)"
+}
+```
+`status` est le statut **effectif** : une proposition échue est `expiree` même si les tâches ne l'ont pas encore marquée (`effectiveProposalStatus`). Jamais `createdById`, `pendingSuggestionId` ni `expiryReminderAt`. Candidat : jamais `withdrawReason` ; recruteur : jamais `declineNote`.
+
+**`POST /match-suggestions/{id}/hire-proposal`** — recruteur propriétaire. Body (`hireProposalSchema`) : `{ jobTitle (3–120), monthlySalaryAr (entier, 50 000 à 100 000 000), startDate ("AAAA-MM-JJ", aujourd'hui à +180 j, heure de Madagascar), contractType, contractDurationMonths (1–36 : obligatoire pour cdd / stage, interdit pour cdi), message? (500) }` — textes sans email, téléphone ni adresse web. Seulement depuis un dernier tour `retenu` ; accord de matching en vigueur et compte candidat actif ; offre non pourvue. Une proposition échue encore `envoyee` du dossier est d'abord passée `expiree` (et notifiée). → `201 { proposal, phase }`. Erreurs : `400` validation, dossier non mis en relation, « Renseignez d’abord l’issue « Retenu » de l’entretien. » · `403` autre rôle ou dossier hors de ses offres · `404` dossier inconnu · `409` « Une proposition est déjà en attente pour ce dossier. » (double envoi : contrainte unique), « Le candidat a déjà répondu définitivement. », « Nombre maximal de propositions atteint pour ce dossier (3). », offre pourvue, accord retiré ou compte inactif · `503`. `AuditLog` `hire_proposal_sent { suggestionId, proposalId, version, contractType }`. Notifications : candidat in-app + email « Proposition d’embauche » (le message de l'entreprise est ajouté à l'email), admins `hire_proposal_sent`.
+
+**`PATCH /match-suggestions/{id}/hire-proposal`** — recruteur. Body : `{ revision, …champs modifiés }` (`hireProposalReviseSchema` ; `null` efface la durée ou le message, un champ absent est conservé). Les champs sont **fusionnés** avec la proposition en attente, puis la cohérence contrat / durée est recontrôlée sur le résultat (`mergeProposalRevision` : un CDD devenu CDI doit perdre sa durée). → `200 { proposal, phase }` avec `revision + 1`, échéance à +7 jours, rappel J-2 réarmé. Erreurs : `400` validation, incohérence contrat / durée, « Aucune modification à enregistrer. » · `409` « La proposition a changé entre-temps (réponse du candidat ou expiration). Rechargez la page. » (révision périmée, réponse, échéance passée), offre pourvue, accord retiré. `AuditLog` `hire_proposal_revised { suggestionId, proposalId, version, revision, fields }`. Candidat re-notifié (in-app + email « Proposition mise à jour »).
+
+**`POST /match-suggestions/{id}/hire-proposal/withdraw`** — recruteur. Body : `{ revision }`. → `200 { proposal (retiree, withdrawReason: recruteur), phase: "retenu" }` ; `409` si la proposition a changé. `AuditLog` `hire_proposal_withdrawn`. Candidat in-app + email « Proposition retirée » (sans motif), admins `hire_proposal_withdrawn`.
+
+**`POST /match-suggestions/{id}/hire-proposal/accept`** — candidat. Body : `{ proposalId, revision }` (la révision qu'il a lue). En **une transaction** : proposition `acceptee` ; `Placement` créé (`origin: proposition_acceptee`, `stage: etape1_due`, salaire, poste, date de début, contrat, `suggestionId` et `hireProposalId` uniques ; un ancien placement **annulé** relié au dossier est détaché) ; si les placements non annulés de l'offre atteignent `positions`, l'offre passe pourvue (`filledAt`, `filledBy: auto`) et ses autres dossiers sont clos (voir Opportunities §5b). Le retrait de l'accord de matching **n'empêche pas** d'accepter ; un compte candidat ou recruteur suspendu / banni, si. → `200 { proposal, placementCreated: true, candidatePhase: "embauche" }`. Erreurs : `401` · `403` autre rôle (ou compte suspendu : garde de session) · `404` « Proposition introuvable. » (pas son dossier, pas mis en relation) · `409` « Cette proposition a été modifiée : relisez-la avant de répondre. », « Cette proposition a expiré. », « Cette proposition a été retirée par l’entreprise. », « Le poste a été pourvu entre-temps. », « Vous avez déjà répondu à cette proposition. », compte de l'entreprise inactif, « Ce candidat est déjà embauché pour ce poste. ». Deux acceptations simultanées sur une offre à un poste : la seconde attend le verrou de l'offre et reçoit `409`. `AuditLog` `hire_proposal_accepted`, `placement_created_auto { placementId, suggestionId, proposalId, opportunityId }`, éventuellement `opportunity_filled`. Notifications : candidat in-app « Embauche confirmée », recruteur in-app « Proposition acceptée » (lien « Placements »), admins `hire_proposal_accepted`.
+
+**`POST /match-suggestions/{id}/hire-proposal/decline`** — candidat. Body : `{ proposalId, revision, reason?, note? (300, sans coordonnées) }`. → `200 { proposal, candidatePhase: "clos" }` ; mêmes `404` / `409`. La **catégorie** est montrée au recruteur (D3), la **précision** à l'admin seulement — jamais dans le journal d'audit ni dans une notification. `AuditLog` `hire_proposal_declined { suggestionId, proposalId, version, reason }`. Candidat in-app « Réponse transmise », recruteur in-app (catégorie seulement), admins `hire_proposal_declined`.
+
+**Expiration et rappel J-2** (`server/src/lib/hiring-jobs.ts`, voir Admin Matching §10) : une proposition échue est traitée comme expirée partout, même sans les tâches ; les tâches la marquent `expiree` (candidat, recruteur et admins notifiés une fois) et envoient au candidat un rappel in-app + email 2 jours avant l'échéance (une fois par échéance).
 
 ---
 
@@ -2924,7 +3151,7 @@ Base path: `/recruiter`
 
 Unique source du tableau de bord `/recruteur`. Recalculé à chaque appel (`computedAt`) en requêtes groupées, sans requête par ligne ni par jour — `server/src/lib/recruiter-dashboard.ts`. **Strictement limité** aux offres, dossiers, entretiens, placements, abonnement, notifications et messages du recruteur connecté. Réponse construite par liste blanche : aucun email ni téléphone de candidat, aucun identifiant de candidat, rien de la présélection ATS (ni rang, ni score, ni candidat non transmis, ni suggestion `suggeree`).
 
-Conventions identiques à `GET /admin/stats` (définitions communes de `server/src/lib/day-series.ts`) : jours au calendrier de Madagascar (UTC+3 fixe), `seriesDays` = 30 jours `AAAA-MM-JJ` aujourd'hui inclus, séries de 30 valeurs (jour sans événement = 0), tendances `last7` / `prev7` sur 7 × 24 h glissantes, offre ouverte = `deadline` ≥ début du jour UTC (comme le moteur de matching).
+Conventions identiques à `GET /admin/stats` (définitions communes de `server/src/lib/day-series.ts`) : jours au calendrier de Madagascar (UTC+3 fixe), `seriesDays` = 30 jours `AAAA-MM-JJ` aujourd'hui inclus, séries de 30 valeurs (jour sans événement = 0), tendances `last7` / `prev7` sur 7 × 24 h glissantes, offre ouverte = `deadline` ≥ début du jour UTC **et** non pourvue (comme le moteur de matching) ; `offers.filled` = offres pourvues, `offers.expired` = date limite dépassée sans être pourvue.
 
 **Response** (200) :
 ```json
@@ -2932,7 +3159,7 @@ Conventions identiques à `GET /admin/stats` (définitions communes de `server/s
   "computedAt": "2026-10-15T07:29:14.621Z",
   "timezone": "UTC+3",
   "seriesDays": ["2026-09-16", "…", "2026-10-15"],
-  "offers": { "total": 6, "open": 5, "expired": 1, "newLast7": 4, "newPrev7": 1 },
+  "offers": { "total": 6, "open": 4, "filled": 1, "expired": 1, "newLast7": 4, "newPrev7": 1 },
   "profiles": {
     "received": 15, "toReview": 5, "transmitted": 4, "interest": 1, "connected": 5,
     "dismissed": 5, "declinedByYou": 2, "connectionRate": 33.3,
@@ -2942,7 +3169,7 @@ Conventions identiques à `GET /admin/stats` (définitions communes de `server/s
     "connectedSeries": ["… 30"], "connectedLast30": 4, "connectedLast7": 3, "connectedPrev7": 0
   },
   "byOffer": [
-    { "id": "uuid", "title": "Comptable junior", "open": true, "deadline": "2026-11-04T07:29:07.896Z",
+    { "id": "uuid", "title": "Comptable junior", "open": true, "filled": false, "deadline": "2026-11-04T07:29:07.896Z",
       "received": 5, "toReview": 2, "connected": 2, "dismissed": 1 }
   ],
   "interviews": {
@@ -2969,7 +3196,7 @@ Définitions :
 - **Profils reçus** (`profiles.received`) : dossiers des offres du recruteur que OffRec lui a transmis — statuts `proposee_recruteur`, `interet_recruteur`, `mise_en_relation`, plus les `ecartee` dont la transmission est **prouvée** : transmission journalisée (`AuditLog` `match_suggestion_status` vers `proposee_recruteur`), sortie journalisée depuis un statut visible (admin `from` `proposee_recruteur`/`interet_recruteur` → `ecartee`, `recruiter_declined`, `candidate_declined` avec `from` visible) ou `preselectionRank` renseigné. Un dossier écarté par l'admin dans sa file interne avant transmission n'est jamais compté ; `suggeree` et les statuts hérités `proposee_candidat` / `interet_candidat` ne sont jamais lus. Limite connue : un dossier envoyé directement par le moteur puis retiré par le candidat **avant** le 2026-10-15 (journal sans `from`) n'est pas compté.
 - `toReview` = `transmitted` (`proposee_recruteur`) + `interest` (`interet_recruteur`, lignes héritées) ; `connected` = `mise_en_relation` ; `dismissed` = écartés après transmission, dont `declinedByYou` déclinés par ce recruteur ; `connectionRate` = `connected` / `received` en % (une décimale, `null` sans profil reçu).
 - **Date de réception** (séries, tendances) : transmission journalisée par un admin si elle existe ; sinon, pour un dossier encore `proposee_recruteur`, sa dernière mise à jour (passage à ce statut) ; sinon sa création (envoi direct du moteur). `receivedSeriesByStatus` répartit chaque jour selon le statut **actuel** des profils reçus ce jour-là.
-- `connectedSeries` / `connectedLast7` / `connectedPrev7` : dossiers `mise_en_relation` datés par `updatedAt` (statut terminal) — même règle que l'admin.
+- `connectedSeries` / `connectedLast7` / `connectedPrev7` : dossiers `mise_en_relation` datés par `connectedAt` (`updatedAt` seulement pour une ligne sans date, ancien client) — même règle que l'admin. Les règles « profil reçu » et « date de réception » sont celles de `server/src/lib/hiring-metrics.ts` (`isTransmittedDossier`, `dossierReceivedAt`), partagées avec l'entonnoir.
 - `byOffer` : toutes les offres du recruteur (100 au plus), triées par profils reçus décroissants, puis mises en relation, puis offre la plus récente.
 - `interviews` : même périmètre que l'onglet « Entretiens » (`GET /match-suggestions/interviews`, dossiers `mise_en_relation` de ses offres). `upcoming` = non annulé et pas encore terminé (`isInterviewUpcoming`) ; `awaitingReply` = `planifie` pas encore commencé ; `toHandle` = `empechement` ; `pastLast30` = non annulés terminés, débutés dans les 30 jours de la série ; `next` = le plus proche à venir, avec le seul nom du candidat (déjà visible dans « Entretiens »). `interviews` vaut `null` si le modèle `Interview` n'est pas disponible sur le serveur.
 - `placements` : suivi **déclaratif** (aucun montant) ; `feeStepsDue` = `etape1_due` + `etape2_due` ; `last30` = déclarés depuis le début de la série.
@@ -2977,6 +3204,31 @@ Définitions :
 - `notifications.unread` : notifications non lues du recruteur ; `messages.unread` : messages reçus non lus dans ses conversations (avec OffRec).
 
 **Erreurs** : `401` · `403`.
+
+### 2. Votre recrutement (`GET /recruiter/stats/hiring`, sous-lot 7)
+
+**Authentification** : `requireRole('recruiter')` — 401 sans session, 403 pour tout autre rôle (admin compris). Périmètre : toujours le recruteur de la session.
+
+**Query** (Zod `recruiterHiringStatsQuerySchema`) : `period` = `30` | `90` | `365` | `all` (défaut `all`) · `opportunityId` (uuid, facultatif) — une offre qui n'est pas la sienne (ou inexistante) → 404 « Offre introuvable. ».
+
+Mêmes étapes, cohorte, situations et délais que `GET /admin/stats/hiring` (§ Admin 1b), limités aux dossiers **transmis** de ses offres : jamais `suggeree`, jamais un écarté de la file interne, rien de la présélection (ni rang, ni score), aucun identifiant de dossier ni de candidat, aucun nom, email ou téléphone. Pas d'indicateur des 7 jours ni d'export de recherche (admin seulement).
+
+**Response** (200, `Cache-Control: no-store`) :
+```json
+{
+  "computedAt": "…", "timezone": "UTC+3", "period": "all", "since": null, "opportunityId": null,
+  "funnel": { "stages": ["… 6 étapes"], "situations": { "…": 0 }, "closedByFilledOffer": 0, "delays": { "…": {} } },
+  "byOffer": [
+    { "id": "uuid", "title": "Développeur React", "proposed": 12, "connected": 9, "interviewed": 6, "retained": 3, "offered": 2, "hired": 1 }
+  ],
+  "offers": [{ "id": "uuid", "title": "Développeur React" }],
+  "truncated": false
+}
+```
+
+`byOffer` : offres ayant au moins un dossier transmis dans la cohorte, triées par embauchés, retenus, proposés décroissants puis titre. `offers` : toutes ses offres (liste du filtre).
+
+**Erreurs** : `400` · `401` · `403` · `404` · `503`.
 
 ---
 
@@ -3054,7 +3306,8 @@ Content-Type: application/json
 Exactement un de `candidateId` / `talentId`.
 
 **Description** :
-- Crée un placement pour un candidat diplômé ou un talent non-diplômé et initialise le suivi **déclaratif** du success fee (`stage: etape1_due`)
+- **Décision D4 (sous-lot 5)** : réservé aux **talents non diplômés**. Pour un candidat diplômé (`candidateId`), `400` « Pour un candidat diplômé, le placement est créé automatiquement quand il accepte votre proposition d’embauche. » — son placement naît de l'acceptation (`origin: proposition_acceptee`, Match Suggestions §5i). Avec un client Prisma non régénéré, l'ancien parcours diplômé reste ouvert
+- Crée un placement (`origin: declaration`) et initialise le suivi **déclaratif** du success fee (`stage: etape1_due`) ; le placement d'un talent compte pour le nombre de postes de l'offre et peut la rendre pourvue (Opportunities §5b, même transaction)
 - Contrôles (depuis 2026-10-16) :
   - l'offre appartient au recruteur connecté (`404` « Offre introuvable. » sinon — même réponse pour une offre inexistante) ;
   - la personne lui a été **proposée pour cette offre** : diplômé → `MatchSuggestion` de ce couple offre/candidat en `proposee_recruteur`, `interet_recruteur` ou `mise_en_relation` ; talent → `TalentOpportunityProposal` créée par un agent. Sinon `400` ;
@@ -3073,12 +3326,20 @@ Exactement un de `candidateId` / `talentId`.
     "monthlySalaryAr": 450000,
     "stage": "etape1_due",
     "createdAt": "2026-09-30T10:00:00Z",
-    "updatedAt": "2026-09-30T10:00:00Z"
+    "updatedAt": "2026-09-30T10:00:00Z",
+    "origin": "declaration",
+    "suggestionId": null,
+    "hireProposalId": null,
+    "jobTitle": null,
+    "startDate": null,
+    "contractType": null
   }
 }
 ```
 
-**Erreurs** : `400` corps invalide (offre absente, les deux ou aucun de `candidateId`/`talentId`) ou personne non proposée pour cette offre · `403` autre rôle · `404` offre introuvable ou d'un autre recruteur · `409` placement déjà déclaré.
+`origin`, `suggestionId`, `hireProposalId`, `jobTitle`, `startDate` (AAAA-MM-JJ), `contractType` (sous-lot 5) sont aussi renvoyés par `GET /placements/mine` et `PUT /placements/{id}/stage` ; `GET /placements` (admin) renvoie les mêmes colonnes. Un placement passé `annule` sur une offre pourvue automatiquement qui repasse sous son nombre de postes **propose** au recruteur (in-app) de la rouvrir — jamais de réouverture automatique.
+
+**Erreurs** : `400` corps invalide (offre absente, les deux ou aucun de `candidateId`/`talentId`), candidat diplômé (D4) ou talent non proposé pour cette offre · `403` autre rôle · `404` offre introuvable ou d'un autre recruteur · `409` placement déjà déclaré.
 
 ---
 
@@ -3102,6 +3363,8 @@ Authorization: Bearer {token}
       "candidateId": "uuid", "talentId": null,
       "monthlySalaryAr": 450000, "stage": "etape1_payee",
       "createdAt": "2026-09-30T10:00:00Z", "updatedAt": "2026-09-30T10:00:00Z",
+      "origin": "proposition_acceptee", "suggestionId": "uuid", "hireProposalId": "uuid",
+      "jobTitle": "Développeur React", "startDate": "2026-11-02", "contractType": "cdi",
       "opportunity": { "id": "uuid", "title": "Développeur React", "companyName": "TechMada" },
       "candidate": { "id": "uuid", "fullName": "Jean Dupont" },
       "talent": null
@@ -3109,7 +3372,7 @@ Authorization: Bearer {token}
   ]
 }
 ```
-Liste blanche : le **nom** du candidat ou du talent, **jamais** son email ni son téléphone (corrigé le 2026-10-16 : `candidate.email` était renvoyé).
+Liste blanche : le **nom** du candidat ou du talent, **jamais** son email ni son téléphone (corrigé le 2026-10-16 : `candidate.email` était renvoyé). `opportunity` vaut `null` si l'offre a été supprimée (le placement survit, `opportunityId`, `suggestionId` et `hireProposalId` à `null`). Triés du plus récent au plus ancien.
 
 ---
 
@@ -3135,16 +3398,11 @@ Content-Type: application/json
 - Journalisé : `AuditLog` `admin_corrected_placement_stage` pour une correction d'admin ; `placement_stage_updated` (`placementId`, `fromStage`, `toStage`) quand le recruteur change réellement l'étape (depuis 2026-10-16)
 - Réponse en liste blanche (mêmes champs que `POST`)
 
-**Response** (200) :
-```json
-{
-  "placement": {
-    "id": "uuid",
-    "stage": "etape1_payee",
-    "updatedAt": "2026-09-30T11:00:00Z"
-  }
-}
-```
+**Response** (200) : `{ "placement": { …mêmes champs que la réponse de POST (§1), stage à jour… } }`
+
+Un placement passé `annule` sur une offre pourvue automatiquement qui repasse sous son nombre de postes **propose** au recruteur de la rouvrir (in-app), sans la rouvrir.
+
+**Erreurs** : `400` étape invalide · `403` autre rôle · `404` placement introuvable ou d'un autre recruteur.
 
 ---
 
@@ -3159,22 +3417,25 @@ Authorization: Bearer {token}
 
 **Rôle requis** : `admin`
 
-**Response** (200) :
+**Response** (200) : tous les placements, du plus récent au plus ancien, avec les colonnes du placement (dont `origin`, `suggestionId`, `hireProposalId`, `jobTitle`, `startDate`, `contractType`) et des relations en `select` explicite (jamais de compte complet) :
 ```json
 {
   "placements": [
     {
-      "id": "uuid",
-      "recruiterName": "Tech Solutions Madagascar",
-      "candidateName": "Jean Dupont",
-      "monthlySalaryAr": 450000,
-      "stage": "etape1_payee",
-      "createdAt": "2026-09-30T10:00:00Z"
+      "id": "uuid", "opportunityId": "uuid", "recruiterId": "uuid", "candidateId": "uuid", "talentId": null,
+      "monthlySalaryAr": 450000, "stage": "etape1_payee", "origin": "proposition_acceptee",
+      "suggestionId": "uuid", "hireProposalId": "uuid", "jobTitle": "Développeur React",
+      "startDate": "2026-11-02T00:00:00.000Z", "contractType": "cdi",
+      "createdAt": "2026-09-30T10:00:00Z", "updatedAt": "2026-09-30T10:00:00Z",
+      "opportunity": { "id": "uuid", "title": "Développeur React", "companyName": "Tech Solutions Madagascar" },
+      "recruiter": { "id": "uuid", "email": "rh@exemple.mg", "recruiterProfile": { "companyName": "Tech Solutions Madagascar" } },
+      "candidate": { "id": "uuid", "email": "candidat@exemple.mg", "candidateProfile": { "fullName": "Jean Dupont" } },
+      "talent": null
     }
-  ],
-  "total": 34
+  ]
 }
 ```
+Réservé à l'admin (qui voit les emails des comptes) ; page `/admin/placements` (origine, lien « Voir le dossier »).
 
 ---
 
@@ -3528,7 +3789,7 @@ Remplace l'ancien `GET …/candidate-pool` (supprimé). Lecture seule : rien n'e
 **Description** (logique pure dans `server/src/lib/preselection.ts`, couche au-dessus de `scoreOpportunity()` dont ni la formule ni les poids ne changent) :
 
 1. **Filtres éliminatoires**, évalués dans cet ordre — un candidat éliminé porte le premier motif rencontré :
-   `offre_fermee` (date limite dépassée ou compte recruteur inactif) → `compte_inactif` → `sans_consentement` → `sans_cv` → `deja_ecarte` (suggestion `ecartee` pour cette offre) → `aucune_competence_commune` → `score_insuffisant` (score < `MATCH_THRESHOLD`) → filtres optionnels `cv_non_verifie`, `autre_province`, `niveau_non_conforme`, `type_non_souhaite`.
+   `offre_fermee` (offre pourvue — `filledAt` —, date limite dépassée ou compte recruteur inactif ; `opportunityClosedReason()`) → `compte_inactif` → `sans_consentement` → `sans_cv` → `deja_ecarte` (suggestion `ecartee` pour cette offre) → `aucune_competence_commune` → `score_insuffisant` (score < `MATCH_THRESHOLD`) → filtres optionnels `cv_non_verifie`, `autre_province`, `niveau_non_conforme`, `type_non_souhaite`.
 2. **Classement** des candidats restants : score décroissant, puis nombre de compétences requises couvertes, puis proximité (même ville, même province, autre), puis CV vérifié avant non vérifié avant rejeté, puis moins de points relevés sur le CV, puis consentement le plus ancien, puis identifiant du candidat.
 3. **Top N** : les `top` premiers (`ranked`). `counts.qualified` compte tous ceux qui ont passé les filtres.
 
@@ -3699,6 +3960,8 @@ Mise en file manuelle d'un candidat (depuis la liste des éliminés de la prés�
 
 **Description** : sans `status`, toutes les suggestions (mise à jour la plus récente d'abord). `?status=suggeree` = **file de validation**, triée par score décroissant.
 
+Avec un client Prisma régénéré (sous-lot 1), chaque suggestion porte aussi `connectedAt` (date de mise en relation, `null` avant) et `closedReason` (`offre_pourvue` sur un dossier écarté par la clôture d'une offre pourvue, sinon `null`). Sous-lot 5 : pour un dossier `mise_en_relation`, `proposals` (toutes les versions, vue admin : catégorie **et** précision d'un refus, raison d'un retrait) et `placement` (`{ id, stage, origin, startDate }` ou `null`). Ces deux champs ne sont renvoyés qu'à l'admin : `GET /match-suggestions/mine` les retire explicitement.
+
 **Response** (200) :
 ```json
 {
@@ -3724,7 +3987,7 @@ Mise en file manuelle d'un candidat (depuis la liste des éliminés de la prés�
 }
 ```
 
-Pour un dossier `mise_en_relation`, `interview` porte l'entretien fixé par le recruteur (objet de `/match-suggestions` §5, plus `calendarError` et `hasGoogleEvent`), sinon `null`.
+Pour un dossier `mise_en_relation`, `interview` porte l'entretien fixé par le recruteur (tour actif, sinon le dernier ; objet de `/match-suggestions` §5, plus `calendarError`, `hasGoogleEvent` et, sous-lot 3, `outcome`, `outcomeReason`, `outcomeAt`, `absenceReply`, `absenceReplyAt` — jamais la note privée du recruteur), sinon `null`, et `phase` la phase dérivée du dossier (`null` hors mise en relation).
 
 **Erreurs** : `400` statut inconnu.
 
@@ -3759,7 +4022,7 @@ Pour un dossier `mise_en_relation`, `interview` porte l'entretien fixé par le r
 
 **Response** (200) : `{ "suggestion": { "id": "uuid", "status": "proposee_recruteur", "...": "..." } }`
 
-**Erreurs** : `400` transition non autorisée ou corps invalide · `404` suggestion introuvable · `409` consentement du candidat absent ou retiré.
+**Erreurs** : `400` transition non autorisée ou corps invalide · `404` suggestion introuvable · `409` consentement du candidat absent ou retiré, compte candidat suspendu ou banni (vers `mise_en_relation`), offre pourvue vers `proposee_recruteur` ou `mise_en_relation` (« Tous les postes de cette offre sont pourvus. »), dossier modifié entre-temps.
 
 ---
 
@@ -3788,7 +4051,7 @@ Pour un dossier `mise_en_relation`, `interview` porte l'entretien fixé par le r
 
 `queued` = créées en `suggeree` ; `sentDirect` = créées en `proposee_recruteur` ; `promoted` = `suggeree` → `proposee_recruteur` ; `refreshed` = score mis à jour ; `ignored` = sans effet (sous le seuil, sans compétence commune, déjà traitée, écartée, plafond atteint).
 
-**Erreurs** : `404` offre introuvable · `409` offre expirée ou compte recruteur inactif.
+**Erreurs** : `404` offre introuvable · `409` offre pourvue, expirée ou compte recruteur inactif (« Le matching ne peut pas être lancé : offre pourvue, expirée ou compte recruteur inactif. »).
 
 ---
 
@@ -3808,13 +4071,14 @@ Pour un dossier `mise_en_relation`, `interview` porte l'entretien fixé par le r
 
 **Endpoint** : `GET /admin/matching/interviews`
 
-**Description** : tous les entretiens de la plateforme, lecture seule (`server/src/lib/interview-list.ts`). Deux requêtes au plus par page (entretiens, puis leurs dossiers), jamais une par ligne ; liste blanche explicite (ni `passwordHash`, ni email ni téléphone).
+**Description** : tous les entretiens de la plateforme (une ligne par tour, `interview.round`), lecture seule (`server/src/lib/interview-list.ts`). Deux requêtes au plus par page (entretiens, puis leurs dossiers), jamais une par ligne ; liste blanche explicite (ni `passwordHash`, ni email ni téléphone).
 
 **Query** (validée par Zod, `400` sinon) :
 - `period` : `a_venir` (défaut) · `passes` · `annules` · `tous` — mêmes définitions que le recruteur
 - `status` : `planifie` · `confirme` · `empechement` · `annule`
 - `opportunityId`, `recruiterId` : uuid
 - `calendarIssue=true` : seulement les problèmes d'agenda, exactement les cas où l'action « Créer le lien Meet » / « Relancer l'agenda Google » est proposée (`calendarActionLabel`, `src/lib/interview.ts`) : à venir sans lien Meet (simulé ou en attente), à venir avec un échec Google, annulé dont l'événement Google n'a pas pu être supprimé
+- `outcome` (sous-lot 3) : `a_renseigner` · `retenu` · `second_entretien` · `non_retenu` · `absent` — mêmes définitions que le recruteur
 - `offset` (défaut 0), `limit` (défaut 30, 100 au plus)
 
 **Tri** : identique au recruteur (à venir croissant, puis passés et annulés décroissant), pagination comprise pour `tous`. Index `Interview(scheduledAt)` (migration `20261014150000_interview_scheduled_at_index`).
@@ -3829,30 +4093,74 @@ Pour un dossier `mise_en_relation`, `interview` porte l'entretien fixé par le r
       "suggestionStatus": "mise_en_relation",
       "opportunity": { "id": "uuid", "title": "Développeur React", "companyName": "TechMada Solutions" },
       "recruiter": { "id": "uuid", "companyName": "TechMada Solutions" },
-      "candidate": { "id": "uuid", "fullName": "…" }
+      "candidate": { "id": "uuid", "fullName": "…" },
+      "phase": "tour_planifie"
     }
   ],
   "total": 9,
   "nextOffset": 30,
-  "counts": { "upcoming": 6, "impediments": 2, "calendarIssues": 5 },
+  "counts": { "upcoming": 6, "impediments": 2, "calendarIssues": 5, "toRecord": 3, "noShows": 1 },
   "offers": [{ "id": "uuid", "title": "…", "companyName": "…", "recruiterId": "uuid" }],
   "recruiters": [{ "id": "uuid", "companyName": "…" }]
 }
 ```
 
-`counts` porte sur l'offre / le recruteur filtrés (sinon toute la plateforme), indépendamment de la période, du statut et du filtre agenda. `offers` et `recruiters` : valeurs possibles des filtres (au moins un entretien). `nextOffset` vaut `null` quand tout est chargé.
+`counts` porte sur l'offre / le recruteur filtrés (sinon toute la plateforme), indépendamment de la période, du statut, de l'issue et du filtre agenda ; `toRecord` = issues à renseigner (même définition que le filtre `outcome=a_renseigner` : dossier `mise_en_relation`, offre non pourvue, aucun placement relié non annulé — sous-lot 5), `noShows` = tours `absent`. Chaque ligne porte `proposal`, la dernière proposition d'embauche du dossier (vue admin) ou `null`. `offers` et `recruiters` : valeurs possibles des filtres (au moins un entretien). `nextOffset` vaut `null` quand tout est chargé. Vue admin de chaque tour : issue, motif (code), `absenceReply` / `absenceReplyAt` — jamais `outcomeNote` ni `outcomeById` (D3) ; `phase` du dossier.
 
 **Erreurs** : `400` filtre invalide · `401` · `403` autre rôle · `503` client Prisma non régénéré ou migration absente.
+
+---
+
+### 9. Reset Interview Outcome (Annuler l'issue d'un tour)
+
+**Endpoint** : `POST /admin/matching/interviews/{id}/outcome/reset`
+
+**Description** : action rare (erreur de saisie). Seulement si rien ne découle de l'issue : ni tour suivant, ni proposition d'embauche, ni placement (`checkHiringAction('reset_outcome')`, relu sous verrou du dossier). Le tour redevient actif (`activeSuggestionId` rétabli) ; issue, motif, note, date et auteur effacés ; une explication d'absence déjà déposée est conservée, le rappel déjà envoyé aussi (un seul rappel par tour). Le recruteur est notifié in-app (« Issue d’entretien à renseigner de nouveau ») ; le candidat ne l'est pas. `AuditLog` `interview_outcome_reset` `{ suggestionId, interviewId, round, previousResult }`.
+
+**Response** (200) : `{ "interview": { …vue admin du tour… }, "phase": "issue_a_renseigner" }`
+
+**Erreurs** : `401` · `403` autre rôle · `404` entretien introuvable · `409` « Cet entretien n’a pas d’issue à annuler. » ou « Une suite existe déjà (tour suivant ou proposition). » · `503` suite non activée.
+
+---
+
+### 10. Run Hiring Jobs (Rappels, expiration des propositions)
+
+**Endpoint** : `POST /admin/matching/hiring-jobs/run`
+
+**Description** : lance à la demande les tâches de `server/src/lib/hiring-jobs.ts` (sous-lot 3, plan §5.5) :
+- **rappel au recruteur** 24 h après la fin d'un tour actif sans issue (ni annulé ni en empêchement) : in-app seulement, **une fois par tour** (`outcomeReminderAt` posé par une écriture conditionnelle : deux passages simultanés n'envoient qu'un rappel) ;
+- **résumé aux admins** des issues en souffrance plus de 7 jours après la fin (`interview_outcome_overdue`, catégorie `systeme`, sans nom ; rappelle aussi l'indicateur « issues renseignées sous 7 jours » de la fenêtre J-37 → J-7, sous-lot 7) : **au plus un par jour** de Madagascar (`AuditLog` `hiring_digest_sent` écrit sous verrou consultatif).
+
+- **expiration des propositions** (sous-lot 5) : chaque proposition `envoyee` échue passe `expiree` (écriture conditionnelle par ligne, `AuditLog` `hire_proposal_expired`) ; candidat (in-app), recruteur (in-app) et admins (`hire_proposal_expired`) notifiés **une fois** ;
+- **rappel J-2** au candidat (in-app + email), une fois par échéance (`expiryReminderAt` posé conditionnellement ; une modification de la proposition le réarme).
+
+Rappels et résumé d'issue ne comptent qu'un tour dont le dossier est dans la phase `issue_a_renseigner` (même règle que `toRecord`). Les mêmes tâches tournent automatiquement au démarrage du serveur puis toutes les 15 minutes, et après la lecture des listes d'entretiens et de « Candidats proposés » (au plus une fois par minute), **seulement si `HIRING_JOBS_ENABLED=true`** (désactivées par défaut). Une proposition échue est de toute façon traitée comme expirée sans ces tâches (vues, contrôles, écritures). `AuditLog` `hiring_jobs_run` (compteurs).
+
+**Response** (200) : `{ "report": { "outcomeReminders": 1, "overdueOutcomes": 2, "digestSent": true, "proposalsExpired": 1, "proposalReminders": 0 } }`
+
+**Erreurs** : `401` · `403` autre rôle · `503` suite non activée.
+
+---
+
+### 11. List Hire Proposals (Propositions d'embauche)
+
+**Endpoint** : `GET /admin/matching/hire-proposals?status=envoyee|acceptee|refusee|expiree|retiree` (sous-lot 5)
+
+**Description** : propositions de la plateforme, 200 au plus ; filtre sur le statut **effectif** (`expiree` comprend les propositions échues pas encore marquées, `envoyee` les exclut). En attente d'abord par échéance croissante, puis les plus récentes. Chaque ligne : `{ proposal (vue admin : catégorie et précision d'un refus, raison d'un retrait), suggestionId, opportunity { id, title, companyName }, candidate { id, fullName }, phase }` ; plus `statusLabels`. Ni email ni téléphone.
+
+**Erreurs** : `400` statut invalide · `401` · `403` autre rôle · `503` suite non activée.
+
+**Interface (sous-lot 6)** : onglet « Propositions d'embauche » de `/admin/mise-en-relation` (`?onglet=propositions`, `&dossier=<suggestionId>` pour un seul dossier — lien « Voir le dossier » de `/admin/placements`) ; le statut passe par `?status=`, les filtres offre, entreprise, candidat, montant, échéance et motif du refus sont appliqués côté client sur ces 200 lignes. Côté recruteur, `/recruteur/candidatures?offre=<opportunityId>&dossier=<suggestionId>` ouvre le détail du dossier (`&etape=proposition` ouvre directement « Faire une proposition ») — liens de la shortlist et de « Placements ».
 
 ---
 
 ## 🔒 Security & Rate Limiting
 
 ### Authentication
-- JWT Bearer token
-- Token en header : `Authorization: Bearer {token}`
-- Expiration : 7 jours
-- Invalidation logout immédiate (journalisé)
+- JWT dans un cookie de session httpOnly (`COOKIE_NAME`, `secure` quand `NODE_ENV=production`, requêtes du front avec `credentials: 'include'`) — aucun en-tête `Authorization`
+- Expiration : `JWT_EXPIRES_IN` (7 jours par défaut)
+- Chaque garde (`requireAuth`, `requireRole`) relit le statut du compte : un compte suspendu ou banni perd l'accès immédiatement (403)
+- Déconnexion : cookie effacé (journalisé)
 
 ### Rate Limiters
 | Endpoint | Limite |
@@ -3890,7 +4198,7 @@ Pour un dossier `mise_en_relation`, `interview` porte l'entretien fixé par le r
 | 422 | Unprocessable Entity - Validation échouée |
 | 429 | Too Many Requests - Rate limite dépassée |
 | 500 | Internal Server Error - Erreur serveur |
-| 503 | Service Unavailable - Service indisponible (ex: Resend) |
+| 503 | Service Unavailable - Service indisponible (ex: Resend), ou fonctionnalité dont le schéma n'est pas activé : client Prisma non régénéré / migration absente (`HIRING_UNAVAILABLE_ERROR` « La suite après l’entretien n’est pas encore activée… », missions d'offre) |
 
 ---
 

@@ -183,6 +183,19 @@ export function scheduleAdminNotification(
   })
 }
 
+/**
+ * Notifications d'un utilisateur (candidat, recruteur) à envoyer APRÈS la
+ * réponse HTTP : la tâche s'exécute en arrière-plan et ne fait jamais
+ * échouer la requête d'origine (erreur journalisée).
+ */
+export function scheduleNotification(label: string, task: () => Promise<void>): void {
+  setImmediate(() => {
+    task().catch((err) => {
+      console.error(`[notify] ${label} impossible`, err)
+    })
+  })
+}
+
 const ACTOR_LABELS: Record<string, string> = {
   candidate: 'Un candidat',
   recruiter: 'Un recruteur',

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CalendarDays, Eye, RotateCcw } from 'lucide-react'
+import { CalendarDays, ClipboardCheck, Eye, RotateCcw, Send } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Field, Select } from '../../components/ui/Form'
@@ -10,10 +10,17 @@ import {
   InterviewPeriodTabs,
   InterviewRow,
   InterviewStat,
+  OUTCOME_FILTER_LABELS,
+  RoundChips,
   groupInterviewsByOffer,
   pluralize,
+  readOutcomeFilter,
 } from '../../components/interview/InterviewList'
-import { RecruiterInterviewDetail } from '../../components/interview/RecruiterInterviewDetail'
+import {
+  RecruiterInterviewDetail,
+  type RecruiterInterviewEntry,
+} from '../../components/interview/RecruiterInterviewDetail'
+import { connectedDossierState, pendingProposal, proposalsOf, roundsOf } from '../../components/hiring/hiringState'
 import { useApp } from '../../context/AppContext'
 import {
   ApiError,
@@ -21,11 +28,14 @@ import {
   type RecruiterInterviewItem,
   type RecruiterInterviewList,
 } from '../../lib/api'
-import { INTERVIEW_STATUS_LABELS } from '../../lib/interview'
+import { INTERVIEW_OUTCOME_FILTERS, checkHiringAction, sortRounds } from '../../lib/hiring'
+import { INTERVIEW_STATUS_LABELS, formatMadagascarShortDateTime } from '../../lib/interview'
 import type { InterviewPeriod, InterviewStatus } from '../../types'
 import './RecruiterInterviews.css'
 
 const PERIODS: InterviewPeriod[] = ['a_venir', 'passes', 'annules', 'tous']
+
+type FilterName = 'periode' | 'statut' | 'offre' | 'issue'
 
 const readPeriod = (value: string | null): InterviewPeriod =>
   PERIODS.includes(value as InterviewPeriod) ? (value as InterviewPeriod) : 'a_venir'
@@ -34,26 +44,35 @@ const readStatus = (value: string | null): InterviewStatus | '' =>
 
 const candidateLabel = (item: RecruiterInterviewItem) => item.candidate.fullName || 'Candidat'
 
+/** Ligne dont l'issue est attendue : le tour actif d'un dossier « Issue à renseigner ». */
+const isOutcomeRow = (item: RecruiterInterviewItem) =>
+  item.phase === 'issue_a_renseigner' &&
+  !item.interview.outcome &&
+  item.interview.status !== 'annule' &&
+  item.interview.status !== 'empechement'
+
 /**
- * Onglet « Entretiens » du recruteur : les entretiens de ses offres,
- * groupés par offre, filtrés par période (à venir par défaut), statut et
- * offre. Le détail s'ouvre dans la même modale que « Candidats proposés »
- * (`RecruiterInterviewDetail`). Les entretiens se créent depuis « Candidats
- * proposés » → « Ce profil m'intéresse ». Filtres repris dans l'URL
- * (`?periode=`, `?statut=`, `?offre=`) pour pouvoir partager ou revenir.
+ * Onglet « Entretiens » du recruteur : les entretiens de ses offres (un
+ * tour par ligne), groupés par offre, filtrés par période (à venir par
+ * défaut), statut, offre et issue. Le détail s'ouvre dans la même modale que
+ * « Candidats proposés » (`RecruiterInterviewDetail`), avec l'historique des
+ * tours du dossier lu dans `receivedSuggestions`. Les entretiens se créent
+ * depuis « Candidats proposés » → « Ce profil m'intéresse ». Filtres repris
+ * dans l'URL (`?periode=`, `?statut=`, `?offre=`, `?issue=`).
  */
 export function RecruiterInterviews() {
   const navigate = useNavigate()
-  const { refreshDossiers } = useApp()
+  const { refreshDossiers, receivedSuggestions } = useApp()
   const [searchParams, setSearchParams] = useSearchParams()
   const period = readPeriod(searchParams.get('periode'))
   const status = readStatus(searchParams.get('statut'))
   const offerId = searchParams.get('offre') ?? ''
+  const outcome = readOutcomeFilter(searchParams.get('issue'))
 
   const [data, setData] = useState<RecruiterInterviewList | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [detailId, setDetailId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<{ suggestionId: string; entry: RecruiterInterviewEntry } | null>(null)
   const [notice, setNotice] = useState('')
   const requestRef = useRef(0)
 
@@ -66,6 +85,7 @@ export function RecruiterInterviews() {
         period,
         status: status || undefined,
         opportunityId: offerId || undefined,
+        outcome: outcome || undefined,
       })
       if (requestId !== requestRef.current) return
       setData(result)
@@ -75,14 +95,14 @@ export function RecruiterInterviews() {
     } finally {
       if (requestId === requestRef.current) setLoading(false)
     }
-  }, [period, status, offerId])
+  }, [period, status, offerId, outcome])
 
   useEffect(() => {
     void load()
   }, [load])
 
   /** Applique un ou plusieurs filtres d'un coup (valeur par défaut = retirée de l'URL). */
-  const setFilters = (patch: Partial<Record<'periode' | 'statut' | 'offre', string>>) => {
+  const setFilters = (patch: Partial<Record<FilterName, string>>) => {
     setNotice('')
     const next = new URLSearchParams(searchParams)
     for (const [name, value] of Object.entries(patch)) {
@@ -103,12 +123,56 @@ export function RecruiterInterviews() {
     await Promise.all([load(), refreshDossiers()])
   }
 
+  /** Proposition changée entre-temps (409) : relecture sans message. */
+  const handleRefresh = async () => {
+    await Promise.all([load(), refreshDossiers()])
+  }
+
+  const openDetail = (item: RecruiterInterviewItem, entry: RecruiterInterviewEntry = 'detail') => {
+    setNotice('')
+    setDetail({ suggestionId: item.suggestionId, entry })
+  }
+
   const items = data?.interviews ?? []
   const groups = groupInterviewsByOffer(items)
   const offerById = new Map((data?.offers ?? []).map((offer) => [offer.id, offer]))
-  const detail = detailId ? items.find((item) => item.suggestionId === detailId) ?? null : null
-  const filtered = period !== 'a_venir' || status !== '' || offerId !== ''
+  const dossierById = new Map(receivedSuggestions.map((s) => [s.id, s]))
+  const roundCount = (suggestionId: string) => {
+    const dossier = dossierById.get(suggestionId)
+    return dossier ? roundsOf(dossier).length : items.filter((item) => item.suggestionId === suggestionId).length
+  }
+  /** Propositions du dossier : toutes les versions (`receivedSuggestions`), sinon la dernière de la ligne. */
+  const proposalsFor = (item: RecruiterInterviewItem) => {
+    const dossier = dossierById.get(item.suggestionId)
+    return dossier ? proposalsOf(dossier) : proposalsOf({ proposal: item.proposal })
+  }
+  /** « Faire une proposition » sur la ligne du tour « Retenu » (règles de src/lib/hiring.ts). */
+  const canPropose = (item: RecruiterInterviewItem) => {
+    if (item.phase !== 'retenu' || item.interview.outcome !== 'retenu') return false
+    const dossier = dossierById.get(item.suggestionId)
+    const state = connectedDossierState(dossier ? roundsOf(dossier) : [item.interview], {
+      proposals: proposalsFor(item),
+      placement: dossier?.placement ?? null,
+      phase: item.phase,
+    })
+    return checkHiringAction({ actor: 'recruiter', action: 'send_proposal', state, now: new Date() }).ok
+  }
+  const filtered = period !== 'a_venir' || status !== '' || offerId !== '' || outcome !== ''
   const counts = data?.counts
+  const toRecord = counts?.toRecord ?? 0
+
+  // Détail : le dossier complet (tous ses tours) vient de `receivedSuggestions` ;
+  // à défaut, les tours de la liste. Relu à chaque rendu.
+  const detailItem = detail ? items.find((item) => item.suggestionId === detail.suggestionId) ?? null : null
+  const detailDossier = detail ? dossierById.get(detail.suggestionId) ?? null : null
+  const detailRounds = detailDossier
+    ? roundsOf(detailDossier)
+    : sortRounds(items.filter((item) => item.suggestionId === detail?.suggestionId).map((item) => item.interview))
+  const detailInterview = detailDossier?.interview ?? detailRounds[detailRounds.length - 1] ?? null
+  const detailName = detailItem
+    ? candidateLabel(detailItem)
+    : detailDossier?.candidate.candidateProfile?.fullName || 'Candidat'
+  const detailTitle = detailItem?.opportunity.title ?? detailDossier?.opportunity.title ?? ''
 
   return (
     <div className="page">
@@ -117,7 +181,7 @@ export function RecruiterInterviews() {
           <h1>Entretiens</h1>
           <p>
             Les entretiens fixés avec les candidats que vous a proposés OffRec, groupés par offre. Dates et heures en
-            heure de Madagascar.
+            heure de Madagascar. Une fois l’heure de fin passée, renseignez l’issue de chaque entretien.
           </p>
         </header>
 
@@ -126,15 +190,22 @@ export function RecruiterInterviews() {
             <InterviewStat
               value={counts.upcoming}
               label={counts.upcoming > 1 ? 'entretiens à venir' : 'entretien à venir'}
-              active={period === 'a_venir' && !status}
-              onClick={() => setFilters({ periode: 'a_venir', statut: '' })}
+              active={period === 'a_venir' && !status && !outcome}
+              onClick={() => setFilters({ periode: 'a_venir', statut: '', issue: '' })}
+            />
+            <InterviewStat
+              value={toRecord}
+              label={toRecord > 1 ? 'issues à renseigner' : 'issue à renseigner'}
+              tone="warning"
+              active={outcome === 'a_renseigner'}
+              onClick={() => setFilters({ periode: 'tous', statut: '', issue: 'a_renseigner' })}
             />
             <InterviewStat
               value={counts.toHandle}
               label="à traiter (empêchement signalé)"
               tone="warning"
-              active={status === 'empechement'}
-              onClick={() => setFilters({ periode: 'tous', statut: 'empechement' })}
+              active={status === 'empechement' && !outcome}
+              onClick={() => setFilters({ periode: 'tous', statut: 'empechement', issue: '' })}
             />
           </div>
         )}
@@ -148,6 +219,16 @@ export function RecruiterInterviews() {
                 {INTERVIEW_STATUSES.map((value) => (
                   <option key={value} value={value}>
                     {INTERVIEW_STATUS_LABELS[value]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Issue">
+              <Select value={outcome} onChange={(e) => setFilters({ issue: e.target.value })}>
+                <option value="">Toutes les issues</option>
+                {INTERVIEW_OUTCOME_FILTERS.map((value) => (
+                  <option key={value} value={value}>
+                    {OUTCOME_FILTER_LABELS[value]}
                   </option>
                 ))}
               </Select>
@@ -196,9 +277,11 @@ export function RecruiterInterviews() {
             icon={CalendarDays}
             title="Aucun entretien pour ces filtres"
             description={
-              period === 'a_venir'
-                ? 'Aucun entretien à venir ne correspond. Les nouveaux entretiens se fixent depuis « Candidats proposés » → « Ce profil m’intéresse ».'
-                : 'Modifiez la période, le statut ou l’offre pour voir d’autres entretiens.'
+              outcome === 'a_renseigner'
+                ? 'Aucune issue à renseigner : chaque entretien terminé a déjà son issue.'
+                : period === 'a_venir'
+                  ? 'Aucun entretien à venir ne correspond. Les nouveaux entretiens se fixent depuis « Candidats proposés » → « Ce profil m’intéresse ».'
+                  : 'Modifiez la période, le statut, l’issue ou l’offre pour voir d’autres entretiens.'
             }
             actionLabel={filtered ? 'Réinitialiser les filtres' : undefined}
             onAction={filtered ? resetFilters : undefined}
@@ -221,6 +304,11 @@ export function RecruiterInterviews() {
                     {offer && (
                       <div className="ivl-group-side">
                         <span className="ivl-chip">{pluralize(offer.upcoming, 'à venir', 'à venir')}</span>
+                        {(offer.toRecord ?? 0) > 0 && (
+                          <span className="ivl-chip is-warning">
+                            {pluralize(offer.toRecord ?? 0, 'issue à renseigner', 'issues à renseigner')}
+                          </span>
+                        )}
                         {offer.toHandle > 0 && (
                           <span className="ivl-chip is-warning">{pluralize(offer.toHandle, 'à traiter', 'à traiter')}</span>
                         )}
@@ -228,29 +316,69 @@ export function RecruiterInterviews() {
                     )}
                   </div>
                   <ul className="ivl-list">
-                    {group.items.map((item) => (
-                      <InterviewRow
-                        key={item.interview.id}
-                        audience="recruiter"
-                        interview={item.interview}
-                        heading={candidateLabel(item)}
-                        actions={
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            aria-haspopup="dialog"
-                            aria-label={`Voir l’entretien avec ${candidateLabel(item)}`}
-                            onClick={() => {
-                              setNotice('')
-                              setDetailId(item.suggestionId)
-                            }}
-                          >
-                            <Eye size={14} aria-hidden />
-                            Voir
-                          </Button>
-                        }
-                      />
-                    ))}
+                    {group.items.map((item) => {
+                      const due = isOutcomeRow(item)
+                      const propose = !due && canPropose(item)
+                      const pending = item.interview.outcome === 'retenu' ? pendingProposal(proposalsFor(item)) : undefined
+                      return (
+                        <InterviewRow
+                          key={item.interview.id}
+                          audience="recruiter"
+                          interview={item.interview}
+                          heading={candidateLabel(item)}
+                          flag={
+                            due
+                              ? 'Issue à renseigner'
+                              : pending
+                                ? `Proposition : réponse avant le ${formatMadagascarShortDateTime(pending.expiresAt)}`
+                                : undefined
+                          }
+                          badges={
+                            <RoundChips
+                              interview={item.interview}
+                              showRound={roundCount(item.suggestionId) > 1 || (item.interview.round ?? 1) > 1}
+                              showOutcome
+                            />
+                          }
+                          actions={
+                            <>
+                              {due && (
+                                <Button
+                                  size="sm"
+                                  aria-haspopup="dialog"
+                                  aria-label={`Renseigner l’issue de l’entretien avec ${candidateLabel(item)}`}
+                                  onClick={() => openDetail(item, 'outcome')}
+                                >
+                                  <ClipboardCheck size={14} aria-hidden />
+                                  Renseigner l’issue
+                                </Button>
+                              )}
+                              {propose && (
+                                <Button
+                                  size="sm"
+                                  aria-haspopup="dialog"
+                                  aria-label={`Faire une proposition d’embauche à ${candidateLabel(item)}`}
+                                  onClick={() => openDetail(item, 'proposal')}
+                                >
+                                  <Send size={14} aria-hidden />
+                                  Faire une proposition
+                                </Button>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                aria-haspopup="dialog"
+                                aria-label={`Voir l’entretien avec ${candidateLabel(item)}`}
+                                onClick={() => openDetail(item)}
+                              >
+                                <Eye size={14} aria-hidden />
+                                Voir
+                              </Button>
+                            </>
+                          }
+                        />
+                      )
+                    })}
                   </ul>
                 </section>
               )
@@ -258,17 +386,23 @@ export function RecruiterInterviews() {
           </div>
         )}
 
-        {detail && (
+        {detail && detailInterview && (
           <RecruiterInterviewDetail
             target={{
               suggestionId: detail.suggestionId,
-              candidateName: candidateLabel(detail),
-              opportunityTitle: detail.opportunity.title,
-              interview: detail.interview,
+              candidateName: detailName,
+              opportunityTitle: detailTitle,
+              interview: detailInterview,
+              rounds: detailRounds,
+              phase: detailDossier?.phase ?? detailItem?.phase ?? null,
+              proposals: detailDossier ? proposalsOf(detailDossier) : proposalsOf({ proposal: detailItem?.proposal }),
+              placement: detailDossier?.placement ?? null,
               canManage: true,
             }}
-            onClose={() => setDetailId(null)}
+            initialStep={detail.entry}
+            onClose={() => setDetail(null)}
             onChanged={handleChanged}
+            onRefresh={handleRefresh}
           />
         )}
       </div>

@@ -12,6 +12,7 @@ import {
   type CandidateIneligibility,
 } from './preselection.js'
 import { clip, notifyAdmins, plural } from './notify.js'
+import { unfilledOpportunityWhere } from './hiring-store.js'
 
 /**
  * Moteur de matching diplômés (décision produit 2026-10-08).
@@ -301,12 +302,14 @@ async function notifyAdminsOfRun(
 }
 
 /**
- * Pendant SQL de `opportunityClosedReason()` (même borne de date, mêmes
- * statuts actifs), pour lister les offres ouvertes sans les charger toutes.
+ * Pendant SQL de `opportunityClosedReason()` (offre non pourvue — D1 —, même
+ * borne de date, mêmes statuts actifs), pour lister les offres ouvertes sans
+ * les charger toutes.
  */
-function openOpportunityWhere(): Prisma.OpportunityWhereInput {
+export function openOpportunityWhere(now: Date = new Date()): Prisma.OpportunityWhereInput {
   return {
-    deadline: { gte: startOfUtcDay(new Date()) },
+    ...unfilledOpportunityWhere(),
+    deadline: { gte: startOfUtcDay(now) },
     recruiter: { role: 'recruiter', status: { in: [...ACTIVE_USER_STATUSES] } },
   }
 }
@@ -353,8 +356,8 @@ export async function runMatchingForCandidate(userId: string, options: RunOption
 
 /**
  * Évalue une offre contre tous les candidats éligibles (rôle candidat, compte
- * actif, consentement donné, CV déposé). Sans effet si l'offre est expirée
- * ou si le compte du recruteur est inactif.
+ * actif, consentement donné, CV déposé). Sans effet si l'offre est pourvue
+ * (D1), expirée, ou si le compte du recruteur est inactif.
  */
 export async function runMatchingForOpportunity(opportunityId: string, options: RunOptions): Promise<MatchingRunResult> {
   const found = await prisma.opportunity.findUnique({
@@ -362,7 +365,7 @@ export async function runMatchingForOpportunity(opportunityId: string, options: 
     include: { recruiter: { select: { role: true, status: true } } },
   })
   if (!found || opportunityClosedReason(found, found.recruiter, new Date())) {
-    return notEligible('opportunity', 'Offre introuvable, expirée, ou compte recruteur inactif.')
+    return notEligible('opportunity', 'Offre introuvable, pourvue, expirée, ou compte recruteur inactif.')
   }
   const { recruiter: _recruiter, ...opportunity } = found
 

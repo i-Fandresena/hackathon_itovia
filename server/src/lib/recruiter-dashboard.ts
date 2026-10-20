@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client'
 import type { InterviewStatus, PlacementStage } from '@prisma/client'
 import {
   interviewAwaitsCandidateReply,
@@ -7,6 +6,9 @@ import {
 } from '../../../src/lib/interview.js'
 import { prisma } from './prisma.js'
 import { startOfUtcDay } from './preselection.js'
+import { connectedAtOf, connectedAtSelect, filledOpportunityWhere } from './hiring-store.js'
+import { loadTransmissionEvidence } from './hiring-stats.js'
+import { dossierReceivedAt, isTransmittedDossier } from './hiring-metrics.js'
 import { interviewStore, isInterviewStorageError, type InterviewRow } from './interviews.js'
 import { bucketByDay, inSeries, percentOrNull, rollingWeeks, seriesDays, zeroRecord } from './day-series.js'
 
@@ -38,74 +40,36 @@ import { bucketByDay, inSeries, percentOrNull, rollingWeeks, seriesDays, zeroRec
  *    seule approximation restante, une promotion du moteur suivie d'un
  *    changement de statut, datée alors à la création de la suggestion).
  *
- * Mise en relation datée par la dernière mise à jour du dossier
- * `mise_en_relation` (statut terminal) — même règle que le tableau admin.
+ * Ces deux règles (dossier transmis, date de réception) sont celles de
+ * lib/hiring-metrics.ts (`isTransmittedDossier`, `dossierReceivedAt`),
+ * partagées avec l'entonnoir de recrutement (lib/hiring-stats.ts).
+ *
+ * Mise en relation datée par `connectedAt` (`updatedAt` seulement pour une
+ * ligne sans date, ancien client) — même règle que le tableau admin.
  * Jours, fenêtres et tendances : `lib/day-series.ts` (mêmes définitions que
  * l'admin). Offre ouverte : date limite ≥ début du jour UTC, comme le moteur
  * de matching et la présélection.
  */
 
 const VISIBLE = ['proposee_recruteur', 'interet_recruteur', 'mise_en_relation'] as const
-type VisibleStatus = (typeof VISIBLE)[number]
 const PLACEMENT_STAGES: PlacementStage[] = ['etape1_due', 'etape1_payee', 'etape2_due', 'etape2_payee', 'annule']
 /** Plafond du classement par offre renvoyé (l'écran en montre 6). */
 const OFFER_CAP = 100
 
-interface AuditEvidenceRow {
-  action: string
-  userId: string | null
-  createdAt: Date
-  suggestionId: string
-  from: string | null
-  to: string | null
-}
-
 interface Evidence {
-  /** Première transmission journalisée par un admin. */
-  transmittedAt: Date | null
-  /** Sortie journalisée depuis un statut visible du recruteur. */
-  exitedAfterTransmission: boolean
   /** Décliné par CE recruteur. */
   declinedByRecruiter: boolean
 }
-
-const isVisible = (status: string | null): boolean => VISIBLE.includes(status as VisibleStatus)
 
 /**
  * Preuves de transmission / sortie, lues dans le journal d'audit en UNE
  * requête pour tous les dossiers du recruteur (jamais une par dossier).
  */
-async function loadEvidence(recruiterId: string, suggestionIds: string[]): Promise<Map<string, Evidence>> {
-  const out = new Map<string, Evidence>()
-  if (suggestionIds.length === 0) return out
-  const rows = await prisma.$queryRaw<AuditEvidenceRow[]>(Prisma.sql`
-    SELECT "action", "userId", "createdAt",
-           "metadata"->>'suggestionId' AS "suggestionId",
-           "metadata"->>'from' AS "from",
-           "metadata"->>'to' AS "to"
-    FROM "AuditLog"
-    WHERE "action" IN ('match_suggestion_status', 'recruiter_declined', 'candidate_declined')
-      AND "metadata"->>'suggestionId' = ANY(${suggestionIds}::text[])
-  `)
-  for (const row of rows) {
-    const e = out.get(row.suggestionId) ?? { transmittedAt: null, exitedAfterTransmission: false, declinedByRecruiter: false }
-    if (row.action === 'match_suggestion_status') {
-      if (row.to === 'proposee_recruteur' && (!e.transmittedAt || row.createdAt < e.transmittedAt)) {
-        e.transmittedAt = row.createdAt
-      }
-      if (row.to === 'ecartee' && isVisible(row.from)) e.exitedAfterTransmission = true
-    } else if (row.action === 'recruiter_declined') {
-      // Le recruteur ne peut décliner qu'un dossier transmis.
-      e.exitedAfterTransmission = true
-      if (row.userId === recruiterId) e.declinedByRecruiter = true
-    } else if (row.action === 'candidate_declined' && isVisible(row.from)) {
-      // `from` n'est journalisé que depuis 2026-10-15 : un retrait plus
-      // ancien d'un dossier envoyé directement par le moteur n'est pas prouvé.
-      e.exitedAfterTransmission = true
-    }
-    out.set(row.suggestionId, e)
-  }
-  return out
+async function loadEvidence(recruiterId: string, suggestionIds: string[]) {
+  const evidence = await loadTransmissionEvidence(suggestionIds)
+  const declined = new Map<string, Evidence>()
+  for (const [id, e] of evidence) declined.set(id, { declinedByRecruiter: e.declinedBy.includes(recruiterId) })
+  return { evidence, declined }
 }
 
 async function loadInterviewRows(recruiterId: string): Promise<InterviewRow[] | null> {
@@ -136,7 +100,7 @@ export async function loadRecruiterDashboard(recruiterId: string, now: Date = ne
       // Jamais `suggeree` ni les statuts hérités d'avant transmission.
       prisma.matchSuggestion.findMany({
         where: { status: { in: [...VISIBLE, 'ecartee'] }, opportunity: { recruiterId } },
-        select: { id: true, opportunityId: true, status: true, preselectionRank: true, createdAt: true, updatedAt: true },
+        select: { id: true, opportunityId: true, status: true, preselectionRank: true, createdAt: true, updatedAt: true, ...connectedAtSelect() },
       }),
       prisma.placement.groupBy({ by: ['stage'], where: { recruiterId }, _count: { _all: true } }),
       prisma.placement.count({ where: { recruiterId, createdAt: { gte: start } } }),
@@ -159,7 +123,7 @@ export async function loadRecruiterDashboard(recruiterId: string, now: Date = ne
   const upcoming = (interviewRows ?? []).filter((row) => isInterviewUpcoming(row, now))
   const nextRow = upcoming[0] ?? null
 
-  const [evidence, nextDossier] = await Promise.all([
+  const [{ evidence, declined }, nextDossier] = await Promise.all([
     loadEvidence(
       recruiterId,
       suggestions.map((s) => s.id),
@@ -182,14 +146,11 @@ export async function loadRecruiterDashboard(recruiterId: string, now: Date = ne
   const received: { opportunityId: string; status: keyof typeof status; receivedAt: Date }[] = []
   for (const s of suggestions) {
     const e = evidence.get(s.id)
-    if (s.status === 'ecartee') {
-      const transmitted = Boolean(e?.transmittedAt || e?.exitedAfterTransmission || s.preselectionRank !== null)
-      if (!transmitted) continue
-      if (e?.declinedByRecruiter) declinedByYou++
-    }
+    if (!isTransmittedDossier(s, e)) continue
+    if (s.status === 'ecartee' && declined.get(s.id)?.declinedByRecruiter) declinedByYou++
     const key = s.status as keyof typeof status
     status[key]++
-    const receivedAt = e?.transmittedAt ?? (s.status === 'proposee_recruteur' ? s.updatedAt : s.createdAt)
+    const receivedAt = dossierReceivedAt(s, e)
     received.push({ opportunityId: s.opportunityId, status: key, receivedAt })
   }
   const receivedTotal = received.length
@@ -199,11 +160,19 @@ export async function loadRecruiterDashboard(recruiterId: string, now: Date = ne
   const byDayFor = (keys: (keyof typeof status)[]) =>
     bucketByDay(received.filter((r) => keys.includes(r.status)).map((r) => r.receivedAt), days)
 
-  const connectedDates = suggestions.filter((s) => s.status === 'mise_en_relation').map((s) => s.updatedAt)
+  const connectedDates = suggestions.filter((s) => s.status === 'mise_en_relation').map((s) => connectedAtOf(s))
   const connectedWeeks = rollingWeeks(connectedDates, now)
 
   /* --- Offres ----------------------------------------------------- */
-  const openIds = new Set(offers.filter((o) => o.deadline >= startOfToday).map((o) => o.id))
+  // Offre ouverte : non pourvue (D1) et date limite non dépassée — même
+  // définition que `opportunityClosedReason()` (le compte du recruteur
+  // connecté est actif par construction).
+  const filledIds = new Set(
+    (await prisma.opportunity.findMany({ where: { recruiterId, ...filledOpportunityWhere() }, select: { id: true } })).map(
+      (o) => o.id,
+    ),
+  )
+  const openIds = new Set(offers.filter((o) => o.deadline >= startOfToday && !filledIds.has(o.id)).map((o) => o.id))
   const offerWeeks = rollingWeeks(offers.map((o) => o.createdAt), now)
   const perOffer = new Map(offers.map((o) => [o.id, { received: 0, toReview: 0, connected: 0, dismissed: 0 }]))
   for (const r of received) {
@@ -215,7 +184,7 @@ export async function loadRecruiterDashboard(recruiterId: string, now: Date = ne
     else c.toReview++
   }
   const byOffer = offers
-    .map((o) => ({ id: o.id, title: o.title, open: openIds.has(o.id), deadline: o.deadline.toISOString(), createdAt: o.createdAt, ...perOffer.get(o.id)! }))
+    .map((o) => ({ id: o.id, title: o.title, open: openIds.has(o.id), filled: filledIds.has(o.id), deadline: o.deadline.toISOString(), createdAt: o.createdAt, ...perOffer.get(o.id)! }))
     .sort(
       (a, b) =>
         b.received - a.received ||
@@ -266,7 +235,9 @@ export async function loadRecruiterDashboard(recruiterId: string, now: Date = ne
     offers: {
       total: offers.length,
       open: openIds.size,
-      expired: offers.length - openIds.size,
+      // Pourvues (D1) à part : `expired` ne compte que les offres non pourvues échues.
+      filled: filledIds.size,
+      expired: offers.length - openIds.size - filledIds.size,
       newLast7: offerWeeks.last7,
       newPrev7: offerWeeks.prev7,
     },

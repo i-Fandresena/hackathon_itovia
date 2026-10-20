@@ -1,0 +1,149 @@
+/* Récapitulatif d'une proposition d'embauche (recruteur, candidat, admin).
+   Préfixe `hps-`. */
+
+.hps {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--color-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+}
+
+.hps-warning {
+  border-left-color: var(--color-warning);
+}
+
+.hps-success {
+  border-left-color: var(--color-success);
+}
+
+.hps-info {
+  border-left-color: var(--color-accent);
+}
+
+.hps-muted {
+  border-left-color: var(--color-border-strong);
+}
+
+.hps-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  min-width: 0;
+}
+
+.hps-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.hps-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.hps-status-warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.hps-status-success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.hps-status-info {
+  background: var(--color-accent-muted);
+  color: var(--color-accent-hover);
+}
+
+.hps-status-muted {
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+}
+
+.hps-version {
+  font-size: 0.78rem;
+  color: var(--color-ink-muted);
+}
+
+.hps-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+.hps-rows div {
+  min-width: 0;
+}
+
+.hps-rows dt,
+.hps-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.hps-rows dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.hps-message,
+.hps-private {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.hps-private {
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+}
+
+.hps-quote {
+  font-style: italic;
+}
+
+.hps-state {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.hps-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 420px) {
+  .hps-actions > .btn {
+    flex: 1 1 100%;
+  }
+}

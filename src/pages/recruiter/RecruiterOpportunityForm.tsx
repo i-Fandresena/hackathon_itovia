@@ -15,8 +15,10 @@ import {
   SECTORS,
 } from '../../data/constants'
 import { useApp } from '../../context/AppContext'
+import { apiMyOpportunities } from '../../lib/api'
+import { OPPORTUNITY_POSITIONS_MAX, OPPORTUNITY_POSITIONS_MIN, positionsUpdateError } from '../../lib/hiring'
 import { checkMissions, normalizeRequiredSkills } from '../../lib/opportunityFields'
-import type { ExperienceLevel, OpportunityType, Sector } from '../../types'
+import type { ExperienceLevel, Opportunity, OpportunityType, Sector } from '../../types'
 
 type SectorDetails = Record<string, string | boolean>
 
@@ -34,6 +36,8 @@ const defaultForm: {
   missions: string[]
   level: ExperienceLevel
   deadline: string
+  /** Nombre de postes (D1) — saisi en texte, contrôlé à l'envoi. */
+  positions: string
 } = {
   title: '',
   category: CATEGORIES[0],
@@ -47,6 +51,7 @@ const defaultForm: {
   missions: [''],
   level: 'junior',
   deadline: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
+  positions: '1',
 }
 
 export function RecruiterOpportunityForm() {
@@ -57,10 +62,28 @@ export function RecruiterOpportunityForm() {
   const [form, setForm] = useState(defaultForm)
   const [error, setError] = useState('')
   const [showMissionErrors, setShowMissionErrors] = useState(false)
+  /** Modification : postes déjà pourvus et offre pourvue, lus dans « Mes offres »
+   *  (`GET /opportunities/mine`, qui fait foi ; le catalogue sert de repli). */
+  const [mine, setMine] = useState<(Opportunity & { activePlacements: number }) | null>(null)
 
   useEffect(() => {
     if (!id) return
-    const existing = opportunities.find((o) => o.id === id)
+    let cancelled = false
+    apiMyOpportunities()
+      .then((list) => {
+        if (!cancelled) setMine(list.find((o) => o.id === id) ?? null)
+      })
+      .catch(() => {
+        // Repli sur le catalogue : le serveur contrôle de toute façon le nombre de postes.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  useEffect(() => {
+    if (!id) return
+    const existing = mine ?? opportunities.find((o) => o.id === id)
     if (existing) {
       setForm({
         title: existing.title,
@@ -74,10 +97,17 @@ export function RecruiterOpportunityForm() {
         requiredSkills: existing.requiredSkills,
         missions: existing.missions?.length ? [...existing.missions] : [''],
         level: existing.level,
-        deadline: existing.deadline,
+        deadline: existing.deadline.slice(0, 10),
+        positions: String(existing.positions ?? 1),
       })
     }
-  }, [id, opportunities])
+  }, [id, opportunities, mine])
+
+  const activePlacements = mine?.activePlacements ?? 0
+  const positionsNumber = Number(form.positions)
+  const positionsError = form.positions === '' ? 'Indiquez le nombre de postes.' : positionsUpdateError(positionsNumber, activePlacements)
+  // Le nombre de postes atteint les embauches : l'offre passera pourvue (D1).
+  const willFill = isEdit && !mine?.filledAt && activePlacements > 0 && positionsError === null && positionsNumber === activePlacements
 
   const setDetail = (key: string, value: string | boolean) => {
     setForm((f) => ({ ...f, sectorDetails: { ...f.sectorDetails, [key]: value } }))
@@ -94,7 +124,16 @@ export function RecruiterOpportunityForm() {
       return
     }
     setShowMissionErrors(false)
-    const payload = { ...form, missions, requiredSkills: normalizeRequiredSkills(form.requiredSkills) }
+    if (positionsError) {
+      setError(positionsError)
+      return
+    }
+    const payload = {
+      ...form,
+      missions,
+      requiredSkills: normalizeRequiredSkills(form.requiredSkills),
+      positions: positionsNumber,
+    }
     const result = isEdit && id ? await updateOpportunity(id, payload) : await addOpportunity(payload)
     if (!result.ok) {
       setError(result.error ?? 'Enregistrement impossible.')
@@ -254,6 +293,33 @@ export function RecruiterOpportunityForm() {
               value={form.requiredSkills}
               onChange={(requiredSkills) => setForm((f) => ({ ...f, requiredSkills }))}
             />
+            <Field
+              label="Nombre de postes"
+              hint={
+                isEdit && activePlacements > 0
+                  ? `${activePlacements} poste${activePlacements > 1 ? 's' : ''} déjà pourvu${activePlacements > 1 ? 's' : ''} : au moins ${activePlacements}, au plus ${OPPORTUNITY_POSITIONS_MAX}. L’offre passe « pourvue » quand tous les postes le sont.`
+                  : `De ${OPPORTUNITY_POSITIONS_MIN} à ${OPPORTUNITY_POSITIONS_MAX}. L’offre passe « pourvue » quand tous les postes le sont.`
+              }
+              error={form.positions !== '' && positionsError ? positionsError : undefined}
+            >
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={Math.max(OPPORTUNITY_POSITIONS_MIN, activePlacements)}
+                max={OPPORTUNITY_POSITIONS_MAX}
+                step={1}
+                required
+                value={form.positions}
+                aria-invalid={form.positions !== '' && positionsError ? true : undefined}
+                onChange={(e) => setForm({ ...form, positions: e.target.value.replace(/\D/g, '').slice(0, 2) })}
+              />
+            </Field>
+            {willFill && (
+              <p className="field-hint" role="note" style={{ marginTop: '-0.5rem', marginBottom: '1rem', color: 'var(--color-warning)' }}>
+                Avec ce nombre, tous les postes sont pourvus : l’offre passera « pourvue » à l’enregistrement et ses
+                autres dossiers seront clos (chaque candidat concerné reçoit un message neutre d’OffRec).
+              </p>
+            )}
             <Field label="Date limite de l’offre">
               <Input
                 type="date"

@@ -1,0 +1,104 @@
+/* Onglet admin « Propositions » (Mise en relation). Préfixe `ahp-`. */
+
+.ahp {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.ahp-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.ahp-intro {
+  margin: -0.5rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--color-ink-muted);
+}
+
+.ahp-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ahp-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0 0.75rem;
+  align-items: end;
+}
+
+.ahp-dossier {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-muted);
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.ahp-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.ahp-count {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+}
+
+.ahp-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ahp-card {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.ahp-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+}
+
+.ahp-card-id {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.ahp-card-id strong {
+  overflow-wrap: anywhere;
+}
+
+.ahp-card-offer {
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}

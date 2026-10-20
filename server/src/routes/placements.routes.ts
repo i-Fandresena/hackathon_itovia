@@ -3,7 +3,16 @@ import type { MatchSuggestionStatus, Placement } from '@prisma/client'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
 import { placementInputSchema, placementStageSchema } from '../lib/validation.js'
-import { actorLabel, scheduleAdminNotification } from '../lib/notify.js'
+import { actorLabel, clip, scheduleAdminNotification, scheduleNotification } from '../lib/notify.js'
+import { GRADUATE_PLACEMENT_AUTOMATIC_ERROR } from '../../../src/lib/hiring.js'
+import { HIRING_SUPPORTED, filledAtOf, filledByOf, placementHiringFields, positionsOf } from '../lib/hiring-store.js'
+import {
+  applyAutoFillTx,
+  countActivePlacements,
+  scheduleFilledClosureEffects,
+  type FilledClosure,
+} from '../lib/opportunity-fill.js'
+import { notifyRecruiter } from '../lib/interviews.js'
 
 const STAGE_LABELS: Record<string, string> = {
   etape1_due: 'étape 1 due',
@@ -40,7 +49,9 @@ class PlacementRefusal extends Error {
   }
 }
 
-/** Placement renvoyé au recruteur ou à l'admin : liste blanche explicite. */
+/** Placement renvoyé au recruteur ou à l'admin : liste blanche explicite.
+ *  Sous-lot 5 : origine (`declaration` | `proposition_acceptee`), dossier et
+ *  proposition d'origine, poste, date de début et type de contrat. */
 function toPlacementView(p: Placement) {
   return {
     id: p.id,
@@ -52,6 +63,7 @@ function toPlacementView(p: Placement) {
     stage: p.stage,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
+    ...placementHiringFields(p),
   }
 }
 
@@ -59,7 +71,12 @@ const router = Router()
 
 /**
  * Déclaration d'un placement par le recruteur (suivi déclaratif du success
- * fee). Contrôles (sous-lot 0, 2026-10-16) :
+ * fee). Décision D4 (sous-lot 5) : RÉSERVÉE aux talents non diplômés — pour
+ * un candidat diplômé (`candidateId`), 400 : son placement est créé
+ * automatiquement quand il accepte la proposition d'embauche (seulement
+ * avec un client Prisma régénéré ; sinon l'ancien parcours reste ouvert).
+ * La déclaration d'un talent peut pourvoir l'offre (D1, même transaction).
+ * Contrôles (sous-lot 0, 2026-10-16) :
  * - l'offre lui appartient (404 sinon, sans révéler l'offre d'un autre) ;
  * - la personne lui a bien été proposée pour CETTE offre : dossier
  *   `MatchSuggestion` transmis (`proposee_recruteur` et au-delà) pour un
@@ -80,6 +97,10 @@ router.post('/', requireRole('recruiter'), async (req, res, next) => {
     })
     if (!opportunity || opportunity.recruiterId !== recruiterId) {
       res.status(404).json({ error: OPPORTUNITY_NOT_FOUND })
+      return
+    }
+    if (body.candidateId && HIRING_SUPPORTED) {
+      res.status(400).json({ error: GRADUATE_PLACEMENT_AUTOMATIC_ERROR })
       return
     }
 
@@ -106,8 +127,9 @@ router.post('/', requireRole('recruiter'), async (req, res, next) => {
     }
 
     let placement: Placement
+    let closure: FilledClosure | null = null
     try {
-      placement = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx) => {
         // Sérialise les déclarations concurrentes sur cette offre (double
         // clic, deux onglets) : la seconde attend la première, puis voit
         // son placement et reçoit 409.
@@ -143,8 +165,12 @@ router.post('/', requireRole('recruiter'), async (req, res, next) => {
             },
           },
         })
-        return created
+        // D1 : le placement d'un talent compte pour le nombre de postes.
+        const fill = body.talentId ? await applyAutoFillTx(tx, opportunity.id, { now: new Date(), actorId: recruiterId }) : null
+        return { created, fill }
       })
+      placement = result.created
+      closure = result.fill
     } catch (err) {
       if (err instanceof PlacementRefusal) {
         res.status(err.httpStatus).json({ error: err.message })
@@ -154,6 +180,7 @@ router.post('/', requireRole('recruiter'), async (req, res, next) => {
     }
 
     res.status(201).json({ placement: toPlacementView(placement) })
+    scheduleFilledClosureEffects(closure)
     scheduleAdminNotification(async () => ({
       event: 'placement_declared',
       category: 'recruteur',
@@ -238,6 +265,24 @@ router.put('/:id/stage', requireRole('recruiter', 'admin'), async (req, res, nex
       })
     }
     res.json({ placement: toPlacementView(updated) })
+    // Placement annulé sur une offre pourvue qui repasse sous son nombre de
+    // postes (D1) : on PROPOSE au recruteur de rouvrir, jamais automatiquement.
+    if (updated.stage === 'annule' && placement.stage !== 'annule' && updated.opportunityId && HIRING_SUPPORTED) {
+      const opportunityId = updated.opportunityId
+      scheduleNotification('Proposition de réouverture d’une offre pourvue', async () => {
+        const offer = await prisma.opportunity.findUnique({ where: { id: opportunityId } })
+        if (!offer || !filledAtOf(offer) || filledByOf(offer) !== 'auto') return
+        const active = await countActivePlacements(prisma, opportunityId)
+        if (active >= positionsOf(offer)) return
+        await notifyRecruiter(
+          offer.recruiterId,
+          'Offre pourvue : un poste s’est libéré',
+          `Un placement de l’offre « ${clip(offer.title)} » est annulé (${active}/${positionsOf(offer)} postes pourvus). ` +
+            'L’offre reste fermée : rouvrez-la depuis « Mes offres » si vous souhaitez recruter de nouveau.',
+          '/recruteur/offres',
+        )
+      })
+    }
     // Seule l'autodéclaration du recruteur est notifiée : la correction d'un
     // admin est déjà une décision d'admin, tracée dans le journal d'audit.
     if (req.session!.role === 'recruiter' && placement.stage !== updated.stage) {
@@ -257,6 +302,7 @@ router.put('/:id/stage', requireRole('recruiter', 'admin'), async (req, res, nex
   }
 })
 
+/** Tous les placements (admin), avec les champs du flux d'embauche (origine, dossier, proposition, poste, début, contrat). */
 router.get('/', requireRole('admin'), async (_req, res, next) => {
   try {
     const placements = await prisma.placement.findMany({

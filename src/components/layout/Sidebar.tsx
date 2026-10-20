@@ -55,23 +55,57 @@ export interface RoleLink {
 }
 
 /** Entretiens à traiter par le recruteur (empêchement signalé par le
- *  candidat) — pastille de l'entrée « Entretiens », calculée sur les dossiers
- *  déjà chargés (`receivedSuggestions`), sans requête de plus. */
+ *  candidat, ou issue à renseigner une fois l'heure de fin passée) —
+ *  pastille de l'entrée « Entretiens », calculée sur les dossiers déjà
+ *  chargés (`receivedSuggestions`), sans requête de plus. */
 export function countInterviewsToHandle(
-  received: { status: string; interview?: { status: string } | null }[],
+  received: { status: string; phase?: string | null; interview?: { status: string } | null }[],
 ): number {
-  return received.filter((s) => s.status === 'mise_en_relation' && s.interview?.status === 'empechement').length
+  return received.filter(
+    (s) =>
+      s.status === 'mise_en_relation' &&
+      (s.phase === 'issue_a_renseigner' || s.interview?.status === 'empechement'),
+  ).length
 }
 
 /** Entretiens qui attendent la réponse du candidat (planifiés ou
- *  reprogrammés, pas encore commencés) — pastille de son entrée
- *  « Entretiens », calculée sur `mySuggestions`, sans requête de plus. */
+ *  reprogrammés, pas encore commencés, ou absence qu'il peut expliquer) —
+ *  pastille de son entrée « Entretiens », calculée sur `mySuggestions`,
+ *  sans requête de plus. */
 export function countInterviewsAwaitingReply(
-  dossiers: { status: string; interview?: { status: InterviewStatus; scheduledAt: string } | null }[],
+  dossiers: {
+    status: string
+    interview?: { status: InterviewStatus; scheduledAt: string } | null
+    interviews?: { canExplainAbsence?: boolean }[]
+  }[],
 ): number {
   return dossiers.filter(
-    (s) => s.status === 'mise_en_relation' && s.interview && interviewAwaitsCandidateReply(s.interview),
+    (s) =>
+      s.status === 'mise_en_relation' &&
+      ((s.interview && interviewAwaitsCandidateReply(s.interview)) ||
+        (s.interviews ?? []).some((round) => round.canExplainAbsence)),
   ).length
+}
+
+/** Propositions d'embauche qui attendent la réponse du candidat (sous-lot 6) —
+ *  pastille de son « Tableau de bord », où elles s'affichent en tête ;
+ *  calculée sur `mySuggestions`, sans requête de plus. Statut effectif du
+ *  serveur : une proposition échue n'est plus `envoyee`. */
+export function countPendingProposals(
+  dossiers: { status: string; proposal?: { status: string; expiresAt: string } | null }[],
+  now: Date = new Date(),
+): number {
+  return dossiers.filter(
+    (s) =>
+      s.status === 'mise_en_relation' &&
+      s.proposal?.status === 'envoyee' &&
+      Date.parse(s.proposal.expiresAt) > now.getTime(),
+  ).length
+}
+
+/** Pastille du « Tableau de bord » du rôle (candidat : propositions à traiter). */
+export function countHomeBadge(role: UserRole, mine: Parameters<typeof countPendingProposals>[0]): number {
+  return role === 'candidate' ? countPendingProposals(mine) : 0
 }
 
 /** Pastille « Entretiens » du rôle (recruteur : empêchements à traiter ;
@@ -101,6 +135,7 @@ export function getLinksByRole(
   unreadCount: number,
   canVerifyCv = false,
   interviewsToHandle = 0,
+  homeBadge = 0,
 ): RoleLink[] {
   const LINKS_BY_ROLE: Record<UserRole, RoleLink[]> = {
     // Les 4 premières entrées forment la barre d'onglets mobile : le suivi
@@ -124,7 +159,8 @@ export function getLinksByRole(
       { to: '/annuaire', label: 'Annuaire', icon: Store },
     ],
     candidate: [
-      { to: '/candidat', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
+      // Pastille : propositions d'embauche à traiter (affichées en tête du tableau de bord).
+      { to: '/candidat', label: 'Tableau de bord', icon: LayoutDashboard, end: true, badge: homeBadge },
       // Juste après le tableau de bord, d'où l'on suit ses dossiers ; hors
       // barre d'onglets mobile (`menuOnly`), déjà pleine (Tableau de bord,
       // Annuaire, Notifications, Profil) : sa pastille passe sur « Menu ».
@@ -293,6 +329,7 @@ export function Sidebar({ onNavigate, onLogout }: SidebarProps) {
     unreadCount,
     currentUser?.canVerifyCv === true,
     countInterviewBadge(role, receivedSuggestions, mySuggestions),
+    countHomeBadge(role, mySuggestions),
   )
   const mainLinks = links.filter((l) => !l.account)
   const accountLinks = links.filter((l) => l.account)

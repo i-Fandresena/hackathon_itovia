@@ -6,11 +6,35 @@ import {
   interviewWindowError,
 } from '../../../src/lib/interview.js'
 import {
+  ABSENCE_REPLY_MAX,
+  ABSENCE_REPLY_MIN,
+  CONTRACT_DURATION_MAX_MONTHS,
+  CONTRACT_DURATION_MIN_MONTHS,
+  CONTRACT_TYPES,
+  DECLINE_NOTE_MAX,
+  HIRE_DECLINE_REASONS,
+  HIRE_JOB_TITLE_MAX,
+  HIRE_JOB_TITLE_MIN,
+  HIRE_MESSAGE_MAX,
+  HIRE_PROPOSAL_STATUSES,
+  INTERVIEW_OUTCOME_FILTERS,
+  INTERVIEW_RESULTS,
+  INTERVIEW_RESULT_REASONS,
+  OPPORTUNITY_POSITIONS_MAX,
+  OPPORTUNITY_POSITIONS_MIN,
+  OUTCOME_NOTE_MAX,
+  contractDurationError,
+  hireSalaryError,
+  hireStartDateError,
+  outcomeReasonError,
+} from '../../../src/lib/hiring.js'
+import {
   OPPORTUNITY_SKILLS_MAX,
   checkMissions,
   normalizeRequiredSkills,
   skillError,
 } from '../../../src/lib/opportunityFields.js'
+import { HIRING_PERIODS } from './hiring-metrics.js'
 
 export const educationLevels = ['bac', 'licence', 'master', 'autodidacte', 'technique'] as const
 export const experienceLevels = ['debutant', 'junior', 'intermediaire', 'senior'] as const
@@ -141,6 +165,13 @@ const opportunitySkillsSchema = z
     return skills
   })
 
+/** Nombre de postes d'une offre (D1) : 1 à 50 (`positionsUpdateError` côté serveur pour le minimum de placements). */
+export const opportunityPositionsField = z
+  .number({ invalid_type_error: 'Nombre de postes invalide.' })
+  .int('Nombre de postes invalide.')
+  .min(OPPORTUNITY_POSITIONS_MIN, `Nombre de postes attendu : de ${OPPORTUNITY_POSITIONS_MIN} à ${OPPORTUNITY_POSITIONS_MAX}.`)
+  .max(OPPORTUNITY_POSITIONS_MAX, `Nombre de postes attendu : de ${OPPORTUNITY_POSITIONS_MIN} à ${OPPORTUNITY_POSITIONS_MAX}.`)
+
 export const opportunityInputSchema = z.object({
   title: z.string().min(3, 'Le titre doit contenir au moins 3 caractères.'),
   category: z.string().min(2, 'La catégorie est requise.'),
@@ -157,6 +188,8 @@ export const opportunityInputSchema = z.object({
   level: z.enum(experienceLevels, { errorMap: () => ({ message: 'Niveau d’expérience invalide.' }) }),
   deadline: z.string().refine((v) => Boolean(v) && !Number.isNaN(Date.parse(v)), 'Date limite invalide.'),
   featured: z.boolean().optional(),
+  /** Nombre de postes (D1). Absent : 1 à la création, inchangé en modification. */
+  positions: opportunityPositionsField.optional(),
 })
 
 export const applicationInputSchema = z.object({
@@ -188,9 +221,16 @@ export const matchSuggestionStatusSchema = z.object({
   status: z.enum(matchSuggestionStatuses),
 })
 
-/* Entretiens fixés par le recruteur (décision 2026-10-14, lib/interviews.ts). */
+/* Textes libres sans coordonnées : OffRec reste l'intermédiaire
+ * (`contactDetailsError`, src/lib/interview.ts). */
 
-const interviewOptionalText = (max: number, tooLong: string) =>
+const rejectContactDetails = (value: string | null | undefined, ctx: z.RefinementCtx) => {
+  const error = contactDetailsError(value)
+  if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error })
+}
+
+/** Texte libre facultatif : vide, absent ou `null` → `null`. */
+const optionalNoContactText = (max: number, tooLong: string) =>
   z
     .string()
     .trim()
@@ -198,10 +238,20 @@ const interviewOptionalText = (max: number, tooLong: string) =>
     .optional()
     .nullable()
     .transform((value) => (value ? value : null))
-    .superRefine((value, ctx) => {
-      const error = contactDetailsError(value)
-      if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error })
-    })
+    .superRefine(rejectContactDetails)
+
+/** Texte libre obligatoire, entre `min` et `max` caractères après `trim`. */
+const noContactText = (options: { min: number; max: number; tooShort: string; tooLong: string }) =>
+  z
+    .string({ required_error: options.tooShort })
+    .trim()
+    .min(options.min, options.tooShort)
+    .max(options.max, options.tooLong)
+    .superRefine(rejectContactDetails)
+
+/* Entretiens fixés par le recruteur (décision 2026-10-14, lib/interviews.ts). */
+
+const interviewOptionalText = optionalNoContactText
 
 /**
  * Date et heure de l'entretien : instant ISO 8601 avec fuseau explicite
@@ -234,22 +284,152 @@ export const interviewRescheduleSchema = interviewScheduleSchema.extend({
     .max(INTERVIEW_MESSAGE_MAX, `Message trop long (${INTERVIEW_MESSAGE_MAX} caractères au plus).`)
     .nullable()
     .optional()
-    .superRefine((value, ctx) => {
-      const error = contactDetailsError(value)
-      if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error })
-    }),
+    .superRefine(rejectContactDetails),
 })
 
 export const interviewUnavailableSchema = z.object({
-  reason: z
-    .string({ required_error: 'Indiquez brièvement le motif de l’empêchement.' })
-    .trim()
-    .min(3, 'Indiquez brièvement le motif de l’empêchement.')
-    .max(INTERVIEW_REASON_MAX, `Motif trop long (${INTERVIEW_REASON_MAX} caractères au plus).`)
+  reason: noContactText({
+    min: 3,
+    max: INTERVIEW_REASON_MAX,
+    tooShort: 'Indiquez brièvement le motif de l’empêchement.',
+    tooLong: `Motif trop long (${INTERVIEW_REASON_MAX} caractères au plus).`,
+  }),
+})
+
+/* Après l'entretien (plan du 2026-10-16) : règles dans src/lib/hiring.ts.
+ * Issue, réponse d'absence et filtre « Issue » : routes du sous-lot 3
+ * (lib/hiring-service.ts, lib/interview-list.ts) ; propositions d'embauche
+ * et offre pourvue : sous-lot 5 (lib/hire-proposals.ts,
+ * lib/opportunity-fill.ts). */
+
+const interviewIdField = z.string({ required_error: 'Entretien manquant.' }).uuid('Entretien invalide.')
+const proposalIdField = z.string({ required_error: 'Proposition manquante.' }).uuid('Proposition invalide.')
+const revisionField = z
+  .number({ required_error: 'Révision manquante.', invalid_type_error: 'Révision invalide.' })
+  .int('Révision invalide.')
+  .min(0, 'Révision invalide.')
+
+/**
+ * Issue d'un tour par le recruteur. `nextRound` (date du tour suivant, mêmes
+ * règles que `interviewScheduleSchema`) seulement avec `second_entretien`.
+ * La note privée n'est relue que par son auteur (décision D3).
+ */
+export const interviewOutcomeSchema = z
+  .object({
+    interviewId: interviewIdField,
+    result: z.enum(INTERVIEW_RESULTS, { errorMap: () => ({ message: 'Issue d’entretien invalide.' }) }),
+    reason: z.enum(INTERVIEW_RESULT_REASONS, { errorMap: () => ({ message: 'Motif invalide.' }) }).optional(),
+    note: optionalNoContactText(OUTCOME_NOTE_MAX, `Note trop longue (${OUTCOME_NOTE_MAX} caractères au plus).`),
+    nextRound: interviewScheduleSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    const reasonError = outcomeReasonError(value.result, value.reason)
+    if (reasonError) ctx.addIssue({ code: z.ZodIssueCode.custom, message: reasonError, path: ['reason'] })
+    if (value.nextRound && value.result !== 'second_entretien') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'La date d’un tour suivant ne s’indique qu’avec l’issue « Second entretien ».',
+        path: ['nextRound'],
+      })
+    }
+  })
+
+/** Explication d'absence du candidat (lue par les admins seuls). */
+export const absenceReplySchema = z.object({
+  interviewId: interviewIdField,
+  reason: noContactText({
+    min: ABSENCE_REPLY_MIN,
+    max: ABSENCE_REPLY_MAX,
+    tooShort: 'Expliquez brièvement votre absence.',
+    tooLong: `Explication trop longue (${ABSENCE_REPLY_MAX} caractères au plus).`,
+  }),
+})
+
+const hireProposalFields = {
+  jobTitle: noContactText({
+    min: HIRE_JOB_TITLE_MIN,
+    max: HIRE_JOB_TITLE_MAX,
+    tooShort: `Intitulé du poste trop court (${HIRE_JOB_TITLE_MIN} caractères au moins).`,
+    tooLong: `Intitulé du poste trop long (${HIRE_JOB_TITLE_MAX} caractères au plus).`,
+  }),
+  /** Salaire mensuel brut, en Ariary (entier). */
+  monthlySalaryAr: z
+    .number({
+      required_error: 'Indiquez le salaire mensuel brut en Ariary.',
+      invalid_type_error: 'Indiquez le salaire mensuel brut en Ariary.',
+    })
     .superRefine((value, ctx) => {
-      const error = contactDetailsError(value)
+      const error = hireSalaryError(value)
       if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error })
     }),
+  /** Jour civil AAAA-MM-JJ à Madagascar : d'aujourd'hui à +180 jours. */
+  startDate: z.string({ required_error: 'Indiquez la date de début.' }).superRefine((value, ctx) => {
+    const error = hireStartDateError(value, new Date())
+    if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error })
+  }),
+  contractType: z.enum(CONTRACT_TYPES, { errorMap: () => ({ message: 'Type de contrat invalide.' }) }),
+  contractDurationMonths: z
+    .number({ invalid_type_error: 'Durée du contrat invalide.' })
+    .int('Durée du contrat invalide.')
+    .min(CONTRACT_DURATION_MIN_MONTHS, `Durée attendue : de ${CONTRACT_DURATION_MIN_MONTHS} à ${CONTRACT_DURATION_MAX_MONTHS} mois.`)
+    .max(CONTRACT_DURATION_MAX_MONTHS, `Durée attendue : de ${CONTRACT_DURATION_MIN_MONTHS} à ${CONTRACT_DURATION_MAX_MONTHS} mois.`)
+    .nullable()
+    .optional(),
+  message: optionalNoContactText(HIRE_MESSAGE_MAX, `Message trop long (${HIRE_MESSAGE_MAX} caractères au plus).`),
+}
+
+/** Proposition d'embauche (recruteur) : durée obligatoire pour un CDD ou un stage, interdite pour un CDI. */
+export const hireProposalSchema = z.object(hireProposalFields).superRefine((value, ctx) => {
+  const error = contractDurationError(value.contractType, value.contractDurationMonths)
+  if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error, path: ['contractDurationMonths'] })
+})
+
+/**
+ * Modification d'une proposition en attente : champs modifiés + révision
+ * lue. La cohérence contrat / durée n'est contrôlée ici que si les deux
+ * champs sont envoyés ; le serveur la recontrôle sur la proposition
+ * fusionnée (`mergeProposalRevision`, lib/hire-proposals.ts).
+ */
+export const hireProposalReviseSchema = z
+  .object(hireProposalFields)
+  .partial()
+  .extend({ revision: revisionField })
+  .superRefine((value, ctx) => {
+    const { revision: _revision, ...changes } = value
+    if (Object.values(changes).every((field) => field === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Aucune modification à enregistrer.' })
+    }
+    if (value.contractType && value.contractDurationMonths !== undefined) {
+      const error = contractDurationError(value.contractType, value.contractDurationMonths)
+      if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error, path: ['contractDurationMonths'] })
+    }
+  })
+
+/** Retrait d'une proposition par le recruteur. */
+export const hireProposalWithdrawSchema = z.object({ revision: revisionField })
+
+/** Acceptation par le candidat : la révision qu'il a lue. */
+export const hireProposalAcceptSchema = z.object({ proposalId: proposalIdField, revision: revisionField })
+
+/** Refus par le candidat : catégorie et précision facultatives (précision lue par les admins seuls). */
+export const hireProposalDeclineSchema = z.object({
+  proposalId: proposalIdField,
+  revision: revisionField,
+  reason: z.enum(HIRE_DECLINE_REASONS, { errorMap: () => ({ message: 'Motif invalide.' }) }).optional(),
+  note: optionalNoContactText(DECLINE_NOTE_MAX, `Précision trop longue (${DECLINE_NOTE_MAX} caractères au plus).`),
+})
+
+/** `GET /admin/matching/hire-proposals?status=` (statut effectif). */
+export const adminHireProposalQuerySchema = z.object({
+  status: z.enum(HIRE_PROPOSAL_STATUSES, { errorMap: () => ({ message: 'Statut de proposition invalide.' }) }).optional(),
+})
+
+/** Réouverture d'une offre pourvue (`positions` facultatif, `checkOpportunityFillAction`). */
+export const opportunityReopenSchema = z.object({ positions: opportunityPositionsField.optional() })
+
+/** Filtre « Issue » des listes d'entretiens (`?outcome=`, recruteur et admin). */
+export const interviewOutcomeFilterSchema = z.enum(INTERVIEW_OUTCOME_FILTERS, {
+  errorMap: () => ({ message: 'Filtre d’issue invalide.' }),
 })
 
 /* Présélection ATS par offre (lib/preselection.ts). */
@@ -802,6 +982,8 @@ export const recruiterInterviewQuerySchema = z.object({
   period: z.enum(interviewPeriods, { errorMap: () => ({ message: 'Période invalide.' }) }).default('a_venir'),
   status: z.enum(interviewStatuses, { errorMap: () => ({ message: 'Statut d’entretien invalide.' }) }).optional(),
   opportunityId: z.string().uuid('Offre invalide.').optional(),
+  /** `a_renseigner` (issue due) ou une issue posée. */
+  outcome: interviewOutcomeFilterSchema.optional(),
 })
 
 /** `GET /admin/matching/interviews` : en plus, recruteur, problème d'agenda
@@ -815,3 +997,27 @@ export const adminInterviewQuerySchema = recruiterInterviewQuerySchema.extend({
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
   limit: z.coerce.number().int().min(1).max(100).default(30),
 })
+
+/* Mesure « après l'entretien » (sous-lot 7, lib/hiring-stats.ts). */
+
+/** Période de la cohorte (dossiers transmis pendant les n derniers jours, ou depuis le début). */
+const hiringPeriodField = z
+  .enum(HIRING_PERIODS, { errorMap: () => ({ message: 'Période invalide (30, 90, 365 ou all).' }) })
+  .default('all')
+
+/** `GET /recruiter/stats/hiring` : période et offre facultative (la sienne). */
+export const recruiterHiringStatsQuerySchema = z.object({
+  period: hiringPeriodField,
+  opportunityId: z.string().uuid('Offre invalide.').optional(),
+})
+
+/** `GET /admin/stats/hiring` : en plus, recruteur et exclusion des comptes de test. */
+export const adminHiringStatsQuerySchema = recruiterHiringStatsQuerySchema.extend({
+  recruiterId: z.string().uuid('Recruteur invalide.').optional(),
+  excludeTest: queryFlag,
+})
+
+/** `POST /admin/stats/research-export` : exclusion facultative des comptes de test. */
+export const researchExportSchema = z
+  .object({ excludeTest: z.boolean({ invalid_type_error: 'Valeur attendue : true ou false.' }).default(false) })
+  .strict()

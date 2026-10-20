@@ -72,6 +72,19 @@ export function csvPreamble(title: string, computedAt: string, note: string): Cs
   return [[title, `Calculé le ${formatDateTime(computedAt)}`], [note], []]
 }
 
+/** Télécharge un document CSV déjà construit (BOM compris) sous `filename`. */
+export function downloadCsvText(csv: string, filename: string) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 /** Télécharge `rows` sous `<prefix>-AAAA-MM-JJ_HHhMM.csv` (heure locale du calcul). */
 export function downloadCsv(rows: CsvRow[], prefix: string, computedAt: string) {
   const blob = new Blob([csvDocument(rows)], { type: 'text/csv;charset=utf-8' })

@@ -44,3 +44,70 @@
   outline-offset: 2px;
   border-radius: var(--radius-xs);
 }
+
+/* Après l'entretien : issue, motif et explication d'absence (jamais la note). */
+.aint-outcome-line {
+  display: block;
+  margin-top: 0.2rem;
+}
+
+.aint-modal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin: -0.5rem 0 1rem;
+}
+
+.aint-modal-head .aint-modal-offer {
+  margin: 0;
+  min-width: 0;
+}
+
+.aint-outcome {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  font-size: 0.85rem;
+}
+
+.aint-outcome > div {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  gap: 0.6rem;
+}
+
+.aint-outcome dt {
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.aint-outcome dd {
+  margin: 0;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.aint-modal-text {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+}
+
+.aint-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 420px) {
+  .aint-outcome > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+}

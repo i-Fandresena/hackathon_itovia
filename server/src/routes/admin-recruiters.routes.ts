@@ -4,8 +4,9 @@ import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
 import { adminRecruiterIdParamSchema, adminRecruiterListQuerySchema } from '../lib/validation.js'
 import { loadCompanyTrust } from '../lib/companies.js'
-import { startOfUtcDay } from '../lib/preselection.js'
+import { opportunityClosedReason, startOfUtcDay } from '../lib/preselection.js'
 import { MISSIONS_SELECT, missionsOf } from '../lib/opportunity-missions.js'
+import { HIRING_SUPPORTED, filledAtOf } from '../lib/hiring-store.js'
 
 /**
  * Comptes recruteurs, côté admin (`/api/admin/recruiters`) — CONSULTATION
@@ -41,6 +42,30 @@ interface OpportunityLite {
   recruiterId: string
   deadline: Date
   createdAt: Date
+}
+
+/**
+ * `filledAt` (offre pourvue, D1) ajouté au `select` des offres seulement avec
+ * un client Prisma régénéré ; lu ensuite par `filledAtOf` (`null` sinon).
+ */
+const OPPORTUNITY_FILL_SELECT = (HIRING_SUPPORTED ? { filledAt: true } : {}) as {}
+
+/**
+ * Offre ouverte : la définition UNIQUE `opportunityClosedReason`
+ * (lib/preselection.ts, jumelle SQL `openOpportunityWhere`) — date limite
+ * non dépassée, offre non pourvue, compte recruteur actif. Sous-lot 6 : une
+ * offre pourvue n'était plus comptée à part et passait pour ouverte.
+ */
+function offerState(o: OpportunityLite, recruiterStatus: string, now: Date) {
+  const filledAt = filledAtOf(o)
+  const closedReason = opportunityClosedReason({ deadline: o.deadline, filledAt }, { role: 'recruiter', status: recruiterStatus }, now)
+  return {
+    open: closedReason === null,
+    closedReason,
+    filled: filledAt !== null,
+    /** Date limite dépassée sur une offre non pourvue. */
+    expired: filledAt === null && o.deadline < startOfUtcDay(now),
+  }
 }
 
 /** Statuts suivis un par un ; `proposee_candidat` / `interet_candidat` (hérités) sont regroupés dans `legacy`. */
@@ -126,7 +151,7 @@ function buildSummaries(
   activity: Activity,
   trust: Awaited<ReturnType<typeof loadCompanyTrust>>,
 ) {
-  const today = startOfUtcDay(new Date())
+  const now = new Date()
   const oppsByRecruiter = new Map<string, OpportunityLite[]>()
   for (const o of opportunities) {
     const list = oppsByRecruiter.get(o.recruiterId) ?? []
@@ -152,7 +177,8 @@ function buildSummaries(
     }
     const placement = activity.placementsByRecruiter.get(r.id)
     lastActivity = later(lastActivity, placement?.last)
-    const openOffers = opps.filter((o) => o.deadline >= today).length
+    const states = opps.map((o) => offerState(o, r.status, now))
+    const openOffers = states.filter((state) => state.open).length
     const companyTrust = r.linkedCompany ? trust.get(r.linkedCompany.id)?.trust : undefined
 
     return {
@@ -195,8 +221,12 @@ function buildSummaries(
         : null,
       counts: {
         offers: opps.length,
+        /** Offres ouvertes : `opportunityClosedReason` (non pourvue, date limite, compte actif). */
         openOffers,
-        expiredOffers: opps.length - openOffers,
+        /** Offres pourvues (D1), quelle que soit leur date limite. */
+        filledOffers: states.filter((state) => state.filled).length,
+        /** Date limite dépassée, offre non pourvue. */
+        expiredOffers: states.filter((state) => state.expired).length,
         /** Profils en attente de validation admin (`suggeree`). */
         awaitingValidation: totals.suggeree,
         /** Profils actuellement chez le recruteur : transmis, intérêt exprimé ou mis en relation. */
@@ -249,7 +279,7 @@ router.get('/', async (req, res, next) => {
     const opportunities = ids.length
       ? await prisma.opportunity.findMany({
           where: { recruiterId: { in: ids } },
-          select: { id: true, recruiterId: true, deadline: true, createdAt: true },
+          select: { id: true, recruiterId: true, deadline: true, createdAt: true, ...OPPORTUNITY_FILL_SELECT },
         })
       : []
     const [activity, trust] = await Promise.all([loadActivity(ids, opportunities), loadCompanyTrustFor(recruiters)])
@@ -323,6 +353,7 @@ router.get('/:id', async (req, res, next) => {
           deadline: true,
           featured: true,
           createdAt: true,
+          ...OPPORTUNITY_FILL_SELECT,
         },
       }),
       prisma.conversation.findFirst({
@@ -351,7 +382,7 @@ router.get('/:id', async (req, res, next) => {
     const [summary] = buildSummaries([recruiter], opportunities, activity, trust)
     const placementCount = new Map(placementsByOpp.map((p) => [p.opportunityId as string, p._count._all]))
 
-    const today = startOfUtcDay(new Date())
+    const now = new Date()
     const offers = opportunities
       .map((o) => ({
         id: o.id,
@@ -368,15 +399,18 @@ router.get('/:id', async (req, res, next) => {
         featured: o.featured,
         createdAt: o.createdAt.toISOString(),
         deadline: o.deadline.toISOString(),
-        expired: o.deadline < today,
+        // Même définition que les compteurs (`offerState`) : `open`,
+        // `closedReason` (texte affiché), `filled`, `expired`.
+        ...offerState(o, recruiter.status, now),
         suggestions: activity.suggestionsByOpp.get(o.id) ?? emptySuggestionCounts(),
         talentProposals: activity.proposalsByOpp.get(o.id)?.count ?? 0,
         placements: placementCount.get(o.id) ?? 0,
       }))
-      // Ouvertes d'abord (date limite la plus proche en tête), puis expirées (les plus récentes en tête).
+      // Ouvertes d'abord (date limite la plus proche en tête), puis fermées —
+      // pourvues ou expirées (les plus récentes en tête).
       .sort((a, b) => {
-        if (a.expired !== b.expired) return a.expired ? 1 : -1
-        const byDeadline = a.expired
+        if (a.open !== b.open) return a.open ? -1 : 1
+        const byDeadline = !a.open
           ? Date.parse(b.deadline) - Date.parse(a.deadline)
           : Date.parse(a.deadline) - Date.parse(b.deadline)
         return byDeadline !== 0 ? byDeadline : a.id.localeCompare(b.id)

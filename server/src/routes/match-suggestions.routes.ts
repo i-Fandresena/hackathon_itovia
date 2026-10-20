@@ -6,19 +6,42 @@ import { toDomainOpportunity, type DbOpportunity } from '../lib/domain.js'
 import { computeMatchFit } from '../lib/preselection.js'
 import { clip, scheduleAdminNotification } from '../lib/notify.js'
 import {
+  activeRow,
   cancelInterview,
   confirmInterview,
-  loadInterviewsBySuggestion,
+  loadHiringContexts,
   reportInterviewUnavailable,
   rescheduleInterview,
   scheduleInterview,
-  toInterviewView,
-  type InterviewOutcome,
+  toCandidateInterviewView,
+  toRecruiterInterviewView,
+  type ServiceResult,
 } from '../lib/interviews.js'
 import { listRecruiterInterviews } from '../lib/interview-list.js'
+import { recordInterviewOutcome, replyToAbsence } from '../lib/hiring-service.js'
+import { scheduleHiringJobs } from '../lib/hiring-jobs.js'
+import {
+  acceptHireProposal,
+  declineHireProposal,
+  latestProposalView,
+  loadProposalRows,
+  proposalView,
+  reviseHireProposal,
+  sendHireProposal,
+  withdrawHireProposal,
+} from '../lib/hire-proposals.js'
 import { STALE_SUGGESTION_ERROR, commitMatchTransition } from '../lib/preselection-service.js'
+import { HIRING_SUPPORTED, displayedRound, loadLinkedPlacements, omitHiringColumns } from '../lib/hiring-store.js'
+import { candidateHiringPhase, hiringPhase } from '../../../src/lib/hiring.js'
 import type { MatchSuggestion as DbMatchSuggestion } from '@prisma/client'
 import {
+  absenceReplySchema,
+  hireProposalAcceptSchema,
+  hireProposalDeclineSchema,
+  hireProposalReviseSchema,
+  hireProposalSchema,
+  hireProposalWithdrawSchema,
+  interviewOutcomeSchema,
   interviewRescheduleSchema,
   interviewScheduleSchema,
   interviewUnavailableSchema,
@@ -79,6 +102,15 @@ function toCandidateVisibleOpportunity(opportunity: DbOpportunity, revealCompany
  * suggestions encore en file de validation admin (`suggeree`) ne lui sont
  * pas montrées. Les lignes héritées `proposee_candidat` / `interet_candidat`
  * encore actives restent listées pour ne perdre aucun dossier en cours.
+ *
+ * Après l'entretien (sous-lot 3) : chaque dossier mis en relation porte ses
+ * tours (`interviews`, vue candidat : jamais l'issue, le motif ni la note —
+ * seulement son explication d'absence et `canExplainAbsence`) et sa phase
+ * neutre `candidatePhase` (`candidateHiringPhase` : « Dossier clos »,
+ * « Suite favorable », « Entretien manqué »… jamais l'issue brute).
+ * Sous-lot 5 : `proposal`, la dernière proposition d'embauche du dossier
+ * (vue candidat, D3 : jamais la raison d'un retrait ni l'auteur ; son
+ * `id` et sa `revision` servent à l'acceptation).
  */
 router.get('/mine', requireRole('candidate'), async (req, res, next) => {
   try {
@@ -92,15 +124,24 @@ router.get('/mine', requireRole('candidate'), async (req, res, next) => {
     })
     // L'entretien n'existe qu'à partir de la mise en relation ; on ne le
     // renvoie au candidat que pour un dossier dans cet état (défense).
-    const interviews = await loadInterviewsBySuggestion(
-      rows.filter((row) => row.status === 'mise_en_relation').map((row) => row.id),
-    )
+    const connected = rows.filter((row) => row.status === 'mise_en_relation')
+    const [contexts, proposals] = await Promise.all([
+      loadHiringContexts(connected),
+      loadProposalRows(connected.map((row) => row.id)),
+    ])
+    const now = new Date()
+    const candidateId = req.session!.sub
     const suggestions = rows.map(({ opportunity, ...suggestion }) => {
-      const interview = suggestion.status === 'mise_en_relation' ? interviews.get(suggestion.id) : undefined
+      const context = suggestion.status === 'mise_en_relation' ? contexts.get(suggestion.id) : undefined
+      const interview = context ? displayedRound(context.rows) : undefined
       return {
-        ...suggestion,
+        // Ni `connectedAt` ni `closedReason` (sous-lot 1).
+        ...omitHiringColumns(suggestion),
         opportunity: toCandidateVisibleOpportunity(opportunity, suggestion.status === 'mise_en_relation'),
-        interview: interview ? toInterviewView(interview) : null,
+        interview: interview ? toCandidateInterviewView(interview) : null,
+        interviews: context ? context.rows.map(toCandidateInterviewView) : [],
+        candidatePhase: HIRING_SUPPORTED && context ? candidateHiringPhase(context.state, now) : null,
+        proposal: context ? latestProposalView(proposals.get(suggestion.id), 'candidate', candidateId, now) : null,
       }
     })
     res.json({ suggestions })
@@ -122,6 +163,12 @@ router.get('/mine', requireRole('candidate'), async (req, res, next) => {
  * vérification du CV. Tri : par offre, de la plus récemment publiée
  * (`Opportunity.createdAt`) à la plus ancienne, id de l'offre en départage,
  * puis score décroissant et id du dossier.
+ *
+ * Sous-lot 5 : `proposals` (toutes les versions, vue recruteur D3 : la
+ * catégorie d'un refus, jamais sa précision), `proposal` (la dernière) et
+ * `placement` (`{ id, stage, origin, startDate }` du placement lié, sinon
+ * `null`) ; `phase` complète (proposition envoyée, embauché, déclinée,
+ * poste pourvu…).
  */
 router.get('/received', requireRole('recruiter'), async (req, res, next) => {
   try {
@@ -162,17 +209,33 @@ router.get('/received', requireRole('recruiter'), async (req, res, next) => {
         candidate: { select: { id: true, candidateProfile: { select: RECRUITER_VISIBLE_PROFILE } } },
       },
     })
-    const interviews = await loadInterviewsBySuggestion(
-      rows.filter((row) => row.status === 'mise_en_relation').map((row) => row.id),
-    )
+    const recruiterId = req.session!.sub
+    const connectedIds = rows.filter((row) => row.status === 'mise_en_relation').map((row) => row.id)
+    const [contexts, proposalRows, placements] = await Promise.all([
+      loadHiringContexts(rows.filter((row) => row.status === 'mise_en_relation')),
+      loadProposalRows(connectedIds),
+      loadLinkedPlacements(connectedIds),
+    ])
+    const now = new Date()
     const suggestions = rows
       .map(({ opportunity, ...suggestion }) => {
         const profile = suggestion.candidate.candidateProfile
-        const interview = interviews.get(suggestion.id)
+        const context = contexts.get(suggestion.id)
+        const interview = context ? displayedRound(context.rows) : undefined
+        const active = context ? activeRow(context) : undefined
         return {
           ...suggestion,
           opportunity: { id: opportunity.id, title: opportunity.title, createdAt: opportunity.createdAt },
-          interview: interview ? toInterviewView(interview) : null,
+          // Tour actif, sinon le dernier (rétrocompatibilité) ; tous les tours
+          // avec leur issue et leur motif (note privée : son auteur seulement,
+          // jamais l'explication d'absence du candidat — D3).
+          interview: interview ? toRecruiterInterviewView(interview, recruiterId) : null,
+          interviews: context ? context.rows.map((row) => toRecruiterInterviewView(row, recruiterId)) : [],
+          activeInterview: active ? toRecruiterInterviewView(active, recruiterId) : null,
+          phase: HIRING_SUPPORTED && context ? hiringPhase(context.state, now) : null,
+          proposals: (proposalRows.get(suggestion.id) ?? []).map((row) => proposalView(row, 'recruiter', recruiterId, now)),
+          proposal: latestProposalView(proposalRows.get(suggestion.id), 'recruiter', recruiterId, now),
+          placement: placements.get(suggestion.id) ?? null,
           fit: profile
             ? computeMatchFit(
                 {
@@ -201,6 +264,7 @@ router.get('/received', requireRole('recruiter'), async (req, res, next) => {
           a.id.localeCompare(b.id),
       )
     res.json({ suggestions })
+    scheduleHiringJobs()
   } catch (err) {
     next(err)
   }
@@ -209,14 +273,18 @@ router.get('/received', requireRole('recruiter'), async (req, res, next) => {
 /**
  * Onglet « Entretiens » du recruteur : les entretiens de SES offres
  * (dossiers `mise_en_relation`), filtrés par `?period=a_venir|passes|annules|tous`
- * (défaut `a_venir`), `?status=` et `?opportunityId=`, avec des compteurs par
- * offre et globaux. Liste blanche (lib/interview-list.ts) : le nom du
- * candidat et l'entretien, jamais son email ni son téléphone.
+ * (défaut `a_venir`), `?status=`, `?opportunityId=` et
+ * `?outcome=a_renseigner|retenu|second_entretien|non_retenu|absent`, avec
+ * des compteurs par offre et globaux (dont `toRecord`, issues à renseigner)
+ * et la phase de chaque dossier. Liste blanche (lib/interview-list.ts) : le
+ * nom du candidat, l'entretien et son issue, jamais son email ni son
+ * téléphone, ni son explication d'absence.
  */
 router.get('/interviews', requireRole('recruiter'), async (req, res, next) => {
   try {
     const query = recruiterInterviewQuerySchema.parse(req.query)
     sendOutcome(res, await listRecruiterInterviews(req.session!.sub, query))
+    scheduleHiringJobs()
   } catch (err) {
     next(err)
   }
@@ -276,7 +344,7 @@ router.post('/:id/interest', async (req, res, next) => {
           metadata: { opportunityTitle: suggestion.opportunity.title, suggestionId: suggestion.id },
         },
       })
-      res.json({ suggestion: updated })
+      res.json({ suggestion: omitHiringColumns(updated) })
       return
     }
 
@@ -424,7 +492,7 @@ router.post('/:id/decline', async (req, res, next) => {
 /* Entretiens (décision produit 2026-10-14) — voir lib/interviews.ts   */
 /* ------------------------------------------------------------------ */
 
-function sendOutcome<T>(res: Response, outcome: InterviewOutcome<T>): void {
+function sendOutcome<T>(res: Response, outcome: ServiceResult<T>): void {
   if (outcome.ok) res.status(outcome.httpStatus).json(outcome.body)
   else res.status(outcome.httpStatus).json({ error: outcome.error })
 }
@@ -436,6 +504,11 @@ function sendOutcome<T>(res: Response, outcome: InterviewOutcome<T>): void {
  * `mise_en_relation` ; le candidat est notifié (plateforme + email), les
  * admins informés. 403 hors de ses offres, 409 sans accord du candidat,
  * compte candidat inactif ou entretien déjà fixé.
+ *
+ * Tour suivant (sous-lot 3) : sur un dossier dont le dernier tour a l'issue
+ * `second_entretien` ou `absent`, crée le tour n+1 (un seul tour actif, 3
+ * tours au plus → 400, offre pourvue → 409) ; le candidat reçoit « Second
+ * entretien proposé ». Après `retenu` ou `non_retenu` : 409.
  */
 router.post('/:id/interview', requireRole('recruiter'), async (req, res, next) => {
   try {
@@ -495,6 +568,175 @@ router.post('/:id/interview/unavailable', requireRole('candidate'), async (req, 
     sendOutcome(
       res,
       await reportInterviewUnavailable({ suggestionId: req.params.id, candidateId: req.session!.sub, reason: body.reason }),
+    )
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ------------------------------------------------------------------ */
+/* Après l'entretien (sous-lot 3) — voir lib/hiring-service.ts          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Issue du tour actif, par le recruteur propriétaire, une fois l'heure de
+ * fin passée : `{ interviewId, result: retenu|second_entretien|non_retenu|absent,
+ * reason?, note?, nextRound? }`. 400 avant la fin, sur un tour annulé ou en
+ * empêchement, au-delà de 3 tours ; 404 tour non actif ; 409 issue déjà
+ * renseignée (double clic), accord retiré ou compte inactif (retenu, second
+ * entretien), offre pourvue, tour suivant en conflit ; 503 suite non activée.
+ * Le candidat reçoit un texte neutre, jamais le motif ni la note.
+ */
+router.post('/:id/interview/outcome', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const body = interviewOutcomeSchema.parse(req.body)
+    sendOutcome(
+      res,
+      await recordInterviewOutcome({
+        suggestionId: req.params.id,
+        recruiterId: req.session!.sub,
+        interviewId: body.interviewId,
+        result: body.result,
+        reason: body.reason ?? null,
+        note: body.note,
+        nextRound: body.nextRound,
+      }),
+    )
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Le candidat explique son absence (`{ interviewId, reason }`, 3 à 300
+ * caractères, sans coordonnées) : une fois par tour absent, lue par les
+ * admins seuls. 404 sans absence à expliquer, 409 déjà répondu.
+ */
+router.post('/:id/interview/absence-reply', requireRole('candidate'), async (req, res, next) => {
+  try {
+    const body = absenceReplySchema.parse(req.body)
+    sendOutcome(
+      res,
+      await replyToAbsence({
+        suggestionId: req.params.id,
+        candidateId: req.session!.sub,
+        interviewId: body.interviewId,
+        reason: body.reason,
+      }),
+    )
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ------------------------------------------------------------------ */
+/* Propositions d'embauche (sous-lot 5) — voir lib/hire-proposals.ts   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le recruteur propriétaire envoie une proposition après un dernier tour
+ * « Retenu » : `{ jobTitle, monthlySalaryAr, startDate (AAAA-MM-JJ),
+ * contractType, contractDurationMonths?, message? }` (textes sans
+ * coordonnées). 201 `{ proposal, phase }` ; 400 hors « Retenu » ou
+ * validation ; 403 hors de ses offres ; 409 proposition déjà en attente,
+ * réponse définitive, 3 versions atteintes, offre pourvue, accord retiré ou
+ * compte inactif ; 503 suite non activée. Échéance : 7 jours (D2).
+ */
+router.post('/:id/hire-proposal', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const body = hireProposalSchema.parse(req.body)
+    sendOutcome(
+      res,
+      await sendHireProposal({
+        suggestionId: req.params.id,
+        recruiterId: req.session!.sub,
+        fields: {
+          jobTitle: body.jobTitle,
+          monthlySalaryAr: body.monthlySalaryAr,
+          startDate: body.startDate,
+          contractType: body.contractType,
+          contractDurationMonths: body.contractDurationMonths ?? null,
+          message: body.message,
+        },
+      }),
+    )
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Modification de la proposition en attente : `{ revision, …champs }`. La
+ * cohérence contrat / durée est recontrôlée sur la proposition fusionnée
+ * (400) ; `revision + 1`, échéance relancée à 7 jours, candidat re-notifié.
+ * 409 si la proposition a changé (réponse, expiration, autre modification).
+ */
+router.patch('/:id/hire-proposal', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const { revision, ...changes } = hireProposalReviseSchema.parse(req.body)
+    sendOutcome(
+      res,
+      await reviseHireProposal({ suggestionId: req.params.id, recruiterId: req.session!.sub, revision, changes }),
+    )
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Retrait de la proposition en attente par le recruteur (`{ revision }`), motif `recruteur`. */
+router.post('/:id/hire-proposal/withdraw', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const body = hireProposalWithdrawSchema.parse(req.body)
+    sendOutcome(
+      res,
+      await withdrawHireProposal({ suggestionId: req.params.id, recruiterId: req.session!.sub, revision: body.revision }),
+    )
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Le candidat accepte la révision qu'il a lue (`{ proposalId, revision }`) :
+ * placement créé dans la même transaction, offre pourvue si le nombre de
+ * postes est atteint. 200 `{ proposal, placementCreated, candidatePhase }` ;
+ * 404 pas son dossier ; 409 proposition modifiée, expirée, retirée, déjà
+ * répondue, poste pourvu, compte inactif, déjà embauché.
+ */
+router.post('/:id/hire-proposal/accept', requireRole('candidate'), async (req, res, next) => {
+  try {
+    const body = hireProposalAcceptSchema.parse(req.body)
+    sendOutcome(
+      res,
+      await acceptHireProposal({
+        suggestionId: req.params.id,
+        candidateId: req.session!.sub,
+        proposalId: body.proposalId,
+        revision: body.revision,
+      }),
+    )
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Le candidat décline (`{ proposalId, revision, reason?, note? }`) : la
+ * catégorie est montrée au recruteur, la précision aux admins seulement.
+ */
+router.post('/:id/hire-proposal/decline', requireRole('candidate'), async (req, res, next) => {
+  try {
+    const body = hireProposalDeclineSchema.parse(req.body)
+    sendOutcome(
+      res,
+      await declineHireProposal({
+        suggestionId: req.params.id,
+        candidateId: req.session!.sub,
+        proposalId: body.proposalId,
+        revision: body.revision,
+        reason: body.reason ?? null,
+        note: body.note,
+      }),
     )
   } catch (err) {
     next(err)

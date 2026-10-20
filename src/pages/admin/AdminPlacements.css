@@ -1,0 +1,89 @@
+/* Placements, vue admin (tous recruteurs). Préfixe `apl-`. */
+
+.apl-error {
+  margin: 0 0 0.75rem;
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.apl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.apl-card {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem 1rem;
+}
+
+.apl-main {
+  flex: 1 1 18rem;
+  min-width: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.apl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+}
+
+.apl-head strong {
+  overflow-wrap: anywhere;
+}
+
+.apl-muted {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.apl-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0;
+}
+
+.apl-facts div {
+  min-width: 0;
+}
+
+.apl-facts dt {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.apl-facts dd {
+  margin: 0.05rem 0 0;
+  font-size: 0.9rem;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.apl-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.apl-stage {
+  flex: 0 1 230px;
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .apl-stage {
+    flex-basis: 100%;
+  }
+}

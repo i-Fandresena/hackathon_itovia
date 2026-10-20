@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { PrismaClient, type Sector } from '@prisma/client'
 import { phoneKeyOf } from '../src/lib/validation.js'
 import { missionsData } from '../src/lib/opportunity-missions.js'
+import { HIRING_SUPPORTED, connectedAtData, placementLinkData } from '../src/lib/hiring-store.js'
 
 const prisma = new PrismaClient()
 
@@ -600,6 +601,21 @@ const RECOMMENDATIONS = [
  * déjà passée au moment du seed est repoussée (45 à 90 jours selon l'offre)
  * pour que les offres de démonstration restent ouvertes.
  */
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Instant relatif au seed : `days` jours (négatif = passé) à `hour` h, heure de Madagascar (UTC+3 fixe). */
+function madagascarAt(days: number, hour: number): Date {
+  const date = new Date(Date.now() + days * DAY_MS)
+  date.setUTCHours(hour - 3, 0, 0, 0)
+  return date
+}
+
+/** Jour civil (colonne `@db.Date`) dans `days` jours. */
+function civilDay(days: number): Date {
+  const date = new Date(Date.now() + days * DAY_MS)
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+}
+
 function seedDeadline(raw: string, index: number): Date {
   const deadline = new Date(raw)
   if (deadline.getTime() > Date.now()) return deadline
@@ -755,7 +771,7 @@ async function main() {
   // la connexion. Aucune ligne dans un statut hérité (`proposee_candidat`,
   // `interet_candidat`).
   console.log('Suggestions de mise en relation de démonstration…')
-  await prisma.matchSuggestion.create({
+  const mioraDossier = await prisma.matchSuggestion.create({
     data: {
       opportunityId: opportunityIdByKey.get('opp-1')!,
       candidateId: userIdByKey.get('candidat-1')!,
@@ -763,6 +779,8 @@ async function main() {
       reasons: ['Compétences réseaux sociaux/Canva alignées', 'Basée à Antananarivo, disponible immédiatement'],
       status: 'mise_en_relation',
       origin: 'systeme',
+      // Ignoré si le client Prisma précède la colonne (lib/hiring-store.ts).
+      ...connectedAtData('mise_en_relation', new Date(Date.now() - 20 * DAY_MS)),
     },
   })
   await prisma.matchSuggestion.create({
@@ -785,6 +803,103 @@ async function main() {
       origin: 'admin',
     },
   })
+
+  // « Après l'entretien » (sous-lot 1, 2026-10-16) : deux dossiers de
+  // recruteur@demo.mg déjà passés en entretien. Le statut reste
+  // `mise_en_relation` ; la suite est portée par le tour et la proposition.
+  // - opp-11 × Faniry : tour 1 terminé, issue « retenu », proposition
+  //   d'embauche envoyée il y a 2 jours (en attente, expire dans 5 jours) ;
+  // - opp-1 × Nomena : tour 1 terminé, issue « non retenu » (motif en liste
+  //   fermée, note privée du recruteur, jamais montrée au candidat).
+  // Données fictives, sans coordonnée dans les textes libres. Ignoré avec un
+  // client Prisma antérieur au sous-lot 1.
+  if (HIRING_SUPPORTED) {
+    console.log('Entretiens passés et proposition d’embauche de démonstration…')
+    const techmadaId = userIdByKey.get('techmada')!
+    const retenu = await prisma.matchSuggestion.create({
+      data: {
+        opportunityId: opportunityIdByKey.get('opp-11')!,
+        candidateId: userIdByKey.get('candidat-2')!,
+        score: 81,
+        reasons: ['Compétences en commun : Python, SQL', 'Disponibilité immédiate'],
+        status: 'mise_en_relation',
+        origin: 'systeme',
+        connectedAt: new Date(Date.now() - 9 * DAY_MS),
+      },
+    })
+    await prisma.interview.create({
+      data: {
+        suggestionId: retenu.id,
+        round: 1,
+        // Tour clos par son issue : plus actif.
+        activeSuggestionId: null,
+        scheduledAt: madagascarAt(-6, 10),
+        durationMinutes: 45,
+        message: 'Prévoyez de présenter un petit projet Python dont vous êtes fier·e.',
+        status: 'confirme',
+        provider: 'simule',
+        meetStatus: 'simule',
+        respondedAt: new Date(Date.now() - 8 * DAY_MS),
+        createdById: techmadaId,
+        createdAt: new Date(Date.now() - 9 * DAY_MS),
+        outcome: 'retenu',
+        outcomeReason: 'points_forts',
+        outcomeNote: 'Bonne maîtrise de Python et de SQL ; à accompagner sur la visualisation de données.',
+        outcomeAt: new Date(Date.now() - 5 * DAY_MS),
+        outcomeById: techmadaId,
+      },
+    })
+    const sentAt = new Date(Date.now() - 2 * DAY_MS)
+    await prisma.hireProposal.create({
+      data: {
+        suggestionId: retenu.id,
+        pendingSuggestionId: retenu.id,
+        version: 1,
+        jobTitle: 'Stagiaire développement Python / data',
+        monthlySalaryAr: 350000,
+        startDate: civilDay(21),
+        contractType: 'stage',
+        contractDurationMonths: 6,
+        message: 'Nous serions ravis de vous accueillir dans l’équipe data dès le mois prochain.',
+        status: 'envoyee',
+        expiresAt: new Date(sentAt.getTime() + 7 * DAY_MS),
+        createdById: techmadaId,
+        createdAt: sentAt,
+      },
+    })
+
+    const nonRetenu = await prisma.matchSuggestion.create({
+      data: {
+        opportunityId: opportunityIdByKey.get('opp-1')!,
+        candidateId: userIdByKey.get('candidat-4')!,
+        score: 64,
+        reasons: ['Compétences en commun : Canva'],
+        status: 'mise_en_relation',
+        origin: 'admin',
+        connectedAt: new Date(Date.now() - 15 * DAY_MS),
+      },
+    })
+    await prisma.interview.create({
+      data: {
+        suggestionId: nonRetenu.id,
+        round: 1,
+        activeSuggestionId: null,
+        scheduledAt: madagascarAt(-12, 14),
+        durationMinutes: 30,
+        status: 'confirme',
+        provider: 'simule',
+        meetStatus: 'simule',
+        respondedAt: new Date(Date.now() - 14 * DAY_MS),
+        createdById: techmadaId,
+        createdAt: new Date(Date.now() - 15 * DAY_MS),
+        outcome: 'non_retenu',
+        outcomeReason: 'experience',
+        outcomeNote: 'Profil plutôt orienté graphisme que gestion de communauté.',
+        outcomeAt: new Date(Date.now() - 11 * DAY_MS),
+        outcomeById: techmadaId,
+      },
+    })
+  }
 
   console.log('Prestataires de l’annuaire…')
   const providerIdByKey = new Map<string, string>()
@@ -1191,6 +1306,9 @@ async function main() {
       candidateId: userIdByKey.get('candidat-1')!,
       monthlySalaryAr: 450000,
       stage: 'etape1_payee',
+      // Placement déclaré (historique) relié à son dossier, comme la reprise
+      // du temps A ; ignoré si le client Prisma précède la colonne.
+      ...placementLinkData({ suggestionId: mioraDossier.id }),
     },
   })
   await prisma.placement.create({

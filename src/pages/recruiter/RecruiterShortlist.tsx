@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, ShieldCheck, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Send, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -10,6 +10,7 @@ import { VerificationBadge } from '../../components/ui/VerificationBadge'
 import { EndorsementItem, jobMonth } from '../../components/trust/EndorsementItem'
 import { TrustLevelBadge } from '../../components/trust/TrustLevelBadge'
 import { InterviewScheduleModal } from '../../components/interview/InterviewScheduleModal'
+import { HiringPhaseBadge } from '../../components/hiring/HiringPhaseBadge'
 import { TALENT_STATUS_LABELS } from '../../data/endorsements'
 import { useApp } from '../../context/AppContext'
 import { formatDate } from '../../lib/format'
@@ -41,10 +42,16 @@ function errorText(err: unknown, fallback: string): string {
  * 2026-10-14 : la modale `InterviewScheduleModal` fixe un entretien
  * (`POST /match-suggestions/:id/interview`), ce qui met en relation, comme
  * dans « Candidats proposés ». Toute erreur du serveur est affichée.
+ *
+ * Décision D4 (sous-lot 6) : « Déclarer un placement » n'existe plus pour un
+ * candidat diplômé — son placement naît de l'acceptation d'une proposition
+ * d'embauche ; la carte affiche la phase du dossier et renvoie vers
+ * « Candidats proposés » (suivi, proposition). La déclaration reste pour les
+ * talents proposés par un agent (contrôles serveur, erreurs affichées).
  */
 export function RecruiterShortlist() {
   const { id = '' } = useParams()
-  const { declineSuggestion, refreshDossiers } = useApp()
+  const { declineSuggestion, refreshDossiers, receivedSuggestions } = useApp()
   const [data, setData] = useState<Shortlist | null>(null)
   const [salary, setSalary] = useState<Record<string, string>>({})
   const [feedback, setFeedback] = useState<Feedback | null>(null)
@@ -139,6 +146,11 @@ export function RecruiterShortlist() {
   }
 
   const matched = data.matched.filter((m) => SUGGESTION_STATUS_LABELS[m.status])
+  /** Phase du dossier (« Candidats proposés » la reçoit du serveur). */
+  const phaseById = new Map(receivedSuggestions.map((s) => [s.id, s.phase ?? null]))
+  const followPath = (suggestionId: string, step?: 'proposition') =>
+    `/recruteur/candidatures?offre=${encodeURIComponent(id)}&dossier=${encodeURIComponent(suggestionId)}` +
+    (step ? `&etape=${step}` : '')
 
   return (
     <div className="page">
@@ -268,7 +280,9 @@ export function RecruiterShortlist() {
         {matched.length > 0 && (
           <p className="rsl-explain">
             « Ce profil m’intéresse » fixe un entretien : OffRec vous met en relation, prévient le candidat et transmet
-            le lien de visio à chacun. L’entretien se suit ensuite dans « Candidats proposés ».
+            le lien de visio à chacun. L’entretien, l’issue et la proposition d’embauche se suivent ensuite dans
+            « Candidats proposés » : le placement d’un candidat diplômé est créé automatiquement quand il accepte votre
+            proposition.
           </p>
         )}
         {matched.length === 0 ? (
@@ -277,6 +291,7 @@ export function RecruiterShortlist() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {matched.map((m) => {
               const canSchedule = m.status === 'proposee_recruteur' || m.status === 'interet_recruteur'
+              const phase = m.status === 'mise_en_relation' ? phaseById.get(m.suggestionId) ?? null : null
               return (
                 <Card key={m.candidateId}>
                   <div className="rsl-matched">
@@ -284,9 +299,13 @@ export function RecruiterShortlist() {
                       <strong>{m.fullName || 'Candidat'}</strong>
                       <VerificationBadge kind="ai" subtitle={`${m.match.score}% de compatibilité`} />
                       <p className="rsl-muted">{m.match.reasons.slice(0, 2).join(' · ')}</p>
-                      <Badge variant={m.status === 'mise_en_relation' ? 'success' : 'muted'}>
-                        {SUGGESTION_STATUS_LABELS[m.status]}
-                      </Badge>
+                      {phase ? (
+                        <HiringPhaseBadge audience="recruiter" phase={phase} />
+                      ) : (
+                        <Badge variant={m.status === 'mise_en_relation' ? 'success' : 'muted'}>
+                          {SUGGESTION_STATUS_LABELS[m.status]}
+                        </Badge>
+                      )}
                     </div>
                     <div className="rsl-matched-actions">
                       {canSchedule && (
@@ -301,32 +320,23 @@ export function RecruiterShortlist() {
                           </Button>
                         </>
                       )}
+                      {phase === 'retenu' && (
+                        <Link to={followPath(m.suggestionId, 'proposition')} className="btn btn-primary btn-sm">
+                          <Send size={14} aria-hidden />
+                          Faire une proposition
+                        </Link>
+                      )}
                       {m.status === 'mise_en_relation' && (
-                        <Link to="/recruteur/candidatures" className="rsl-follow">
+                        <Link to={followPath(m.suggestionId)} className="rsl-follow">
                           Suivre dans « Candidats proposés »
                           <ArrowRight size={14} aria-hidden />
                         </Link>
                       )}
-                      <div className="rsl-place">
-                        <div style={{ width: 130 }}>
-                          <Input
-                            type="number"
-                            min={1}
-                            placeholder="Salaire Ar"
-                            aria-label={`Salaire mensuel de ${m.fullName || 'ce candidat'} (Ar)`}
-                            value={salary[m.candidateId] ?? ''}
-                            onChange={(e) => setSalary((s) => ({ ...s, [m.candidateId]: e.target.value }))}
-                          />
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={busy !== null}
-                          onClick={() => declarePlacement(m.candidateId, { candidateId: m.candidateId })}
-                        >
-                          Déclarer un placement
-                        </Button>
-                      </div>
+                      {m.status === 'mise_en_relation' && (
+                        <p className="rsl-auto-placement">
+                          Placement créé automatiquement quand le candidat accepte votre proposition d’embauche.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </Card>

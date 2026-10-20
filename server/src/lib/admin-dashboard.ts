@@ -8,6 +8,14 @@ import type {
 } from '@prisma/client'
 import { prisma } from './prisma.js'
 import { startOfUtcDay } from './preselection.js'
+import {
+  connectedAtOf,
+  connectedAtSelect,
+  connectedSinceWhere,
+  filledOpportunityWhere,
+  unfilledOpportunityWhere,
+} from './hiring-store.js'
+import { loadOutcomeIndicator } from './hiring-stats.js'
 import { DAY_MS, bucketByDay, percentOrNull, rollingWeeks, seriesDays, zeroRecord } from './day-series.js'
 
 /**
@@ -76,22 +84,23 @@ export async function loadAdminDashboard(adminId: string, now: Date = new Date()
     }),
     prisma.candidateProfile.count({ where: { matchingConsentAt: { not: null } } }),
     prisma.matchSuggestion.groupBy({ by: ['status'], _count: { _all: true } }),
-    // `mise_en_relation` est terminal (`ADMIN_ALLOWED_TRANSITIONS`) : la
-    // dernière mise à jour d'une telle ligne est la mise en relation elle-même.
+    // Mise en relation datée par `connectedAt` (écrit par
+    // `commitMatchTransition`), `updatedAt` seulement pour une ligne sans date
+    // (ancien client) — `mise_en_relation` est terminal.
     prisma.matchSuggestion.findMany({
-      where: { status: 'mise_en_relation', updatedAt: { gte: start } },
-      select: { updatedAt: true },
+      where: connectedSinceWhere(start),
+      select: { updatedAt: true, ...connectedAtSelect() },
     }),
     prisma.matchSuggestion.findMany({
       where: { createdAt: { gte: new Date(now.getTime() - 14 * DAY_MS) } },
       select: { createdAt: true },
     }),
     prisma.opportunity.count(),
-    prisma.opportunity.count({ where: { deadline: { gte: startOfToday } } }),
     // Offre ouverte : même définition que le moteur de matching et la
-    // présélection (date limite ≥ début du jour UTC).
+    // présélection (non pourvue — D1 — et date limite ≥ début du jour UTC).
+    prisma.opportunity.count({ where: { deadline: { gte: startOfToday }, ...unfilledOpportunityWhere() } }),
     prisma.opportunity.findMany({
-      where: { deadline: { gte: startOfToday } },
+      where: { deadline: { gte: startOfToday }, ...unfilledOpportunityWhere() },
       distinct: ['recruiterId'],
       select: { recruiterId: true },
     }),
@@ -118,6 +127,12 @@ export async function loadAdminDashboard(adminId: string, now: Date = new Date()
     prisma.placement.groupBy({ by: ['stage'], _count: { _all: true } }),
     prisma.placement.count({ where: { createdAt: { gte: start } } }),
     prisma.notification.count({ where: { userId: adminId, read: false } }),
+  ])
+  const [filledOffers, outcomeIndicator] = await Promise.all([
+    prisma.opportunity.count({ where: filledOpportunityWhere() }),
+    // Plan §11 : part des tours terminés dont l'issue a été renseignée sous
+    // 7 jours (toute la plateforme ; `null` sans le schéma « après l'entretien »).
+    loadOutcomeIndicator(now),
   ])
 
   /* --- Comptes ---------------------------------------------------- */
@@ -151,7 +166,7 @@ export async function loadAdminDashboard(adminId: string, now: Date = new Date()
   const toValidate = matchByStatus.suggeree + matchByStatus.proposee_candidat + matchByStatus.interet_candidat
   const sentToRecruiter =
     matchByStatus.proposee_recruteur + matchByStatus.interet_recruteur + matchByStatus.mise_en_relation
-  const connectionDates = recentConnections.map((s) => s.updatedAt)
+  const connectionDates = recentConnections.map((s) => connectedAtOf(s))
   const connectionWeeks = rollingWeeks(connectionDates, now)
   const suggestionWeeks = rollingWeeks(recentSuggestions.map((s) => s.createdAt), now)
 
@@ -226,7 +241,9 @@ export async function loadAdminDashboard(adminId: string, now: Date = new Date()
     offers: {
       total: offersTotal,
       open: openOffers,
-      expired: offersTotal - openOffers,
+      // Pourvues (D1) à part : `expired` ne compte que les offres non pourvues échues.
+      filled: filledOffers,
+      expired: offersTotal - openOffers - filledOffers,
       recruitersWithOpenOffer: openOfferRecruiters.length,
       newLast7: offerWeeks.last7,
       newPrev7: offerWeeks.prev7,
@@ -262,5 +279,10 @@ export async function loadAdminDashboard(adminId: string, now: Date = new Date()
       last30: placementsLast30,
     },
     notifications: { adminUnread },
+    hiring: {
+      /** Fenêtre glissante du plan §11 (fin du tour entre J-37 et J-7), `null` sans tour mûr. */
+      outcomeRecordedWithin7dPercent: outcomeIndicator?.last30.percent ?? null,
+      outcomeIndicator,
+    },
   }
 }

@@ -137,3 +137,8 @@
   gap: 0.6rem;
   margin-top: 1rem;
 }
+
+/* Proposition d'embauche du dossier candidat (sous-lot 6). */
+.detail-proposal {
+  margin-top: 1rem;
+}

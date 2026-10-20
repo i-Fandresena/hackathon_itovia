@@ -1,10 +1,31 @@
 import { useState } from 'react'
-import { ArrowRight, Building2, CalendarDays, CheckCircle2, CircleAlert, Clock, MapPin, Send } from 'lucide-react'
+import {
+  ArrowRight,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  CircleAlert,
+  Clock,
+  FileSignature,
+  MapPin,
+  Send,
+} from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { WithdrawDossierButton } from '../../components/candidate/WithdrawDossierButton'
-import { candidateInterviewFlag } from '../../components/interview/CandidateInterviewCard'
+import { HiringPhaseBadge } from '../../components/hiring/HiringPhaseBadge'
+import {
+  CandidateHireProposalCard,
+  CandidateHireProposalDialog,
+  type CandidateProposalStep,
+} from '../../components/hiring/CandidateHireProposalCard'
+import {
+  ABSENCE_FLAG,
+  absenceToExplain,
+  candidateInterviewFlag,
+} from '../../components/interview/CandidateInterviewCard'
 import { CandidateInterviewDetail } from '../../components/interview/CandidateInterviewDetail'
 import { interviewStatusLabel } from '../../components/interview/InterviewSummary'
+import type { MatchSuggestionWithOpportunity } from '../../lib/api'
 import { FadeUp } from '../../components/motion/Motion'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -12,8 +33,15 @@ import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { useApp } from '../../context/AppContext'
 import { OPPORTUNITY_TYPE_LABELS } from '../../data/constants'
-import { canWithdrawFromDossier, dossierStatusInfo, isTransmitted } from '../../lib/candidateDossier'
+import {
+  CANDIDATE_PHASE_TEXT,
+  canWithdrawFromDossier,
+  dossierStatusInfo,
+  isClosedDossier,
+  isTransmitted,
+} from '../../lib/candidateDossier'
 import { formatDate } from '../../lib/format'
+import { formatCivilDate } from '../../lib/hiring'
 import { formatMadagascarDateTime, formatMadagascarShortDateTime } from '../../lib/interview'
 import type { CandidateProfile } from '../../types'
 import './CandidateDashboard.css'
@@ -138,10 +166,13 @@ function readinessSteps(profile: CandidateProfile): ReadinessStep[] {
 const STEP_ICONS = { ok: CheckCircle2, pending: Clock, missing: CircleAlert } as const
 
 export function CandidateDashboard() {
-  const { currentUser, mySuggestions } = useApp()
+  const { currentUser, mySuggestions, refreshDossiers } = useApp()
   const navigate = useNavigate()
   const [withdrawnTitle, setWithdrawnTitle] = useState('')
   const [detailId, setDetailId] = useState<string | null>(null)
+  /** Réponse à une proposition d'embauche (une modale à la fois). */
+  const [proposalDialog, setProposalDialog] = useState<{ id: string; step: CandidateProposalStep } | null>(null)
+  const [proposalFeedback, setProposalFeedback] = useState('')
   const profile = currentUser?.candidateProfile
 
   if (!profile) {
@@ -173,10 +204,124 @@ export function CandidateDashboard() {
   const transmitted = dossiers.filter((s) => isTransmitted(s.status)).length
   const interested = dossiers.filter((s) => s.status === 'interet_recruteur').length
   const connected = dossiers.filter((s) => s.status === 'mise_en_relation').length
+  // Propositions d'embauche (sous-lot 6) : en attente de réponse, puis embauches confirmées.
+  const pendingProposals = dossiers.filter((s) => s.status === 'mise_en_relation' && s.proposal?.status === 'envoyee')
+  const hires = dossiers.filter((s) => s.status === 'mise_en_relation' && s.candidatePhase === 'embauche').length
+  // Dossiers clos (« Dossier clos » : non retenu, poste pourvu…) : rangés à
+  // part, repliés, sans action possible.
+  const openDossiers = dossiers.filter((s) => !isClosedDossier(s))
+  const closedDossiers = dossiers.filter((s) => isClosedDossier(s))
   // Relu à chaque rendu : la modale revient à jour après une réponse.
   const detail = detailId
     ? dossiers.find((s) => s.id === detailId && s.status === 'mise_en_relation' && s.interview) ?? null
     : null
+  // Relue à chaque rendu : après un 409, la nouvelle version de la proposition.
+  const proposalDossier = proposalDialog
+    ? dossiers.find((s) => s.id === proposalDialog.id && s.status === 'mise_en_relation' && s.proposal) ?? null
+    : null
+
+  const openProposal = (id: string, step: CandidateProposalStep) => {
+    setProposalFeedback('')
+    setProposalDialog({ id, step })
+  }
+
+  const renderDossier = (s: MatchSuggestionWithOpportunity) => {
+    const status = dossierStatusInfo(s.status)
+    const detailPath = `/candidat/offres/${s.opportunityId}`
+    // Le serveur ne renvoie le nom qu'à la mise en relation ; on
+    // le conditionne aussi au statut, par défense.
+    const connectedDossier = s.status === 'mise_en_relation'
+    const company = connectedDossier ? s.opportunity.companyName : null
+    const interview = connectedDossier ? s.interview ?? null : null
+    const phase = connectedDossier ? s.candidatePhase ?? null : null
+    const absence = connectedDossier ? absenceToExplain(s.interviews ?? []) : undefined
+    const flag = absence ? ABSENCE_FLAG : interview ? candidateInterviewFlag(interview) : null
+    const flagId = `dossier-iv-flag-${s.id}`
+    return (
+      <Card key={s.id} className="dossier-card">
+        <div className="dossier-head">
+          <div className="dossier-title">
+            <h3>
+              <Link to={detailPath}>{s.opportunity.title}</Link>
+            </h3>
+            <p className="dossier-company">
+              <Building2 size={14} aria-hidden />
+              {company ?? 'Entreprise communiquée à la mise en relation'}
+            </p>
+          </div>
+          {phase ? (
+            <HiringPhaseBadge audience="candidate" phase={phase} />
+          ) : (
+            <Badge variant={status.variant}>{status.label}</Badge>
+          )}
+        </div>
+
+        <div className="dossier-meta">
+          <Badge variant="muted">{s.opportunity.category}</Badge>
+          <Badge variant="muted">{OPPORTUNITY_TYPE_LABELS[s.opportunity.opportunityType]}</Badge>
+          <span className="dossier-location">
+            <MapPin size={14} aria-hidden />
+            {s.opportunity.city}, {s.opportunity.province}
+          </span>
+        </div>
+
+        <p className="dossier-status-text">{phase ? CANDIDATE_PHASE_TEXT[phase] : status.description}</p>
+
+        {connectedDossier && s.proposal?.status === 'acceptee' && (
+          <p className="dossier-hired">
+            <CheckCircle2 size={14} aria-hidden />
+            Embauche confirmée — début le {formatCivilDate(s.proposal.startDate)}.
+          </p>
+        )}
+
+        {(interview || canWithdrawFromDossier(s.status)) && (
+          <div className="dossier-actions">
+            {canWithdrawFromDossier(s.status) && (
+              <WithdrawDossierButton
+                suggestionId={s.id}
+                opportunityTitle={s.opportunity.title}
+                onWithdrawn={setWithdrawnTitle}
+              />
+            )}
+            {/* Entretien fixé par l'entreprise (décision 2026-10-14),
+                envoyé par le serveur à partir de la mise en relation
+                seulement : détail, réponse et explication d'absence dans
+                une modale. */}
+            {interview && s.proposal && (
+              <Button variant="outline" size="sm" aria-haspopup="dialog" onClick={() => setDetailId(s.id)}>
+                <FileSignature size={14} aria-hidden />
+                Voir la proposition
+              </Button>
+            )}
+            {interview && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="dossier-iv-btn"
+                aria-haspopup="dialog"
+                aria-describedby={flag ? flagId : undefined}
+                title={`Entretien : ${interviewStatusLabel(interview.status, 'candidate')} · ${formatMadagascarDateTime(interview.scheduledAt)} (heure de Madagascar)`}
+                onClick={() => setDetailId(s.id)}
+              >
+                <CalendarDays size={14} aria-hidden />
+                Voir l’entretien
+                <span className={`dossier-iv-when${interview.status === 'annule' ? ' is-cancelled' : ''}`}>
+                  · {interview.status === 'annule' ? 'annulé' : formatMadagascarShortDateTime(interview.scheduledAt)}
+                </span>
+                {flag && <span className="dossier-iv-dot" aria-hidden />}
+              </Button>
+            )}
+            {flag && (
+              <span className="dossier-iv-flag" id={flagId}>
+                <Clock size={13} aria-hidden />
+                {flag}
+              </span>
+            )}
+          </div>
+        )}
+      </Card>
+    )
+  }
 
   return (
     <div className="page">
@@ -191,6 +336,33 @@ export function CandidateDashboard() {
             </p>
           </header>
         </FadeUp>
+
+        {pendingProposals.length > 0 && (
+          <section className="dash-proposals" aria-labelledby="dash-proposals-title">
+            <div className="dash-block-head">
+              <h2 id="dash-proposals-title">
+                {pendingProposals.length > 1 ? 'Propositions d’embauche à traiter' : 'Proposition d’embauche à traiter'}
+              </h2>
+            </div>
+            {pendingProposals.map((s) => (
+              <Card key={s.id} className="dash-proposal-card">
+                <CandidateHireProposalCard
+                  proposal={s.proposal!}
+                  opportunityTitle={s.opportunity.title}
+                  companyName={s.opportunity.companyName}
+                  onAccept={() => openProposal(s.id, 'accept')}
+                  onDecline={() => openProposal(s.id, 'decline')}
+                />
+              </Card>
+            ))}
+          </section>
+        )}
+
+        {proposalFeedback && (
+          <p className="dash-feedback" role="status">
+            {proposalFeedback}
+          </p>
+        )}
 
         <FadeUp eager index={0}>
           <Card className="dash-readiness">
@@ -227,7 +399,7 @@ export function CandidateDashboard() {
           </Card>
         </FadeUp>
 
-        <div className="grid-3 dash-stats">
+        <div className="dash-stats dash-stats-grid">
           <FadeUp eager index={1}>
             <Card className="stat-card">
               <strong>{transmitted}</strong>
@@ -247,6 +419,18 @@ export function CandidateDashboard() {
             <Card className="stat-card">
               <strong>{connected}</strong>
               <span>{connected > 1 ? 'Mises en relation confirmées' : 'Mise en relation confirmée'}</span>
+            </Card>
+          </FadeUp>
+          <FadeUp eager index={4}>
+            <Card className={`stat-card${pendingProposals.length > 0 ? ' dash-stat-warning' : ''}`}>
+              <strong>{pendingProposals.length}</strong>
+              <span>{pendingProposals.length > 1 ? 'Propositions à traiter' : 'Proposition à traiter'}</span>
+            </Card>
+          </FadeUp>
+          <FadeUp eager index={5}>
+            <Card className="stat-card">
+              <strong>{hires}</strong>
+              <span>{hires > 1 ? 'Embauches confirmées' : 'Embauche confirmée'}</span>
             </Card>
           </FadeUp>
         </div>
@@ -274,84 +458,25 @@ export function CandidateDashboard() {
             onAction={ready ? undefined : () => navigate(PROFILE_PATH)}
           />
         ) : (
-          <div className="dash-dossiers">
-            {dossiers.map((s) => {
-              const status = dossierStatusInfo(s.status)
-              const detailPath = `/candidat/offres/${s.opportunityId}`
-              // Le serveur ne renvoie le nom qu'à la mise en relation ; on
-              // le conditionne aussi au statut, par défense.
-              const company = s.status === 'mise_en_relation' ? s.opportunity.companyName : null
-              const interview = s.status === 'mise_en_relation' ? s.interview ?? null : null
-              const flag = interview ? candidateInterviewFlag(interview) : null
-              const flagId = `dossier-iv-flag-${s.id}`
-              return (
-                <Card key={s.id} className="dossier-card">
-                  <div className="dossier-head">
-                    <div className="dossier-title">
-                      <h3>
-                        <Link to={detailPath}>{s.opportunity.title}</Link>
-                      </h3>
-                      <p className="dossier-company">
-                        <Building2 size={14} aria-hidden />
-                        {company ?? 'Entreprise communiquée à la mise en relation'}
-                      </p>
-                    </div>
-                    <Badge variant={status.variant}>{status.label}</Badge>
-                  </div>
-
-                  <div className="dossier-meta">
-                    <Badge variant="muted">{s.opportunity.category}</Badge>
-                    <Badge variant="muted">{OPPORTUNITY_TYPE_LABELS[s.opportunity.opportunityType]}</Badge>
-                    <span className="dossier-location">
-                      <MapPin size={14} aria-hidden />
-                      {s.opportunity.city}, {s.opportunity.province}
-                    </span>
-                  </div>
-
-                  <p className="dossier-status-text">{status.description}</p>
-
-                  {(interview || canWithdrawFromDossier(s.status)) && (
-                    <div className="dossier-actions">
-                      {canWithdrawFromDossier(s.status) && (
-                        <WithdrawDossierButton
-                          suggestionId={s.id}
-                          opportunityTitle={s.opportunity.title}
-                          onWithdrawn={setWithdrawnTitle}
-                        />
-                      )}
-                      {/* Entretien fixé par l'entreprise (décision 2026-10-14),
-                          envoyé par le serveur à partir de la mise en relation
-                          seulement : détail et réponse dans une modale. */}
-                      {interview && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="dossier-iv-btn"
-                          aria-haspopup="dialog"
-                          aria-describedby={flag ? flagId : undefined}
-                          title={`Entretien : ${interviewStatusLabel(interview.status, 'candidate')} · ${formatMadagascarDateTime(interview.scheduledAt)} (heure de Madagascar)`}
-                          onClick={() => setDetailId(s.id)}
-                        >
-                          <CalendarDays size={14} aria-hidden />
-                          Voir l’entretien
-                          <span className={`dossier-iv-when${interview.status === 'annule' ? ' is-cancelled' : ''}`}>
-                            · {interview.status === 'annule' ? 'annulé' : formatMadagascarShortDateTime(interview.scheduledAt)}
-                          </span>
-                          {flag && <span className="dossier-iv-dot" aria-hidden />}
-                        </Button>
-                      )}
-                      {flag && (
-                        <span className="dossier-iv-flag" id={flagId}>
-                          <Clock size={13} aria-hidden />
-                          {flag}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </Card>
-              )
-            })}
-          </div>
+          <>
+            {openDossiers.length > 0 ? (
+              <div className="dash-dossiers">{openDossiers.map(renderDossier)}</div>
+            ) : (
+              <p className="dash-closed-empty">Aucun dossier en cours : vos dossiers clos sont rangés ci-dessous.</p>
+            )}
+            {closedDossiers.length > 0 && (
+              <details className="dash-closed">
+                <summary className="dash-closed-summary">
+                  Dossiers clos ({closedDossiers.length})
+                </summary>
+                <p className="dash-closed-text">
+                  Ces dossiers sont clos. Votre profil reste proposé par OffRec pour d’autres offres qui correspondent à
+                  vos compétences.
+                </p>
+                <div className="dash-dossiers">{closedDossiers.map(renderDossier)}</div>
+              </details>
+            )}
+          </>
         )}
 
         {detail?.interview && (
@@ -361,8 +486,24 @@ export function CandidateDashboard() {
               opportunityTitle: detail.opportunity.title,
               companyName: detail.opportunity.companyName,
               interview: detail.interview,
+              rounds: detail.interviews && detail.interviews.length > 0 ? detail.interviews : [detail.interview],
+              candidatePhase: detail.candidatePhase ?? null,
+              proposal: detail.proposal ?? null,
             }}
             onClose={() => setDetailId(null)}
+          />
+        )}
+
+        {proposalDialog && proposalDossier?.proposal && (
+          <CandidateHireProposalDialog
+            step={proposalDialog.step}
+            suggestionId={proposalDossier.id}
+            proposal={proposalDossier.proposal}
+            opportunityTitle={proposalDossier.opportunity.title}
+            companyName={proposalDossier.opportunity.companyName}
+            onClose={() => setProposalDialog(null)}
+            onRefresh={refreshDossiers}
+            onDone={setProposalFeedback}
           />
         )}
       </div>

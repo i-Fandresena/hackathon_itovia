@@ -1,36 +1,342 @@
-/* « Candidats proposés » (/recruteur/candidatures) : profils regroupés par
-   offre (la plus récemment publiée d'abord), meilleurs scores d'abord. */
+/* « Candidats proposés » (/recruteur/candidatures). Mise en page reprise de
+   l'onglet admin « Recruteurs » (AdminRecruiters.css) : les offres à gauche
+   (`rcand-`), les profils proposés pour l'offre choisie à droite. Les cartes
+   de profil gardent leurs classes `rapp-`. */
 
-.rapp-group {
-  margin-bottom: 1.75rem;
+.rcand-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
 }
 
-.rapp-group-title {
+.rcand-list-col,
+.rcand-detail-col {
+  min-width: 0;
+}
+
+/* Écran étroit : la liste OU le détail, jamais les deux empilés. */
+@media (max-width: 1279px) {
+  .rcand-layout:not(.rcand-has-detail) .rcand-detail-col,
+  .rcand-layout.rcand-has-detail .rcand-list-col {
+    display: none;
+  }
+}
+
+/* Écran large : offres à gauche, profils à droite. */
+@media (min-width: 1280px) {
+  .rcand-layout {
+    grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+  }
+
+  .rcand-list-col {
+    position: sticky;
+    top: calc(var(--header-h) + 1rem);
+    max-height: calc(100vh - var(--header-h) - 2rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* Place pour l'anneau de focus des lignes, sans rognage. */
+    padding: 3px 0.25rem 3px 3px;
+  }
+
+  .rcand-back {
+    display: none !important;
+  }
+}
+
+/* ------------------------------------------------------------ états */
+
+.rcand-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-danger);
+}
+
+.rcand-stale {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1.05rem;
+  gap: 0.4rem 0.6rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.rcand-stale > span {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.rcand-muted {
+  margin-top: 0.15rem;
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+}
+
+/* --------------------------------------------------- colonne des offres */
+
+.rcand-search {
+  position: relative;
+  display: flex;
+  align-items: center;
   margin-bottom: 0.75rem;
+}
+
+.rcand-search svg {
+  position: absolute;
+  left: 0.8rem;
+  color: var(--color-ink-muted);
+  pointer-events: none;
+}
+
+.rcand-search .input {
+  width: 100%;
+  min-width: 0;
+  padding-left: 2.3rem;
+}
+
+.rcand-result-line {
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--color-ink-muted);
+}
+
+.rcand-no-result {
+  padding: 1rem;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--color-ink-muted);
   overflow-wrap: anywhere;
 }
 
-.rapp-group-count {
-  padding: 0.1rem 0.5rem;
-  border-radius: var(--radius-full);
-  background: var(--color-bg-subtle);
-  color: var(--color-ink-secondary);
-  font-size: 0.75rem;
+.rcand-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rcand-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
+}
+
+.rcand-row:hover {
+  border-color: var(--color-border-strong);
+}
+
+.rcand-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+.rcand-row-active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-muted);
+}
+
+.rcand-row-title {
   font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.rcand-row-date {
+  font-size: 0.8rem;
+  color: var(--color-ink-muted);
+}
+
+.rcand-row-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--color-ink-secondary);
+}
+
+.rcand-row-review,
+.rcand-row-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 650;
   white-space: nowrap;
 }
 
-.rapp-group-date {
-  color: var(--color-ink-secondary);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  white-space: nowrap;
+.rcand-row-review {
+  background: var(--color-accent-muted);
+  color: var(--color-accent-hover);
 }
+
+.rcand-row-active .rcand-row-review {
+  background: var(--color-surface);
+}
+
+.rcand-row-flag {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+/* ------------------------------------------------- panneau des profils */
+
+.rcand-back {
+  margin-bottom: 0.75rem;
+}
+
+.rcand-panel-head {
+  min-width: 0;
+  margin-bottom: 1rem;
+}
+
+.rcand-panel-head h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.rcand-panel-head h2:focus {
+  outline: none;
+}
+
+.rcand-panel-head h2:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.rcand-counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.5rem;
+  margin: 0.9rem 0 0;
+}
+
+.rcand-counter {
+  min-width: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  border-left: 3px solid var(--color-border-strong);
+}
+
+.rcand-counter-review {
+  border-left-color: var(--color-accent);
+}
+
+.rcand-counter-done {
+  border-left-color: var(--color-success);
+}
+
+.rcand-counter dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.rcand-counter dd {
+  margin: 0.1rem 0 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rcand-flag-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.rcand-flag-line svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.rcand-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.rcand-links .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.rcand-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.rcand-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  margin-left: 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rcand-filter-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 2rem 1.25rem;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-ink-muted);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+/* ------------------------------------------------------ cartes de profil */
 
 .rapp-list {
   display: grid;
@@ -155,4 +461,10 @@
 .rapp-feedback.is-error {
   background: var(--color-danger-bg);
   color: var(--color-danger);
+}
+
+/* Offre pourvue (sous-lot 6) dans l'en-tête du panneau. */
+.rcand-filled {
+  font-weight: 600;
+  color: var(--color-success);
 }

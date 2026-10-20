@@ -64,6 +64,7 @@ import { FadeUp } from '../../components/motion/Motion'
 import { Card } from '../../components/ui/Card'
 import { apiAdminStats, type AdminStats } from '../../lib/api'
 import { formatDateTime } from '../../lib/format'
+import { AdminHiringSection } from './AdminHiringSection'
 import type { UserRole } from '../../types'
 import './AdminDashboard.css'
 
@@ -500,8 +501,12 @@ export function AdminDashboard() {
               </div>
             </FadeUp>
 
+            <FadeUp eager index={3}>
+              <AdminHiringSection />
+            </FadeUp>
+
             {model.sections.map((sec, i) => (
-              <FadeUp eager index={3 + i} key={sec.id}>
+              <FadeUp eager index={4 + i} key={sec.id}>
                 <section className="odash-section" aria-labelledby={`odash-sec-${sec.id}`}>
                   <div className="odash-section-head">
                     <h2 id={`odash-sec-${sec.id}`}>{sec.title}</h2>

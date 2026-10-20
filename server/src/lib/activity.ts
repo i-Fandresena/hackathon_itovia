@@ -3,6 +3,20 @@ import { prisma } from './prisma.js'
 import { clip, plural } from './notify.js'
 import { ACTIVITY_FAMILY_KEYS } from './validation.js'
 import { formatMadagascarDateTime } from '../../../src/lib/interview.js'
+import {
+  CONTRACT_TYPE_LABELS,
+  DECLINE_REASON_LABELS,
+  INTERVIEW_RESULT_LABELS,
+  RESULT_REASON_LABELS,
+  WITHDRAW_REASON_LABELS,
+} from '../../../src/lib/hiring.js'
+import type {
+  ContractType,
+  HireDeclineReason,
+  HireProposalWithdrawReason,
+  InterviewResult,
+  InterviewResultReason,
+} from '../../../src/types/index.js'
 
 /**
  * Journal d'activité de la plateforme vu par l'admin (`GET /api/admin/activity`).
@@ -71,10 +85,26 @@ const ACTIONS: Record<string, ActionDef> = {
   interview_confirmed: { family: 'matching', label: 'Entretien confirmé par le candidat' },
   interview_unavailable: { family: 'matching', label: 'Empêchement signalé par le candidat' },
   interview_calendar_resync: { family: 'matching', label: 'Agenda d’un entretien régularisé' },
+  // Après l'entretien (sous-lot 3)
+  interview_outcome_recorded: { family: 'matching', label: 'Issue d’entretien renseignée' },
+  interview_absence_reply: { family: 'matching', label: 'Absence expliquée par le candidat' },
+  interview_outcome_reset: { family: 'matching', label: 'Issue d’entretien annulée par un admin' },
+  hiring_jobs_run: { family: 'matching', label: 'Rappels d’issue lancés à la demande' },
+  hiring_digest_sent: { family: 'matching', label: 'Résumé des issues en souffrance envoyé', system: true },
+  // Propositions d'embauche (sous-lot 5)
+  hire_proposal_sent: { family: 'matching', label: 'Proposition d’embauche envoyée' },
+  hire_proposal_revised: { family: 'matching', label: 'Proposition d’embauche modifiée' },
+  hire_proposal_withdrawn: { family: 'matching', label: 'Proposition d’embauche retirée' },
+  hire_proposal_accepted: { family: 'matching', label: 'Proposition d’embauche acceptée' },
+  hire_proposal_declined: { family: 'matching', label: 'Proposition d’embauche déclinée' },
+  hire_proposal_expired: { family: 'matching', label: 'Proposition d’embauche expirée', system: true },
 
   // Offres et recruteurs (décisions des recruteurs sur les profils proposés)
   recruiter_interested: { family: 'recruteurs', label: 'Recruteur intéressé par un profil' },
   recruiter_declined: { family: 'recruteurs', label: 'Recruteur a écarté un profil' },
+  // Offre pourvue (décision D1, sous-lot 5)
+  opportunity_filled: { family: 'recruteurs', label: 'Offre pourvue' },
+  opportunity_reopened: { family: 'recruteurs', label: 'Offre pourvue rouverte' },
 
   // Talents et agents de terrain
   talent_consent_profile: { family: 'talents', label: 'Profil de talent créé (accord recueilli)' },
@@ -112,12 +142,14 @@ const ACTIONS: Record<string, ActionDef> = {
 
   // Abonnements et placements
   placement_declared: { family: 'placements', label: 'Placement déclaré par le recruteur' },
+  placement_created_auto: { family: 'placements', label: 'Placement créé à l’acceptation d’une proposition' },
   placement_stage_updated: { family: 'placements', label: 'Étape de placement mise à jour par le recruteur' },
   admin_corrected_placement_stage: { family: 'placements', label: 'Étape de placement corrigée' },
 
   // Administration
   'admin:create_agent': { family: 'administration', label: 'Compte agent créé' },
   'admin:cv_verifier_roles': { family: 'administration', label: 'Habilitations de vérification des CV modifiées' },
+  research_export: { family: 'administration', label: 'Export de recherche pseudonymisé téléchargé' },
   notification_dispatch: { family: 'administration', label: 'Envoi de notification', system: true },
 }
 
@@ -630,6 +662,98 @@ function describe(log: ActivityLog, ctx: Context): Described {
       }
     }
 
+    case 'interview_outcome_recorded':
+    case 'interview_outcome_reset': {
+      // Issue et motif en libellés (l'admin les voit, décision D3) ; jamais
+      // la note privée du recruteur, qui n'est d'ailleurs pas journalisée.
+      const parts = suggestionParts(ctx, meta)
+      const round = num(meta, 'round')
+      const reset = log.action === 'interview_outcome_reset'
+      const result = str(meta, reset ? 'previousResult' : 'result')
+      const resultLabel = result ? INTERVIEW_RESULT_LABELS[result as InterviewResult] ?? null : null
+      const reason = str(meta, 'reason')
+      return {
+        detail: joinParts([
+          parts.candidate,
+          round !== null && `tour ${round}`,
+          resultLabel && (reset ? `issue annulée : ${resultLabel}` : resultLabel),
+          reason && RESULT_REASON_LABELS[reason as InterviewResultReason],
+          meta.nextRound === true && 'tour suivant fixé',
+        ]),
+        target: parts.target,
+        link: interviewsLink(parts.opportunityId),
+      }
+    }
+    case 'interview_absence_reply': {
+      // Jamais le texte de l'explication : il n'est pas dans la metadata.
+      const parts = suggestionParts(ctx, meta)
+      const round = num(meta, 'round')
+      return {
+        detail: joinParts([parts.candidate, round !== null && `tour ${round}`]),
+        target: parts.target,
+        link: interviewsLink(parts.opportunityId),
+      }
+    }
+    case 'hiring_jobs_run':
+    case 'hiring_digest_sent': {
+      const reminders = num(meta, 'outcomeReminders')
+      const overdue = num(meta, 'overdueOutcomes') ?? num(meta, 'overdue')
+      const expired = num(meta, 'proposalsExpired')
+      const proposalReminders = num(meta, 'proposalReminders')
+      return {
+        detail: joinParts([
+          reminders !== null && plural(reminders, 'rappel envoyé', 'rappels envoyés'),
+          overdue !== null && plural(overdue, 'issue en souffrance', 'issues en souffrance'),
+          expired !== null && expired > 0 && plural(expired, 'proposition expirée', 'propositions expirées'),
+          proposalReminders !== null && proposalReminders > 0 && plural(proposalReminders, 'rappel J-2', 'rappels J-2'),
+        ]),
+        target: null,
+        link: '/admin/entretiens',
+      }
+    }
+
+    case 'hire_proposal_sent':
+    case 'hire_proposal_revised':
+    case 'hire_proposal_withdrawn':
+    case 'hire_proposal_accepted':
+    case 'hire_proposal_declined':
+    case 'hire_proposal_expired': {
+      // Ni salaire ni message ni précision d'un refus : codes et numéros seulement.
+      const parts = suggestionParts(ctx, meta)
+      const version = num(meta, 'version')
+      const revision = num(meta, 'revision')
+      const contract = str(meta, 'contractType')
+      const reason = str(meta, 'reason')
+      return {
+        detail: joinParts([
+          parts.candidate,
+          version !== null && `version ${version}`,
+          log.action === 'hire_proposal_revised' && revision !== null && `révision ${revision}`,
+          contract && CONTRACT_TYPE_LABELS[contract as ContractType],
+          log.action === 'hire_proposal_declined' && reason && `motif : ${DECLINE_REASON_LABELS[reason as HireDeclineReason] ?? 'autre'}`,
+          log.action === 'hire_proposal_withdrawn' && reason && WITHDRAW_REASON_LABELS[reason as HireProposalWithdrawReason],
+        ]),
+        target: parts.target,
+        link: '/admin/mise-en-relation',
+      }
+    }
+    case 'opportunity_filled':
+    case 'opportunity_reopened': {
+      const opportunityId = idOf(meta, 'opportunityId')
+      const positions = num(meta, 'positions')
+      const active = num(meta, 'activePlacements')
+      const source = str(meta, 'source')
+      return {
+        detail: joinParts([
+          source === 'auto' && 'nombre de postes atteint',
+          source === 'manuel' && 'marquée pourvue par le recruteur',
+          positions !== null && `${active ?? 0}/${positions} poste${positions > 1 ? 's' : ''} pourvu${(active ?? 0) > 1 ? 's' : ''}`,
+        ]),
+        target: offerTarget(ctx, opportunityId, null),
+        link: offerLink(opportunityId),
+      }
+    }
+
     case 'talent_consent_profile': {
       const talentId = idOf(meta, 'talentId')
       const origin = str(meta, 'origin')
@@ -742,6 +866,10 @@ function describe(log: ActivityLog, ctx: Context): Described {
         link: '/admin/placements',
       }
     }
+    case 'placement_created_auto': {
+      const parts = suggestionParts(ctx, meta)
+      return { detail: joinParts(['Candidat diplômé', parts.candidate]), target: parts.target, link: '/admin/placements' }
+    }
     case 'placement_stage_updated':
     case 'admin_corrected_placement_stage': {
       const from = str(meta, 'fromStage')
@@ -763,6 +891,19 @@ function describe(log: ActivityLog, ctx: Context): Described {
           : 'Plus aucun rôle habilité en dehors de l’admin',
         target: null,
         link: '/verification-cv',
+      }
+    }
+    case 'research_export': {
+      // Volume et filtre seulement : aucune ligne ni aucun pseudonyme n'est journalisé.
+      const rows = num(meta, 'rowCount')
+      return {
+        detail: joinParts([
+          rows !== null && plural(rows, 'dossier exporté', 'dossiers exportés'),
+          meta.excludeTest === true ? 'sans les comptes de test' : 'comptes de test compris',
+          meta.truncated === true && 'tronqué',
+        ]),
+        target: null,
+        link: '/admin',
       }
     }
     case 'notification_dispatch': {

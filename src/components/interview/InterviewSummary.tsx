@@ -42,7 +42,13 @@ export function interviewStatusLabel(status: InterviewStatus, audience: Audience
   return INTERVIEW_STATUS_LABELS[status]
 }
 
-const isAdminInterview = (interview: Interview | AdminInterview): interview is AdminInterview =>
+/** Côté candidat, un entretien terminé n'attend plus de réponse : « Terminé »
+ *  plutôt que « À confirmer » ou « Présence confirmée » (jamais l'issue). */
+export function candidateRoundLabel(status: InterviewStatus, audience: Audience, ended: boolean): string | null {
+  return audience === 'candidate' && ended && (status === 'planifie' || status === 'confirme') ? 'Terminé' : null
+}
+
+const isAdminInterview =(interview: Interview | AdminInterview): interview is AdminInterview =>
   'calendarError' in interview
 
 /** Libellé de la visioconférence, honnête sur l'état réel du lien. */
@@ -96,7 +102,7 @@ function MeetLine({ interview, audience }: { interview: Interview; audience: Aud
 export function InterviewSummary({ interview, audience, companyName, title = 'Entretien', children }: InterviewSummaryProps) {
   const end = interviewEnd(interview.scheduledAt, interview.durationMinutes)
   const past = end.getTime() < Date.now()
-  const statusLabel = interviewStatusLabel(interview.status, audience)
+  const statusLabel = candidateRoundLabel(interview.status, audience, past) ?? interviewStatusLabel(interview.status, audience)
 
   return (
     <section className={`iv-summary iv-summary-${interview.status}`} aria-label={title}>

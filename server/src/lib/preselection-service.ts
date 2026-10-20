@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import type { MatchSuggestion as DbMatchSuggestion, Opportunity as DbOpportunityRow } from '@prisma/client'
 import type {
+  MatchClosedReason,
   MatchSuggestionStatus,
   PreselectionFilters,
   PreselectionResult,
@@ -12,7 +13,14 @@ import { toDomainCandidateProfile, toDomainOpportunity } from './domain.js'
 import { parseCvFlags } from './cv-flags.js'
 import { getMatchingConfig, notifyRecruiterOfProposal } from './matching.js'
 import { notifyUser } from './notify.js'
-import { ADMIN_ALLOWED_TRANSITIONS, RECRUITER_ALLOWED_TRANSITIONS, preselect } from './preselection.js'
+import {
+  ADMIN_ALLOWED_TRANSITIONS,
+  OPPORTUNITY_FILLED_REASON,
+  RECRUITER_ALLOWED_TRANSITIONS,
+  SYSTEM_ALLOWED_TRANSITIONS,
+  preselect,
+} from './preselection.js'
+import { closedReasonData, connectedAtData, filledAtOf } from './hiring-store.js'
 
 /**
  * Accès base de la présélection ATS et des transitions admin. La logique de
@@ -95,24 +103,32 @@ export const STALE_SUGGESTION_ERROR = 'Ce dossier a changé entre-temps. Recharg
 
 export type TransitionCheck = { ok: true } | { ok: false; httpStatus: 400 | 409; error: string }
 
+const TRANSITION_TABLES = {
+  admin: ADMIN_ALLOWED_TRANSITIONS,
+  recruiter: RECRUITER_ALLOWED_TRANSITIONS,
+  system: SYSTEM_ALLOWED_TRANSITIONS,
+} as const
+
 /**
  * Règles communes à toute transition d'un dossier, qu'elle vienne d'un
- * admin (`ADMIN_ALLOWED_TRANSITIONS`) ou du recruteur qui fixe un entretien
- * (`RECRUITER_ALLOWED_TRANSITIONS`, décision 2026-10-14) :
+ * admin (`ADMIN_ALLOWED_TRANSITIONS`), du recruteur qui fixe un entretien
+ * (`RECRUITER_ALLOWED_TRANSITIONS`, décision 2026-10-14) ou du système qui
+ * clôt les dossiers d'une offre pourvue (`SYSTEM_ALLOWED_TRANSITIONS`,
+ * décision D1 — écarter seulement) :
  * - la transition doit figurer dans la table de l'acteur ;
  * - aucun profil ne part chez un recruteur, ni n'est mis en relation, sans
  *   le consentement en vigueur du candidat (relu en base par l'appelant) ;
  * - pas de mise en relation avec un compte candidat suspendu ou banni.
  */
 export function checkMatchTransition(input: {
-  actor: 'admin' | 'recruiter'
+  actor: 'admin' | 'recruiter' | 'system'
   from: MatchSuggestionStatus
   to: MatchSuggestionStatus
   hasConsent: boolean
   /** Compte candidat suspendu ou banni (même définition que `isAccountBlocked`). */
   candidateBlocked?: boolean
 }): TransitionCheck {
-  const table = input.actor === 'admin' ? ADMIN_ALLOWED_TRANSITIONS : RECRUITER_ALLOWED_TRANSITIONS
+  const table: Partial<Record<MatchSuggestionStatus, MatchSuggestionStatus[]>> = TRANSITION_TABLES[input.actor]
   const allowed = table[input.from] ?? []
   if (!allowed.includes(input.to)) {
     return { ok: false, httpStatus: 400, error: `Transition ${input.from} → ${input.to} non autorisée.` }
@@ -141,7 +157,10 @@ type TxClient = Prisma.TransactionClient | typeof prisma
  * Écrit la transition SEULEMENT si le dossier est toujours dans le statut lu
  * (`updateMany` conditionnel) : deux requêtes concurrentes (double clic,
  * deux admins) ne font jamais avancer deux fois le même dossier. `null` si
- * le dossier a changé entre-temps.
+ * le dossier a changé entre-temps. Vers `mise_en_relation`, date aussi la
+ * mise en relation (`connectedAt`, client Prisma régénéré ; sinon la
+ * réparation au démarrage la reprend du journal d'audit). `closedReason` :
+ * raison d'une clôture automatique vers `ecartee` (offre pourvue).
  */
 export async function commitMatchTransition(
   client: TxClient,
@@ -150,11 +169,17 @@ export async function commitMatchTransition(
     from: MatchSuggestionStatus
     to: MatchSuggestionStatus
     extraData?: Pick<Prisma.MatchSuggestionUncheckedUpdateInput, 'score' | 'reasons' | 'preselectionRank'>
+    closedReason?: MatchClosedReason
   },
 ): Promise<DbMatchSuggestion | null> {
   const { count } = await client.matchSuggestion.updateMany({
     where: { id: input.id, status: input.from },
-    data: { ...input.extraData, status: input.to },
+    data: {
+      ...input.extraData,
+      ...connectedAtData(input.to),
+      ...(input.closedReason && input.to === 'ecartee' ? closedReasonData(input.closedReason) : {}),
+      status: input.to,
+    },
   })
   if (count === 0) return null
   return client.matchSuggestion.findUnique({ where: { id: input.id } })
@@ -228,6 +253,7 @@ export type AdminTransitionResult =
 
 interface AdminTransitionInput {
   suggestion: Pick<DbMatchSuggestion, 'id' | 'status' | 'candidateId' | 'opportunityId'>
+  /** Ligne complète de préférence : `filledAt` (offre pourvue) y est relu. */
   opportunity: Pick<DbOpportunityRow, 'recruiterId' | 'title' | 'companyName'>
   /** Consentement de matching en vigueur du candidat, relu en base par l'appelant. */
   hasConsent: boolean
@@ -259,6 +285,11 @@ export async function applyAdminTransition(input: AdminTransitionInput): Promise
     candidateBlocked: input.candidateBlocked,
   })
   if (!check.ok) return check
+  // Offre pourvue (D1) : plus aucun profil transmis ni mis en relation ;
+  // écarter reste possible.
+  if ((to === 'proposee_recruteur' || to === 'mise_en_relation') && filledAtOf(opportunity)) {
+    return { ok: false, httpStatus: 409, error: OPPORTUNITY_FILLED_REASON }
+  }
 
   const suggestion = await commitMatchTransition(prisma, {
     id: existing.id,

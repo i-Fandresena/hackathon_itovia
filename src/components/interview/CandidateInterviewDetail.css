@@ -9,6 +9,31 @@
   overflow-wrap: anywhere;
 }
 
+.civd-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin: -0.5rem 0 1rem;
+}
+
+.civd-head .civd-offer {
+  margin: 0;
+  min-width: 0;
+}
+
+/* Texte neutre de la phase du dossier (jamais l'issue). */
+.civd-phase {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .civd-notes {
   display: flex;
   flex-direction: column;
@@ -27,4 +52,20 @@
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
+}
+
+/* Proposition d'embauche reçue (sous-lot 6), en tête du détail. */
+.civd-proposal {
+  margin-bottom: 1rem;
+}
+
+.civd-proposal-feedback {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }

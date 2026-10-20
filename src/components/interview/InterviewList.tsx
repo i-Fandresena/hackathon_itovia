@@ -1,7 +1,7 @@
 import { AlertTriangle, Clock, ExternalLink, Video } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '../ui/Badge'
-import { INTERVIEW_STATUS_VARIANT, interviewStatusLabel } from './InterviewSummary'
+import { INTERVIEW_STATUS_VARIANT, candidateRoundLabel, interviewStatusLabel } from './InterviewSummary'
 import {
   INTERVIEW_PERIOD_LABELS,
   formatMadagascarDateTime,
@@ -9,7 +9,8 @@ import {
   interviewEnd,
   isInterviewUpcoming,
 } from '../../lib/interview'
-import type { Interview, InterviewPeriod, InterviewStatus } from '../../types'
+import { INTERVIEW_OUTCOME_FILTERS, INTERVIEW_RESULT_LABELS, type InterviewOutcomeFilter, type RoundOutcomeView } from '../../lib/hiring'
+import type { Interview, InterviewPeriod, InterviewResult, InterviewStatus } from '../../types'
 import './InterviewList.css'
 
 /**
@@ -17,6 +18,44 @@ import './InterviewList.css'
  * sélecteur de période, regroupement par offre, ligne d'entretien et
  * compteurs. Les pages gardent leurs données et leurs actions.
  */
+
+/** Filtre « Issue » (recruteur, admin — jamais le candidat). */
+export const OUTCOME_FILTER_LABELS: Record<InterviewOutcomeFilter, string> = {
+  a_renseigner: 'À renseigner',
+  ...INTERVIEW_RESULT_LABELS,
+}
+
+export const readOutcomeFilter = (value: string | null): InterviewOutcomeFilter | '' =>
+  INTERVIEW_OUTCOME_FILTERS.includes(value as InterviewOutcomeFilter) ? (value as InterviewOutcomeFilter) : ''
+
+const OUTCOME_CHIP: Record<InterviewResult, string> = {
+  retenu: ' is-success',
+  second_entretien: '',
+  non_retenu: ' is-muted',
+  absent: ' is-warning',
+}
+
+/** « Tour n » et, hors candidat, l'issue du tour, à côté du statut d'une ligne. */
+export function RoundChips({
+  interview,
+  showRound,
+  showOutcome,
+}: {
+  interview: Interview & RoundOutcomeView
+  showRound: boolean
+  showOutcome: boolean
+}) {
+  return (
+    <>
+      {showRound && <span className="ivl-chip">Tour {interview.round ?? 1}</span>}
+      {showOutcome && interview.outcome && (
+        <span className={`ivl-chip${OUTCOME_CHIP[interview.outcome]}`}>
+          Issue : {INTERVIEW_RESULT_LABELS[interview.outcome]}
+        </span>
+      )}
+    </>
+  )
+}
 
 export const INTERVIEW_PERIODS: InterviewPeriod[] = ['a_venir', 'passes', 'annules', 'tous']
 export const INTERVIEW_STATUSES: InterviewStatus[] = ['planifie', 'confirme', 'empechement', 'annule']
@@ -126,6 +165,8 @@ interface InterviewRowProps {
   extra?: ReactNode
   /** Mention courte à côté du statut (ex. « Réponse attendue »). */
   flag?: string
+  /** Badges après le statut (tour, issue, phase du dossier). */
+  badges?: ReactNode
   actions?: ReactNode
 }
 
@@ -141,6 +182,7 @@ export function InterviewRow({
   meta,
   extra,
   flag,
+  badges,
   actions,
 }: InterviewRowProps) {
   const end = interviewEnd(interview.scheduledAt, interview.durationMinutes)
@@ -168,8 +210,9 @@ export function InterviewRow({
 
       <div className="ivl-state">
         <Badge variant={INTERVIEW_STATUS_VARIANT[interview.status]}>
-          {interviewStatusLabel(interview.status, audience)}
+          {candidateRoundLabel(interview.status, audience, !upcoming) ?? interviewStatusLabel(interview.status, audience)}
         </Badge>
+        {badges}
         {flag && (
           <span className="ivl-chip is-warning ivl-flag">
             <Clock size={12} aria-hidden />

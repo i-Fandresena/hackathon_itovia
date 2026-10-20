@@ -412,6 +412,17 @@ model Opportunity {
   deadline        DateTime
   featured        Boolean         @default(false)
   createdAt       DateTime        @default(now())
+  /// Nombre de postes à pourvoir (décision D1 du 2026-10-16, 1 à 50, 1 par
+  /// défaut). L'offre sera pourvue quand les placements non annulés qui lui
+  /// sont liés atteindront ce nombre (flux d'embauche, sous-lot 5).
+  positions       Int             @default(1)
+  /// Offre pourvue : fermée au matching, à la présélection et aux nouvelles
+  /// propositions d'embauche. `null` = ouverte (aucune reprise de données :
+  /// seul le nouveau flux ou une clôture manuelle la renseigne).
+  filledAt        DateTime?
+  /// `'auto'` (nombre de postes atteint) ou identifiant du recruteur
+  /// (clôture manuelle). Interne : jamais renvoyé par l'API.
+  filledBy        String?
 
   applications     Application[]
   bookmarks        Bookmark[]
@@ -477,13 +488,31 @@ model MatchSuggestion {
   preselectionRank Int?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
-  /// Entretien fixé par le recruteur (décision 2026-10-14) — un seul par
-  /// dossier, reprogrammé ou annulé en place.
-  interview        Interview?
+  /// Date du passage en `mise_en_relation`, écrite par `commitMatchTransition`
+  /// (lib/preselection-service.ts). Remplace l'approximation `updatedAt` des
+  /// tableaux de bord. Reprise des lignes existantes : date du journal
+  /// d'audit de la transition, sinon `updatedAt`.
+  connectedAt      DateTime?
+  /// Raison d'une clôture automatique, seulement sur une ligne `ecartee`
+  /// (offre pourvue, sous-lot 5).
+  closedReason     MatchClosedReason?
+  /// Tours d'entretien fixés par le recruteur (décision 2026-10-14, tours
+  /// multiples 2026-10-16) : un seul tour ACTIF à la fois
+  /// (`Interview.activeSuggestionId` unique), reprogrammé ou annulé en place.
+  interviews       Interview[]
+  /// Propositions d'embauche successives (une seule en attente à la fois).
+  proposals        HireProposal[]
+  /// Placement né de ce dossier (proposition acceptée, ou déclaration reprise).
+  placement        Placement?
 
   @@unique([opportunityId, candidateId])
   @@index([status])
   @@index([candidateId])
+}
+
+/// Pourquoi un dossier non mis en relation a été clos automatiquement.
+enum MatchClosedReason {
+  offre_pourvue
 }
 
 /// Statut d'un entretien (décision produit 2026-10-14).
@@ -517,43 +546,174 @@ enum InterviewMeetStatus {
   simule
 }
 
+/// Issue d'un tour d'entretien, renseignée par le recruteur après l'heure de
+/// fin (« après l'entretien », 2026-10-16). Le candidat ne la voit jamais
+/// brute : il reçoit les textes neutres d'OffRec. (Le type TS
+/// `InterviewOutcome<T>` existait déjà côté serveur, d'où ce nom.)
+enum InterviewResult {
+  retenu
+  second_entretien
+  non_retenu
+  absent
+}
+
+/// Motif de l'issue, en liste fermée (agrégeable) : `points_forts` pour
+/// `retenu` / `second_entretien`, les autres pour `non_retenu`.
+enum InterviewResultReason {
+  competences_techniques
+  experience
+  disponibilite
+  pretentions_salariales
+  savoir_etre
+  autre_candidat_retenu
+  poste_modifie
+  points_forts
+  autre
+}
+
 /// Entretien fixé par le recruteur en cliquant « Ce profil m'intéresse »
 /// (décision produit 2026-10-14). Sa création fait passer le dossier en
 /// `mise_en_relation`. L'événement Google vit dans l'agenda d'OffRec, sans
 /// aucun invité : OffRec transmet lui-même le lien à chacun (intermédiaire).
+///
+/// Une ligne = un tour (`round`, 1 à 3, décision D5). Un seul tour ACTIF par
+/// dossier : `activeSuggestionId` vaut `suggestionId` tant que le tour n'a
+/// pas d'issue, `null` ensuite ; son index unique (NULL multiples permis par
+/// PostgreSQL) garantit l'unicité sans index partiel.
 model Interview {
-  id              String              @id @default(uuid())
-  suggestionId    String              @unique
-  suggestion      MatchSuggestion     @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  id                 String                 @id @default(uuid())
+  suggestionId       String
+  suggestion         MatchSuggestion        @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  /// Numéro de tour (1 pour tous les entretiens antérieurs aux tours).
+  round              Int                    @default(1)
+  /// = `suggestionId` tant que le tour est actif (aucune issue), sinon `null`.
+  activeSuggestionId String?                @unique
+  /// Issue du tour (`null` tant qu'elle n'est pas renseignée).
+  outcome            InterviewResult?
+  outcomeReason      InterviewResultReason?
+  /// Note privée du recruteur : renvoyée à son seul auteur (décision D3),
+  /// jamais au candidat, jamais à l'admin, jamais dans le journal d'audit.
+  outcomeNote        String?
+  outcomeAt          DateTime?
+  /// Recruteur auteur de l'issue (identifiant de compte, sans clé étrangère).
+  outcomeById        String?
+  /// Rappel « issue à renseigner » envoyé au recruteur (une seule fois par tour).
+  outcomeReminderAt  DateTime?
+  /// Explication d'absence du candidat (après une issue `absent`), lue par
+  /// les admins seuls — jamais par le recruteur.
+  absenceReply       String?
+  absenceReplyAt     DateTime?
   /// Instant de début, en UTC (saisi en heure de Madagascar, UTC+3 fixe).
-  scheduledAt     DateTime
+  scheduledAt        DateTime
   /// 30, 45 ou 60.
-  durationMinutes Int
+  durationMinutes    Int
   /// Message optionnel du recruteur au candidat.
-  message         String?
-  status          InterviewStatus     @default(planifie)
-  provider        InterviewProvider
-  meetStatus      InterviewMeetStatus
-  meetUrl         String?
-  googleEventId   String?
+  message            String?
+  status             InterviewStatus        @default(planifie)
+  provider           InterviewProvider
+  meetStatus         InterviewMeetStatus
+  meetUrl            String?
+  googleEventId      String?
   /// Dernier échec de synchronisation avec Google (message court, sans
   /// secret) ; `null` quand l'agenda est à jour.
-  calendarError   String?
+  calendarError      String?
   /// Motif court donné par le candidat avec son empêchement.
-  declineReason   String?
+  declineReason      String?
   /// Dernière réponse du candidat (confirmation ou empêchement).
-  respondedAt     DateTime?
-  cancelledAt     DateTime?
-  rescheduleCount Int                 @default(0)
+  respondedAt        DateTime?
+  cancelledAt        DateTime?
+  rescheduleCount    Int                    @default(0)
   /// Recruteur auteur (identifiant de compte, sans clé étrangère).
-  createdById     String
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  createdById        String
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
+  /// Remplace l'ancien `suggestionId @unique` (migration
+  /// 20261016100000_interview_rounds) ; sert aussi d'index par dossier.
+  @@unique([suggestionId, round])
   @@index([status])
   @@index([meetStatus])
   /// Listes « Entretiens » (recruteur, admin) : tri et périodes par date.
   @@index([scheduledAt])
+  @@index([outcome])
+}
+
+enum HireProposalStatus {
+  envoyee
+  acceptee
+  refusee
+  expiree
+  retiree
+}
+
+enum HireProposalWithdrawReason {
+  recruteur
+  poste_pourvu
+  compte_inactif
+}
+
+enum ContractType {
+  cdi
+  cdd
+  stage
+  alternance
+  freelance
+}
+
+/// Motif (facultatif) d'un refus de proposition par le candidat.
+enum HireDeclineReason {
+  salaire
+  date_debut
+  type_contrat
+  autre_offre_acceptee
+  localisation
+  raisons_personnelles
+  autre
+}
+
+/// Proposition d'embauche du recruteur à un candidat retenu (2026-10-16).
+/// Versions successives par dossier (`version`) ; une seule en attente à la
+/// fois : `pendingSuggestionId` vaut `suggestionId` tant que le statut est
+/// `envoyee`, `null` ensuite (index unique, même motif que
+/// `Interview.activeSuggestionId`). Expire 7 jours après l'envoi ou la
+/// dernière modification (décision D2) ; le candidat accepte la révision
+/// (`revision`) qu'il a lue.
+model HireProposal {
+  id                     String                      @id @default(uuid())
+  suggestionId           String
+  suggestion             MatchSuggestion             @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  /// = `suggestionId` tant que `status = envoyee`, sinon `null`.
+  pendingSuggestionId    String?                     @unique
+  /// n-ième proposition du dossier.
+  version                Int                         @default(1)
+  jobTitle               String
+  monthlySalaryAr        Int
+  /// Jour civil (Madagascar).
+  startDate              DateTime                    @db.Date
+  contractType           ContractType
+  /// Obligatoire pour `cdd` et `stage`.
+  contractDurationMonths Int?
+  message                String?
+  status                 HireProposalStatus          @default(envoyee)
+  expiresAt              DateTime
+  /// Incrémenté à chaque modification.
+  revision               Int                         @default(0)
+  respondedAt            DateTime?
+  declineReason          HireDeclineReason?
+  /// Précision du refus : lue par le candidat et l'admin, jamais par le
+  /// recruteur (décision D3), jamais dans le journal d'audit.
+  declineNote            String?
+  withdrawnAt            DateTime?
+  withdrawReason         HireProposalWithdrawReason?
+  expiryReminderAt       DateTime?
+  /// Recruteur auteur (identifiant de compte, sans clé étrangère).
+  createdById            String
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  placement              Placement?
+
+  @@unique([suggestionId, version])
+  @@index([status, expiresAt])
 }
 
 model Application {
@@ -990,21 +1150,42 @@ model TalentOpportunityProposal {
 /// Exactement un de candidateId/talentId renseigné — vérifié en code
 /// (validation Zod), pas en contrainte DB.
 model Placement {
-  id              String         @id @default(uuid())
+  id              String           @id @default(uuid())
   opportunityId   String?
-  opportunity     Opportunity?   @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  opportunity     Opportunity?     @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
   recruiterId     String
-  recruiter       User           @relation("PlacementsAsRecruiter", fields: [recruiterId], references: [id], onDelete: Cascade)
+  recruiter       User             @relation("PlacementsAsRecruiter", fields: [recruiterId], references: [id], onDelete: Cascade)
   candidateId     String?
-  candidate       User?          @relation("PlacementsAsCandidate", fields: [candidateId], references: [id], onDelete: SetNull)
+  candidate       User?            @relation("PlacementsAsCandidate", fields: [candidateId], references: [id], onDelete: SetNull)
   talentId        String?
-  talent          TalentProfile? @relation(fields: [talentId], references: [id], onDelete: SetNull)
+  talent          TalentProfile?   @relation(fields: [talentId], references: [id], onDelete: SetNull)
   monthlySalaryAr Int?
-  stage           PlacementStage @default(etape1_due)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  stage           PlacementStage   @default(etape1_due)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  /// Dossier diplômé d'origine. `SetNull` et non `Cascade` : supprimer
+  /// l'offre supprime ses `MatchSuggestion` (cascade) mais le suivi du
+  /// success fee doit survivre, comme `opportunityId`. Reprise : le plus
+  /// ancien placement non annulé de chaque paire offre/candidat.
+  suggestionId    String?          @unique
+  suggestion      MatchSuggestion? @relation(fields: [suggestionId], references: [id], onDelete: SetNull)
+  /// Proposition d'embauche acceptée dont il est né (flux automatique).
+  hireProposalId  String?          @unique
+  hireProposal    HireProposal?    @relation(fields: [hireProposalId], references: [id], onDelete: SetNull)
+  origin          PlacementOrigin  @default(declaration)
+  jobTitle        String?
+  /// Jour civil (Madagascar).
+  startDate       DateTime?        @db.Date
+  contractType    ContractType?
 
   @@index([recruiterId])
+}
+
+/// Origine d'un placement : déclaration du recruteur (talents, historique)
+/// ou acceptation d'une proposition d'embauche (diplômés, automatique).
+enum PlacementOrigin {
+  declaration
+  proposition_acceptee
 }
 
 // Recommandations de talents (et, plus tard, d'entreprises) : un membre

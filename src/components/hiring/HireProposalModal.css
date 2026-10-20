@@ -1,0 +1,97 @@
+/* Modale « Proposition d'embauche » (recruteur : envoi et modification).
+   Préfixe `hpm-`. */
+
+.hpm-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.hpm-context {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.hpm-fields {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.hpm-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0 0.75rem;
+}
+
+.hpm-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+}
+
+.hpm-preview {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-muted);
+  color: var(--color-ink-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.hpm-preview p {
+  margin: 0;
+}
+
+.hpm-preview-title {
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.hpm-quote {
+  font-style: italic;
+}
+
+.hpm-muted {
+  color: var(--color-ink-muted);
+}
+
+.hpm-deadline strong {
+  color: var(--color-ink);
+}
+
+.hpm-error {
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.hpm-context + .hpm-error {
+  margin: 0 0 1rem;
+}
+
+.hpm-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 420px) {
+  .hpm-actions > .btn {
+    flex: 1 1 100%;
+  }
+}

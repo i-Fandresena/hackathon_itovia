@@ -1,12 +1,25 @@
 /* Détail d'un entretien côté recruteur (modale partagée par « Candidats
    proposés » et « Entretiens »). */
 
+.rivd-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin: -0.5rem 0 1rem;
+}
+
 .rivd-offer {
   margin: -0.5rem 0 1rem;
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-ink-secondary);
   overflow-wrap: anywhere;
+}
+
+.rivd-head .rivd-offer {
+  margin: 0;
+  min-width: 0;
 }
 
 .rivd-feedback {
@@ -40,4 +53,84 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 1.25rem;
+}
+
+/* Ce que la phase du dossier laisse à faire (sous le récapitulatif). */
+.rivd-note {
+  margin: 0.85rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.rivd-note.is-warning {
+  background: var(--color-warning-bg);
+  color: var(--color-ink);
+}
+
+.rivd-note.is-ok {
+  background: var(--color-success-bg);
+  color: var(--color-ink);
+}
+
+.rivd-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.rivd-next .rivd-note {
+  flex: 1 1 100%;
+}
+
+.rivd-soon {
+  margin: 0;
+  flex: 1 1 12rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--color-ink-muted);
+}
+
+/* Proposition d'embauche du dossier (sous-lot 6), au-dessus du récapitulatif. */
+.rivd-proposal {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.rivd-versions {
+  font-size: 0.82rem;
+  color: var(--color-ink-muted);
+}
+
+.rivd-versions summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+}
+
+.rivd-versions ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.25rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rivd-quote {
+  margin: 0.25rem 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-muted);
+  color: var(--color-ink-secondary);
+  font-size: 0.875rem;
+  font-style: italic;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }

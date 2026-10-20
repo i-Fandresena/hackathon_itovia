@@ -1,0 +1,104 @@
+/* Frise des tours d'entretien d'un dossier (InterviewRounds). Préfixe `ivr-`. */
+
+.ivr {
+  margin-top: 1rem;
+}
+
+.ivr-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.ivr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.ivr-item {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  min-width: 0;
+}
+
+.ivr-item.is-current {
+  border-color: var(--color-accent-ring);
+  background: var(--color-accent-muted);
+}
+
+.ivr-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.ivr-round {
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.ivr-date {
+  color: var(--color-ink-secondary);
+}
+
+.ivr-state {
+  margin-left: auto;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.ivr-state-neutral {
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-secondary);
+}
+
+.ivr-state-muted {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-ink-muted);
+}
+
+.ivr-state-warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.ivr-state-success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.ivr-detail {
+  margin: 0.3rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.ivr-label {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.ivr-note {
+  font-style: italic;
+}
+
+@media (max-width: 420px) {
+  .ivr-state {
+    margin-left: 0;
+  }
+}

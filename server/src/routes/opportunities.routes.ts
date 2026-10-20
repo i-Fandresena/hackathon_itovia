@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireRole } from '../middleware/rbac.js'
-import { opportunityInputSchema } from '../lib/validation.js'
+import { opportunityInputSchema, opportunityReopenSchema } from '../lib/validation.js'
 import { scoreOpportunity } from '../../../src/lib/recommendation.js'
 import type { CandidateProfile } from '../../../src/types/index.js'
 import { toDomainCandidateProfile, toDomainOpportunity } from '../lib/domain.js'
@@ -11,9 +11,34 @@ import { clip, plural, scheduleAdminNotification } from '../lib/notify.js'
 import { loadTalentTrust, recruiterEndorsementView, retainedEndorsements, verificationSummary } from '../lib/talent-trust.js'
 import { talentMatch } from '../lib/talent-match.js'
 import { compareSubjectTrust } from '../../../src/lib/trust.js'
+import { positionsUpdateError } from '../../../src/lib/hiring.js'
+import { HIRING_SUPPORTED, positionsData } from '../lib/hiring-store.js'
+import {
+  applyAutoFillTx,
+  countActivePlacements,
+  lockOpportunity,
+  markOpportunityFilled,
+  reopenOpportunity,
+  scheduleFilledClosureEffects,
+  type FilledClosure,
+} from '../lib/opportunity-fill.js'
+import type { ServiceResult } from '../lib/interviews.js'
+import type { Response } from 'express'
+
+/** Refus du nombre de postes (sous les placements actifs), levé dans la transaction. */
+class PositionsRefusal extends Error {}
+
+function sendOutcome<T>(res: Response, outcome: ServiceResult<T>): void {
+  if (outcome.ok) res.status(outcome.httpStatus).json(outcome.body)
+  else res.status(outcome.httpStatus).json({ error: outcome.error })
+}
 
 const router = Router()
 
+/**
+ * Catalogue public. Chaque offre porte `positions` et `filledAt` (offre
+ * pourvue, D1 : affichée « Pourvue », fermée au matching) ; jamais `filledBy`.
+ */
 router.get('/', async (req, res, next) => {
   try {
     const opportunities = await prisma.opportunity.findMany({ orderBy: { createdAt: 'desc' } })
@@ -38,6 +63,7 @@ router.get('/', async (req, res, next) => {
   }
 })
 
+/** Offres du recruteur, avec `activePlacements` (placements non annulés : « Pourvue (n/n) », D1). */
 router.get('/mine', requireRole('recruiter'), async (req, res, next) => {
   try {
     const opportunities = await prisma.opportunity.findMany({
@@ -45,10 +71,17 @@ router.get('/mine', requireRole('recruiter'), async (req, res, next) => {
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { applications: true } } },
     })
+    const placed = await prisma.placement.groupBy({
+      by: ['opportunityId'],
+      where: { opportunityId: { in: opportunities.map((o) => o.id) }, stage: { not: 'annule' } },
+      _count: { _all: true },
+    })
+    const placedBy = new Map(placed.map((g) => [g.opportunityId, g._count._all]))
     res.json({
       opportunities: opportunities.map((o) => ({
         ...toDomainOpportunity(o),
         applicationCount: o._count.applications,
+        activePlacements: placedBy.get(o.id) ?? 0,
       })),
     })
   } catch (err) {
@@ -71,7 +104,7 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', requireRole('recruiter'), async (req, res, next) => {
   try {
-    const { missions, ...body } = opportunityInputSchema.parse(req.body)
+    const { missions, positions, ...body } = opportunityInputSchema.parse(req.body)
     const recruiterProfile = await prisma.recruiterProfile.findUnique({
       where: { userId: req.session!.sub },
     })
@@ -88,6 +121,7 @@ router.post('/', requireRole('recruiter'), async (req, res, next) => {
       data: {
         ...body,
         ...missionsField,
+        ...positionsData(positions),
         deadline: new Date(body.deadline),
         recruiterId: req.session!.sub,
         companyName: recruiterProfile.companyName,
@@ -115,17 +149,45 @@ router.put('/:id', requireRole('recruiter'), async (req, res, next) => {
       res.status(404).json({ error: 'Offre introuvable.' })
       return
     }
-    const { missions, ...body } = opportunityInputSchema.parse(req.body)
+    const { missions, positions, ...body } = opportunityInputSchema.parse(req.body)
     const missionsField = missionsData(missions)
     if (!missionsField) {
       res.status(503).json({ error: MISSIONS_UNAVAILABLE_MESSAGE })
       return
     }
-    const opportunity = await prisma.opportunity.update({
-      where: { id: req.params.id },
-      data: { ...body, ...missionsField, deadline: new Date(body.deadline) },
-    })
+    const data = { ...body, ...missionsField, deadline: new Date(body.deadline) }
+    let opportunity: Awaited<ReturnType<typeof prisma.opportunity.update>>
+    let closure: FilledClosure | null = null
+    if (positions !== undefined && HIRING_SUPPORTED) {
+      // Nombre de postes (D1) : jamais sous les placements actifs ; atteint,
+      // l'offre passe pourvue et ses autres dossiers sont clos (même
+      // transaction, offre verrouillée).
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          await lockOpportunity(tx, existing.id)
+          const error = positionsUpdateError(positions, await countActivePlacements(tx, existing.id))
+          if (error) throw new PositionsRefusal(error)
+          const updated = await tx.opportunity.update({
+            where: { id: existing.id },
+            data: { ...data, ...positionsData(positions) },
+          })
+          const fill = await applyAutoFillTx(tx, existing.id, { now: new Date(), actorId: req.session!.sub })
+          return { updated: fill ? ((await tx.opportunity.findUnique({ where: { id: existing.id } })) ?? updated) : updated, fill }
+        })
+        opportunity = result.updated
+        closure = result.fill
+      } catch (err) {
+        if (err instanceof PositionsRefusal) {
+          res.status(400).json({ error: err.message })
+          return
+        }
+        throw err
+      }
+    } else {
+      opportunity = await prisma.opportunity.update({ where: { id: req.params.id }, data })
+    }
     res.json({ opportunity: toDomainOpportunity(opportunity) })
+    scheduleFilledClosureEffects(closure)
     scheduleAdminNotification({
       event: 'opportunity_updated',
       category: 'recruteur',
@@ -163,6 +225,43 @@ router.delete('/:id', requireRole('recruiter'), async (req, res, next) => {
         (openFiles > 0 ? ` : ${plural(openFiles, 'dossier')} de matching en cours ${openFiles > 1 ? 'disparaissent' : 'disparaît'} avec elle.` : '.'),
       link: '/admin/mise-en-relation',
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * « Marquer comme pourvue » (D1, embauche faite hors OffRec) : recruteur
+ * propriétaire. Les autres dossiers de l'offre sont clos dans la même
+ * transaction (non mis en relation → écartés ; mis en relation → tour à
+ * venir annulé, proposition en attente retirée) et leurs candidats
+ * informés par un message neutre. 200 `{ opportunity }` ; 404 hors de ses
+ * offres ; 409 déjà pourvue ; 503 suite non activée.
+ */
+router.post('/:id/filled', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    sendOutcome(res, await markOpportunityFilled({ opportunityId: req.params.id, recruiterId: req.session!.sub }))
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * « Rouvrir » une offre pourvue (`{ positions? }`, D1) : au moins un poste
+ * libre. Les dossiers clos ne sont pas réactivés ; le moteur de matching
+ * repart après la réponse. 200 `{ opportunity }` ; 400 nombre de postes
+ * invalide ; 404 ; 409 pas pourvue.
+ */
+router.delete('/:id/filled', requireRole('recruiter'), async (req, res, next) => {
+  try {
+    const body = opportunityReopenSchema.parse(req.body ?? {})
+    const outcome = await reopenOpportunity({
+      opportunityId: req.params.id,
+      recruiterId: req.session!.sub,
+      positions: body.positions,
+    })
+    sendOutcome(res, outcome)
+    if (outcome.ok) scheduleOpportunityMatching(req.params.id, 'opportunity_updated')
   } catch (err) {
     next(err)
   }

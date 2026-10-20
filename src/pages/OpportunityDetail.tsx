@@ -3,6 +3,12 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { WithdrawDossierButton } from '../components/candidate/WithdrawDossierButton'
 import { CandidateInterviewCard } from '../components/interview/CandidateInterviewCard'
+import { HiringPhaseBadge } from '../components/hiring/HiringPhaseBadge'
+import {
+  CandidateHireProposalCard,
+  CandidateHireProposalDialog,
+  type CandidateProposalStep,
+} from '../components/hiring/CandidateHireProposalCard'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -16,7 +22,7 @@ import {
 } from '../data/constants'
 import { useApp } from '../context/AppContext'
 import { toDisplayOpportunity } from '../lib/api'
-import { canWithdrawFromDossier, dossierStatusInfo } from '../lib/candidateDossier'
+import { CANDIDATE_PHASE_TEXT, canWithdrawFromDossier, dossierStatusInfo } from '../lib/candidateDossier'
 import { formatDate } from '../lib/format'
 import { EmployerTrust } from './companies/LinkedCompanyCard'
 import './OpportunityDetail.css'
@@ -36,10 +42,12 @@ interface OpportunityDetailProps {
 export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityDetailProps) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { opportunities, getSuggestionForOpportunity, expressInterest, currentUser, hydrated } =
+  const { opportunities, getSuggestionForOpportunity, expressInterest, currentUser, hydrated, refreshDossiers } =
     useApp()
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null)
   const [withdrawnTitle, setWithdrawnTitle] = useState('')
+  /** Réponse à la proposition d'embauche du dossier (une modale à la fois). */
+  const [proposalStep, setProposalStep] = useState<CandidateProposalStep | null>(null)
 
   const suggestion = candidate && id ? getSuggestionForOpportunity(id) : undefined
   const opportunity = candidate
@@ -81,6 +89,8 @@ export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityD
   }
 
   const status = suggestion ? dossierStatusInfo(suggestion.status) : null
+  // Après l'entretien : phase neutre (`candidatePhase`), jamais l'issue brute.
+  const phase = suggestion?.status === 'mise_en_relation' ? suggestion.candidatePhase ?? null : null
   // Le nom de l'entreprise n'est affiché au candidat qu'à la mise en relation.
   const showCompany = !candidate || suggestion?.status === 'mise_en_relation'
 
@@ -116,6 +126,9 @@ export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityD
           <Badge variant="primary">{opportunity.category}</Badge>
           <Badge variant="muted">{OPPORTUNITY_TYPE_LABELS[opportunity.opportunityType]}</Badge>
           <Badge variant="muted">{EXPERIENCE_LABELS[opportunity.level]}</Badge>
+          {/* Offre pourvue (D1) : catalogue public seulement — dans un dossier
+              candidat, la phase neutre suffit (« Dossier clos »). */}
+          {!candidate && opportunity.filledAt && <Badge variant="success">Pourvue</Badge>}
         </div>
 
         <p className="opp-location detail-location">
@@ -135,9 +148,33 @@ export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityD
           <Card className="detail-dossier">
             <div className="detail-dossier-head">
               <h2>État de votre dossier</h2>
-              <Badge variant={status.variant}>{status.label}</Badge>
+              {phase ? (
+                <HiringPhaseBadge audience="candidate" phase={phase} />
+              ) : (
+                <Badge variant={status.variant}>{status.label}</Badge>
+              )}
             </div>
-            <p className="detail-dossier-text">{status.description}</p>
+            <p className="detail-dossier-text">{phase ? CANDIDATE_PHASE_TEXT[phase] : status.description}</p>
+
+            {/* Proposition d'embauche reçue (sous-lot 6) : seulement à la mise en relation. */}
+            {suggestion.status === 'mise_en_relation' && suggestion.proposal && (
+              <div className="detail-proposal" id="proposition">
+                <CandidateHireProposalCard
+                  proposal={suggestion.proposal}
+                  opportunityTitle={opportunity.title}
+                  companyName={suggestion.opportunity.companyName}
+                  title="Proposition d’embauche"
+                  onAccept={() => {
+                    setFeedback(null)
+                    setProposalStep('accept')
+                  }}
+                  onDecline={() => {
+                    setFeedback(null)
+                    setProposalStep('decline')
+                  }}
+                />
+              </div>
+            )}
 
             {suggestion.status === 'mise_en_relation' && suggestion.interview && (
               <div className="detail-interview" id="entretien">
@@ -145,6 +182,7 @@ export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityD
                   suggestionId={suggestion.id}
                   interview={suggestion.interview}
                   companyName={suggestion.opportunity.companyName}
+                  rounds={suggestion.interviews ?? []}
                 />
               </div>
             )}
@@ -217,6 +255,19 @@ export function OpportunityDetail({ backLabel, backTo, candidate }: OpportunityD
             </>
           )}
         </Card>
+
+        {proposalStep && suggestion?.status === 'mise_en_relation' && suggestion.proposal && (
+          <CandidateHireProposalDialog
+            step={proposalStep}
+            suggestionId={suggestion.id}
+            proposal={suggestion.proposal}
+            opportunityTitle={opportunity.title}
+            companyName={suggestion.opportunity.companyName}
+            onClose={() => setProposalStep(null)}
+            onRefresh={refreshDossiers}
+            onDone={(text) => setFeedback({ ok: true, text })}
+          />
+        )}
 
         {/* Appel à l'inscription : visiteurs non connectés uniquement (attendre
             l'hydratation évite de le faire clignoter pour un utilisateur connecté). */}

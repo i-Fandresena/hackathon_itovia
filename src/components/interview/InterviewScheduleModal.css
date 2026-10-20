@@ -12,12 +12,6 @@
   overflow-wrap: anywhere;
 }
 
-.ivm-when {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 0.75rem;
-}
-
 .ivm-reminder {
   display: grid;
   gap: 0.4rem;
@@ -52,10 +46,6 @@
 }
 
 @media (max-width: 420px) {
-  .ivm-when {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .ivm-actions > .btn {
     flex: 1 1 100%;
   }

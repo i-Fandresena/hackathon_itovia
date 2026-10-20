@@ -5,7 +5,7 @@ import { useApp } from '../../context/AppContext'
 import { PageMotion } from '../motion/Motion'
 import { Logo } from '../brand/Logo'
 import { ThemeToggle } from '../ui/ThemeToggle'
-import { Sidebar, countInterviewBadge, getLinksByRole } from './Sidebar'
+import { Sidebar, countHomeBadge, countInterviewBadge, getLinksByRole } from './Sidebar'
 import { TabBar, type TabBarItem } from './TabBar'
 import './AppShell.css'
 
@@ -37,8 +37,9 @@ export function AppShell() {
   const role = currentUser?.role ?? 'candidate'
   const canVerifyCv = currentUser?.canVerifyCv === true
   const interviewsToHandle = countInterviewBadge(role, receivedSuggestions, mySuggestions)
+  const homeBadge = countHomeBadge(role, mySuggestions)
   const tabItems: TabBarItem[] = useMemo(() => {
-    const allLinks = getLinksByRole(role, unreadCount, canVerifyCv, interviewsToHandle)
+    const allLinks = getLinksByRole(role, unreadCount, canVerifyCv, interviewsToHandle, homeBadge)
     // Les entrées `menuOnly` restent sous « Menu » (leur pastille compte dans la sienne).
     const primary = allLinks.filter((l) => !l.menuOnly).slice(0, 4)
     const hiddenBadgeTotal = allLinks
@@ -55,7 +56,7 @@ export function AppShell() {
         onClick: () => setMenuOpen(true),
       },
     ]
-  }, [role, unreadCount, menuOpen, canVerifyCv, interviewsToHandle])
+  }, [role, unreadCount, menuOpen, canVerifyCv, interviewsToHandle, homeBadge])
 
   return (
     <div className="shell">

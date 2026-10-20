@@ -196,6 +196,18 @@ button.ivl-stat:focus-visible {
   color: var(--color-warning);
 }
 
+/* Issue d'un tour (recruteur, admin) : retenu, non retenu… */
+.ivl-chip.is-success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.ivl-chip.is-muted {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-ink-muted);
+}
+
 /* Mention « Réponse attendue » à côté du statut d'une ligne. */
 .ivl-flag {
   display: inline-flex;

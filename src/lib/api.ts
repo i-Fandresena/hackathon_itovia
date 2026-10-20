@@ -1,8 +1,13 @@
 import type {
   AdminInterview,
+  ContractType,
+  HireDeclineReason,
+  HireProposalStatus,
   Interview,
   InterviewDuration,
   InterviewPeriod,
+  InterviewResult,
+  InterviewResultReason,
   InterviewStatus,
   CompanyRelation,
   LinkedCompanySummary,
@@ -29,6 +34,7 @@ import type {
   Opportunity,
   OpportunityType,
   Placement,
+  PlacementOrigin,
   PlacementStage,
   PreselectionFilters,
   PreselectionResult,
@@ -52,6 +58,34 @@ import type {
   User,
   UserRole,
 } from '../types/index.js'
+import type {
+  CandidateHiringPhase,
+  HireProposalFields,
+  HireProposalView,
+  HiringPhase,
+  InterviewOutcomeFilter,
+  RoundOutcomeView,
+} from './hiring.js'
+
+/** Placement lié à un dossier diplômé (sous-lot 5) : jamais le salaire ni les personnes. */
+export interface DossierPlacement {
+  id: string
+  stage: PlacementStage
+  origin: PlacementOrigin
+  /** Jour civil AAAA-MM-JJ, ou `null`. */
+  startDate: string | null
+}
+
+/** Champs « flux d'embauche » d'un placement (sous-lot 5) — absents d'un serveur plus ancien. */
+export interface PlacementHiringFields {
+  origin?: PlacementOrigin
+  suggestionId?: string | null
+  hireProposalId?: string | null
+  jobTitle?: string | null
+  /** Jour civil AAAA-MM-JJ (vue recruteur) ou date ISO (vue admin). */
+  startDate?: string | null
+  contractType?: ContractType | null
+}
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000/api'
 
@@ -278,6 +312,36 @@ export function apiDeleteOpportunity(id: string) {
   return request<void>(`/opportunities/${id}`, { method: 'DELETE' })
 }
 
+/** Offre du recruteur (« Mes offres ») : + `activePlacements`, placements
+ *  non annulés liés à l'offre (« n / positions pourvus », D1). */
+export type RecruiterOpportunity = Opportunity & { applicationCount?: number; activePlacements: number }
+
+/** Recruteur : ses offres, pourvues comprises (sous-lot 5). */
+export function apiMyOpportunities() {
+  return request<{ opportunities: RecruiterOpportunity[] }>('/opportunities/mine').then((r) => r.opportunities)
+}
+
+/** « Marquer comme pourvue » (embauche faite hors OffRec) : les autres
+ *  dossiers de l'offre sont clos dans la même transaction (profils transmis
+ *  écartés, entretiens à venir annulés, propositions en attente retirées) et
+ *  leurs candidats informés par un message neutre. 404 hors de ses offres,
+ *  409 déjà pourvue, 503 suite non activée. */
+export function apiMarkOpportunityFilled(id: string) {
+  return request<{ opportunity: RecruiterOpportunity }>(`/opportunities/${id}/filled`, { method: 'POST' }).then(
+    (r) => r.opportunity,
+  )
+}
+
+/** « Rouvrir » une offre pourvue : au moins un poste libre (`positions`
+ *  facultatif, sinon max(postes actuels, placements + 1)). Les dossiers clos
+ *  ne sont pas réactivés. 400 nombre invalide, 409 pas pourvue. */
+export function apiReopenOpportunity(id: string, positions?: number) {
+  return request<{ opportunity: RecruiterOpportunity }>(`/opportunities/${id}/filled`, {
+    method: 'DELETE',
+    body: JSON.stringify(positions === undefined ? {} : { positions }),
+  }).then((r) => r.opportunity)
+}
+
 export function apiAddBookmark(opportunityId: string) {
   return request<void>(`/opportunities/${opportunityId}/bookmark`, { method: 'POST' })
 }
@@ -366,11 +430,32 @@ export type CandidateSuggestionOpportunity = Omit<Opportunity, 'recruiterId' | '
   companyName: string | null
 }
 
+/** Tour d'entretien vu par le candidat : jamais l'issue, le motif ni la
+ *  note ; son explication d'absence et `canExplainAbsence` (sous-lot 3). */
+export type CandidateInterview = Interview & RoundOutcomeView
+
+/** Tour vu par le recruteur propriétaire de l'offre : + issue et motif ; la
+ *  note privée seulement s'il en est l'auteur ; jamais l'explication
+ *  d'absence du candidat (décision D3). */
+export type RecruiterInterview = Interview & RoundOutcomeView
+
+/** Tour vu par l'admin : + agenda, issue, motif, explication d'absence ;
+ *  jamais la note privée du recruteur. */
+export type AdminRoundInterview = AdminInterview & RoundOutcomeView
+
 export interface MatchSuggestionWithOpportunity extends MatchSuggestion {
   opportunity: CandidateSuggestionOpportunity
   /** Entretien fixé par le recruteur — uniquement à partir de
-   *  `mise_en_relation` ; `null`/absent sinon. */
-  interview?: Interview | null
+   *  `mise_en_relation` (tour actif, sinon le dernier) ; `null`/absent sinon. */
+  interview?: CandidateInterview | null
+  /** Tous les tours, triés (sous-lot 3) ; `[]` avant la mise en relation. */
+  interviews?: CandidateInterview[]
+  /** Phase neutre du dossier (`candidateHiringPhase`) ; `null` avant la mise
+   *  en relation ou si la suite après l'entretien n'est pas activée. */
+  candidatePhase?: CandidateHiringPhase | null
+  /** Dernière proposition d'embauche (sous-lot 5, vue candidat : jamais la
+   *  raison d'un retrait) ; `id` + `revision` servent à l'acceptation. */
+  proposal?: HireProposalView | null
 }
 
 /** Adapte l'offre d'un dossier candidat aux composants qui attendent une
@@ -406,8 +491,22 @@ export interface ReceivedSuggestion {
   /** Rang dans la présélection OffRec au moment de la transmission, s'il a
    *  été enregistré. */
   preselectionRank?: number | null
-  /** Entretien fixé (dossier `mise_en_relation`), `null`/absent sinon. */
-  interview?: Interview | null
+  /** Entretien fixé (dossier `mise_en_relation`) : tour actif, sinon le
+   *  dernier ; `null`/absent sinon. */
+  interview?: RecruiterInterview | null
+  /** Tous les tours, triés, avec leur issue (sous-lot 3). */
+  interviews?: RecruiterInterview[]
+  /** Tour actif (sans issue), `null` s'il n'y en a pas. */
+  activeInterview?: RecruiterInterview | null
+  /** Phase dérivée du dossier (`hiringPhase`), `null` hors `mise_en_relation`. */
+  phase?: HiringPhase | null
+  /** Propositions d'embauche, toutes versions (sous-lot 5, vue recruteur :
+   *  catégorie d'un refus, jamais sa précision). */
+  proposals?: HireProposalView[]
+  /** Dernière proposition, ou `null`. */
+  proposal?: HireProposalView | null
+  /** Placement lié au dossier, ou `null`. */
+  placement?: DossierPlacement | null
   /** Le serveur ne transmet au recruteur qu'une liste blanche du profil :
    *  ni email, ni téléphone, ni CV, ni statut de vérification du CV. */
   candidate: {
@@ -514,6 +613,164 @@ export function apiAdminResyncInterview(interviewId: string) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Après l'entretien : issue et tours (plan du 2026-10-16, sous-lot 3) */
+/* ------------------------------------------------------------------ */
+
+export interface InterviewOutcomeInput {
+  /** Tour actif visé (404 s'il n'est plus actif, 409 si l'issue est déjà posée). */
+  interviewId: string
+  result: InterviewResult
+  /** Liste fermée (`reasonsForResult`) : obligatoire pour `non_retenu`,
+   *  `points_forts` facultatif pour `retenu` / `second_entretien`, aucun pour `absent`. */
+  reason?: InterviewResultReason
+  /** Note privée : relue par son seul auteur, jamais transmise au candidat. */
+  note?: string
+  /** Date du tour suivant, seulement avec `second_entretien`. */
+  nextRound?: InterviewInput
+}
+
+export interface InterviewOutcomeResult {
+  interview: RecruiterInterview
+  /** Tour suivant créé dans la même transaction (`nextRound`), sinon `null`. */
+  nextInterview: RecruiterInterview | null
+  phase: HiringPhase | null
+}
+
+/** Recruteur : issue du tour actif, après son heure de fin. 400 avant la
+ *  fin, sur un tour annulé ou en empêchement, ou au-delà de 3 tours ; 404
+ *  tour non actif ; 409 issue déjà renseignée, accord retiré, compte
+ *  inactif, offre pourvue ; 503 suite non activée. */
+export function apiRecordInterviewOutcome(suggestionId: string, input: InterviewOutcomeInput) {
+  return request<InterviewOutcomeResult>(`/match-suggestions/${suggestionId}/interview/outcome`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+/** Candidat : expliquer son absence (3 à 300 caractères, sans coordonnées),
+ *  une fois par tour ; lue par les admins seuls. 409 « Vous avez déjà répondu. » */
+export function apiReplyAbsence(suggestionId: string, interviewId: string, reason: string) {
+  return request<{ interview: CandidateInterview }>(`/match-suggestions/${suggestionId}/interview/absence-reply`, {
+    method: 'POST',
+    body: JSON.stringify({ interviewId, reason }),
+  })
+}
+
+/** Admin : annuler l'issue d'un tour (erreur de saisie) tant que rien n'en
+ *  découle. 409 « Une suite existe déjà (tour suivant ou proposition). » */
+export function apiAdminResetOutcome(interviewId: string) {
+  return request<{ interview: AdminRoundInterview; phase: HiringPhase | null }>(
+    `/admin/matching/interviews/${interviewId}/outcome/reset`,
+    { method: 'POST' },
+  )
+}
+
+export interface HiringJobsReport {
+  /** Rappels « issue à renseigner » envoyés par ce passage. */
+  outcomeReminders: number
+  /** Issues en souffrance depuis plus de 7 jours. */
+  overdueOutcomes: number
+  /** Le résumé quotidien aux admins est parti à ce passage. */
+  digestSent: boolean
+}
+
+/** Admin : lance à la demande les rappels « après l'entretien » (idempotent). */
+export function apiAdminRunHiringJobs() {
+  return request<{ report: HiringJobsReport }>('/admin/matching/hiring-jobs/run', { method: 'POST' })
+}
+
+/* ------------------------------------------------------------------ */
+/* Propositions d'embauche (serveur : sous-lot 5 ; UI : sous-lot 6)     */
+/* ------------------------------------------------------------------ */
+
+/** Champs d'une proposition : jour civil AAAA-MM-JJ (Madagascar) pour
+ *  `startDate`, salaire mensuel brut en Ariary (entier), durée en mois
+ *  (obligatoire pour un CDD ou un stage, interdite pour un CDI), message
+ *  sans coordonnées. */
+export type HireProposalInput = HireProposalFields
+
+/** Modification : champs modifiés seulement ; `null` efface la durée ou le message. */
+export type HireProposalChangesInput = { [K in keyof HireProposalInput]?: HireProposalInput[K] | null }
+
+/** Réponse au recruteur : la proposition (vue recruteur) et la phase du dossier. */
+export interface HireProposalResult {
+  proposal: HireProposalView
+  phase: HiringPhase | null
+}
+
+/** Recruteur : envoyer une proposition après un dernier tour « Retenu ».
+ *  201 ; 400 hors « Retenu » ou validation ; 409 proposition déjà en
+ *  attente, réponse définitive, 3 versions atteintes, offre pourvue, accord
+ *  retiré ou compte inactif ; 503 suite non activée. Échéance : 7 jours. */
+export function apiSendHireProposal(suggestionId: string, input: HireProposalInput) {
+  return request<HireProposalResult>(`/match-suggestions/${suggestionId}/hire-proposal`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+/** Recruteur : modifier la proposition en attente avec la `revision` lue.
+ *  409 si elle a changé entre-temps (réponse, expiration, autre
+ *  modification) : recharger puis ré-afficher. Le délai de 7 jours repart. */
+export function apiReviseHireProposal(suggestionId: string, revision: number, changes: HireProposalChangesInput) {
+  return request<HireProposalResult>(`/match-suggestions/${suggestionId}/hire-proposal`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ...changes, revision }),
+  })
+}
+
+/** Recruteur : retirer la proposition en attente (`revision` lue ; motif
+ *  enregistré « Retirée par l'entreprise »). 409 si elle a changé. */
+export function apiWithdrawHireProposal(suggestionId: string, revision: number) {
+  return request<HireProposalResult>(`/match-suggestions/${suggestionId}/hire-proposal/withdraw`, {
+    method: 'POST',
+    body: JSON.stringify({ revision }),
+  })
+}
+
+/** Candidat : accepter la révision AFFICHÉE (`proposalId` + `revision`) ;
+ *  le placement est créé dans la même transaction. 409 proposition
+ *  modifiée (relire la nouvelle version), expirée, retirée, déjà répondue,
+ *  poste pourvu ou compte inactif ; 404 pas son dossier. */
+export function apiAcceptHireProposal(suggestionId: string, proposalId: string, revision: number) {
+  return request<{ proposal: HireProposalView; placementCreated: boolean; candidatePhase: CandidateHiringPhase | null }>(
+    `/match-suggestions/${suggestionId}/hire-proposal/accept`,
+    { method: 'POST', body: JSON.stringify({ proposalId, revision }) },
+  )
+}
+
+/** Candidat : décliner, avec une catégorie facultative (montrée au
+ *  recruteur) et une précision facultative (lue par OffRec seulement). */
+export function apiDeclineHireProposal(
+  suggestionId: string,
+  input: { proposalId: string; revision: number; reason?: HireDeclineReason; note?: string },
+) {
+  return request<{ proposal: HireProposalView; candidatePhase: CandidateHiringPhase | null }>(
+    `/match-suggestions/${suggestionId}/hire-proposal/decline`,
+    { method: 'POST', body: JSON.stringify(input) },
+  )
+}
+
+/** Ligne de l'onglet admin « Propositions » (vue admin : catégorie ET
+ *  précision d'un refus, raison d'un retrait ; jamais l'auteur). */
+export interface AdminHireProposalItem {
+  proposal: HireProposalView
+  suggestionId: string
+  opportunity: { id: string; title: string; companyName: string }
+  candidate: { id: string; fullName: string | null }
+  phase: HiringPhase | null
+}
+
+/** Admin : propositions de la plateforme (`status` effectif : une
+ *  proposition échue compte comme `expiree`), en attente d'abord par
+ *  échéance, puis les plus récentes ; 200 au plus. */
+export function apiAdminHireProposals(status?: HireProposalStatus) {
+  return request<{ proposals: AdminHireProposalItem[] }>(
+    `/admin/matching/hire-proposals${status ? `?status=${status}` : ''}`,
+  ).then((r) => r.proposals)
+}
+
+/* ------------------------------------------------------------------ */
 /* Onglets « Entretiens » (recruteur, admin)                           */
 /* ------------------------------------------------------------------ */
 
@@ -521,14 +778,20 @@ export interface InterviewListFilters {
   period: InterviewPeriod
   status?: InterviewStatus
   opportunityId?: string
+  /** Filtre « Issue » : `a_renseigner` ou une issue posée (sous-lot 3). */
+  outcome?: InterviewOutcomeFilter
 }
 
 export interface RecruiterInterviewItem {
-  interview: Interview
+  interview: RecruiterInterview
   suggestionId: string
   opportunity: { id: string; title: string }
   /** Seul élément du profil transmis : le nom (ni email ni téléphone). */
   candidate: { fullName: string | null }
+  /** Phase dérivée du dossier (sous-lot 3). */
+  phase?: HiringPhase | null
+  /** Dernière proposition d'embauche du dossier (sous-lot 5). */
+  proposal?: HireProposalView | null
 }
 
 export interface InterviewOfferSummary {
@@ -538,13 +801,15 @@ export interface InterviewOfferSummary {
   upcoming: number
   /** Empêchements signalés, à reprogrammer ou annuler. */
   toHandle: number
+  /** Issues à renseigner (sous-lot 3). */
+  toRecord?: number
 }
 
 export interface RecruiterInterviewList {
   interviews: RecruiterInterviewItem[]
   /** Offres ayant au moins un entretien, compteurs indépendants des filtres. */
   offers: InterviewOfferSummary[]
-  counts: { total: number; upcoming: number; toHandle: number }
+  counts: { total: number; upcoming: number; toHandle: number; toRecord?: number }
   truncated: boolean
 }
 
@@ -568,12 +833,16 @@ export interface AdminInterviewFilters extends InterviewListFilters {
 }
 
 export interface AdminInterviewItem {
-  interview: AdminInterview
+  interview: AdminRoundInterview
   suggestionId: string
   suggestionStatus: MatchSuggestionStatus
   opportunity: { id: string; title: string; companyName: string }
   recruiter: { id: string; companyName: string }
   candidate: { id: string; fullName: string | null }
+  /** Phase dérivée du dossier (sous-lot 3). */
+  phase?: HiringPhase | null
+  /** Dernière proposition d'embauche du dossier (sous-lot 5, vue admin). */
+  proposal?: HireProposalView | null
 }
 
 export interface AdminInterviewList {
@@ -582,7 +851,14 @@ export interface AdminInterviewList {
   /** Décalage de la page suivante, `null` s'il n'y en a plus. */
   nextOffset: number | null
   /** Sur l'offre / le recruteur filtrés, sinon toute la plateforme. */
-  counts: { upcoming: number; impediments: number; calendarIssues: number }
+  counts: {
+    upcoming: number
+    impediments: number
+    calendarIssues: number
+    /** Issues à renseigner et absences (sous-lot 3). */
+    toRecord?: number
+    noShows?: number
+  }
   offers: { id: string; title: string; companyName: string; recruiterId: string }[]
   recruiters: { id: string; companyName: string }[]
 }
@@ -675,7 +951,12 @@ export interface AdminMatchSuggestion extends MatchSuggestion {
   /** `false` : le serveur refusera (409) la transmission au recruteur. */
   matchingConsent: boolean
   /** Entretien fixé par le recruteur (dossier `mise_en_relation`). */
-  interview?: AdminInterview | null
+  interview?: AdminRoundInterview | null
+  /** Phase dérivée du dossier (sous-lot 3). */
+  phase?: HiringPhase | null
+  /** Propositions d'embauche (sous-lot 5, vue admin) et placement lié. */
+  proposals?: HireProposalView[]
+  placement?: DossierPlacement | null
 }
 
 /** Suivi des suggestions. `apiAdminMatchSuggestions('suggeree')` = file de
@@ -1422,7 +1703,7 @@ export function apiCreatePlacement(input: PlacementInput) {
 
 /** Placement vu par le recruteur : le nom du candidat ou du talent, jamais
  *  son email ni son téléphone. */
-export interface RecruiterPlacement extends Placement {
+export interface RecruiterPlacement extends Placement, PlacementHiringFields {
   opportunity: { id: string; title: string; companyName: string } | null
   candidate: { id: string; fullName: string | null } | null
   talent: { id: string; fullName: string } | null
@@ -1442,7 +1723,7 @@ export function apiUpdatePlacementStage(id: string, stage: PlacementStage) {
 /** Vue admin : tous les placements, tous recruteurs confondus — le seul
  *  point de contrôle qui existait jusque-là était le compteur agrégé du
  *  tableau de bord. */
-export interface AdminPlacement extends Placement {
+export interface AdminPlacement extends Placement, PlacementHiringFields {
   opportunity: { id: string; title: string; companyName: string } | null
   recruiter: { id: string; email: string; recruiterProfile: { companyName: string } | null }
   candidate: { id: string; email: string; candidateProfile: { fullName: string } | null } | null
@@ -1543,6 +1824,12 @@ export interface AdminStats {
     last30: number
   }
   notifications: { adminUnread: number }
+  /** Sous-lot 7 — absent d'un serveur plus ancien ; `outcomeIndicator` vaut
+   *  `null` sans le schéma « après l'entretien ». */
+  hiring?: {
+    outcomeRecordedWithin7dPercent: number | null
+    outcomeIndicator: OutcomeIndicator | null
+  }
 
   users: { candidates: number; recruiters: number; individuals: number; agents: number }
   opportunities: number
@@ -1644,6 +1931,139 @@ export function apiRecruiterStats() {
 
 export function apiAdminStats() {
   return request<AdminStats>('/admin/stats')
+}
+
+/* ------------------------------------------------------------------ */
+/* Mesure « après l'entretien » (sous-lot 7)                           */
+/* ------------------------------------------------------------------ */
+
+/** Période de la cohorte : dossiers transmis pendant les n derniers jours, ou depuis le début. */
+export type HiringPeriod = '30' | '90' | '365' | 'all'
+
+export type FunnelStage = 'proposes' | 'mis_en_relation' | 'entretien_passe' | 'retenus' | 'proposition' | 'embauches'
+
+export type FunnelSituation =
+  | 'embauche'
+  | 'en_cours'
+  | 'ecarte_avant_mise_en_relation'
+  | 'non_retenu'
+  | 'proposition_declinee'
+  | 'poste_pourvu'
+  | 'embauche_annulee'
+  | 'placement_declare'
+
+export interface DelaySummary {
+  count: number
+  medianDays: number | null
+  meanDays: number | null
+}
+
+/** Entonnoir d'une cohorte de dossiers transmis (`lib/hiring-metrics.ts`). */
+export interface HiringFunnelData {
+  stages: { key: FunnelStage; count: number; ratePrevious: number | null; rateFromStart: number | null }[]
+  situations: Record<FunnelSituation, number>
+  closedByFilledOffer: number
+  delays: {
+    connectionToHire: DelaySummary
+    transmissionToConnection: DelaySummary
+    connectionToFirstInterview: DelaySummary
+    interviewToOutcome: DelaySummary
+  }
+}
+
+export interface OutcomeTimeliness {
+  eligible: number
+  recordedWithin7d: number
+  percent: number | null
+  targetPercent: number
+  met: boolean | null
+}
+
+/** Part des tours terminés dont l'issue a été renseignée sous 7 jours (plan §11). */
+export interface OutcomeIndicator {
+  windowDays: number
+  graceDays: number
+  last30: OutcomeTimeliness
+  allTime: OutcomeTimeliness
+}
+
+export interface AdminHiringStats {
+  computedAt: string
+  timezone: string
+  period: HiringPeriod
+  since: string | null
+  filters: { recruiterId: string | null; opportunityId: string | null; excludeTest: boolean }
+  funnel: HiringFunnelData
+  outcomeIndicator: OutcomeIndicator
+  truncated: boolean
+  options: {
+    recruiters: { id: string; companyName: string }[]
+    opportunities: { id: string; title: string; recruiterId: string; companyName: string }[]
+  }
+}
+
+export interface RecruiterHiringStats {
+  computedAt: string
+  timezone: string
+  period: HiringPeriod
+  since: string | null
+  opportunityId: string | null
+  funnel: HiringFunnelData
+  byOffer: {
+    id: string
+    title: string
+    proposed: number
+    connected: number
+    interviewed: number
+    retained: number
+    offered: number
+    hired: number
+  }[]
+  offers: { id: string; title: string }[]
+  truncated: boolean
+}
+
+export interface ResearchExportResult {
+  filename: string
+  generatedAt: string
+  rowCount: number
+  testRows: number
+  excludeTest: boolean
+  truncated: boolean
+  generalization: { offerAttributes: number; quarter: number; year: number; masked: number; residualSmallGroups: number }
+  /** Document CSV complet (BOM, `;`, CRLF). */
+  csv: string
+}
+
+function hiringQuery(params: Record<string, string | boolean | undefined>): string {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === '' || value === false) continue
+    query.set(key, String(value))
+  }
+  const text = query.toString()
+  return text ? `?${text}` : ''
+}
+
+export function apiAdminHiringStats(params: {
+  period: HiringPeriod
+  recruiterId?: string
+  opportunityId?: string
+  excludeTest?: boolean
+}) {
+  return request<AdminHiringStats>(`/admin/stats/hiring${hiringQuery(params)}`)
+}
+
+export function apiRecruiterHiringStats(params: { period: HiringPeriod; opportunityId?: string }) {
+  return request<RecruiterHiringStats>(`/recruiter/stats/hiring${hiringQuery(params)}`)
+}
+
+/** Export de recherche pseudonymisé (admin) — chaque appel est journalisé. */
+export function apiAdminResearchExport(excludeTest: boolean) {
+  return request<ResearchExportResult>('/admin/stats/research-export', {
+    method: 'POST',
+    body: JSON.stringify({ excludeTest }),
+  })
 }
 
 export function apiAdminCreateAgent(payload: {
@@ -2033,7 +2453,12 @@ export interface AdminRecruiterSummary {
   } | null
   counts: {
     offers: number
+    /** Offres ouvertes — définition unique `opportunityClosedReason` : non
+     *  pourvue, date limite non dépassée, compte recruteur actif. */
     openOffers: number
+    /** Offres pourvues (sous-lot 6) ; absent d'un serveur plus ancien. */
+    filledOffers?: number
+    /** Date limite dépassée sur une offre non pourvue. */
     expiredOffers: number
     awaitingValidation: number
     proposedProfiles: number
@@ -2071,7 +2496,13 @@ export interface AdminRecruiterOpportunity {
   featured: boolean
   createdAt: string
   deadline: string
+  /** Date limite dépassée (offre non pourvue). */
   expired: boolean
+  /** Sous-lot 6 : offre ouverte selon `opportunityClosedReason`, sinon sa
+   *  raison de fermeture ; offre pourvue. Absents d'un serveur plus ancien. */
+  open?: boolean
+  closedReason?: string | null
+  filled?: boolean
   suggestions: AdminRecruiterSuggestionCounts
   talentProposals: number
   placements: number

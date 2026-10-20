@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowUpRight, CalendarDays, CalendarSync, Eye, RotateCcw } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, CalendarSync, Eye, RotateCcw, Undo2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Field, Select } from '../../components/ui/Form'
@@ -11,26 +11,34 @@ import {
   InterviewPeriodTabs,
   InterviewRow,
   InterviewStat,
+  OUTCOME_FILTER_LABELS,
+  RoundChips,
   groupInterviewsByOffer,
   pluralize,
+  readOutcomeFilter,
 } from '../../components/interview/InterviewList'
 import { InterviewSummary } from '../../components/interview/InterviewSummary'
+import { HiringPhaseBadge, hiringPhaseLabel } from '../../components/hiring/HiringPhaseBadge'
+import { outcomeIsLastStep } from '../../components/hiring/hiringState'
 import {
   ApiError,
   apiAdminInterviews,
+  apiAdminResetOutcome,
   apiAdminResyncInterview,
   type AdminInterviewFilters,
   type AdminInterviewItem,
   type AdminInterviewList,
+  type AdminRoundInterview,
 } from '../../lib/api'
-import { INTERVIEW_STATUS_LABELS, calendarActionLabel } from '../../lib/interview'
+import { INTERVIEW_OUTCOME_FILTERS, INTERVIEW_RESULT_LABELS, RESULT_REASON_LABELS } from '../../lib/hiring'
+import { INTERVIEW_STATUS_LABELS, calendarActionLabel, formatMadagascarDateTime } from '../../lib/interview'
 import type { AdminInterview, InterviewPeriod, InterviewStatus } from '../../types'
 import './AdminInterviews.css'
 
 const PERIODS: InterviewPeriod[] = ['a_venir', 'passes', 'annules', 'tous']
 const PAGE_SIZE = 30
 
-type FilterName = 'periode' | 'statut' | 'offre' | 'recruteur' | 'agenda'
+type FilterName = 'periode' | 'statut' | 'offre' | 'recruteur' | 'agenda' | 'issue'
 type Meta = Omit<AdminInterviewList, 'interviews'>
 type Notice = { ok: boolean; text: string }
 
@@ -44,6 +52,13 @@ const candidateLabel = (item: AdminInterviewItem) => item.candidate.fullName || 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof ApiError && err.message ? err.message : fallback
 }
+
+/** Ligne dont l'issue est attendue : le tour actif d'un dossier « Issue à renseigner ». */
+const isOutcomeRow = (item: AdminInterviewItem) =>
+  item.phase === 'issue_a_renseigner' &&
+  !item.interview.outcome &&
+  item.interview.status !== 'annule' &&
+  item.interview.status !== 'empechement'
 
 function providerLabel(interview: AdminInterview): string {
   return interview.provider === 'google' ? 'Agenda : Google Calendar (OffRec)' : 'Agenda : simulé (Google non configuré)'
@@ -66,6 +81,7 @@ export function AdminInterviews() {
   const offerId = searchParams.get('offre') ?? ''
   const recruiterId = searchParams.get('recruteur') ?? ''
   const calendarIssue = searchParams.get('agenda') === '1'
+  const outcome = readOutcomeFilter(searchParams.get('issue'))
 
   const [items, setItems] = useState<AdminInterviewItem[]>([])
   const [meta, setMeta] = useState<Meta | null>(null)
@@ -76,6 +92,10 @@ export function AdminInterviews() {
   const [notice, setNotice] = useState<Notice | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
+  /** Confirmation « Annuler l'issue » (remplace la modale de détail). */
+  const [resetting, setResetting] = useState(false)
+  const [resetBusy, setResetBusy] = useState(false)
+  const [resetError, setResetError] = useState('')
   const requestRef = useRef(0)
 
   const filters: AdminInterviewFilters = {
@@ -84,6 +104,7 @@ export function AdminInterviews() {
     opportunityId: offerId || undefined,
     recruiterId: recruiterId || undefined,
     calendarIssue: calendarIssue || undefined,
+    outcome: outcome || undefined,
   }
   const filtersKey = JSON.stringify(filters)
 
@@ -183,9 +204,48 @@ export function AdminInterviews() {
     }
   }
 
+  const openDetail = (id: string) => {
+    setNotice(null)
+    setResetting(false)
+    setResetError('')
+    setDetailId(id)
+  }
+
+  const closeDetail = () => {
+    if (resetBusy) return
+    if (resetting) {
+      // Échap ou « Garder l'issue » : retour au détail, un seul niveau.
+      setResetting(false)
+      setResetError('')
+      return
+    }
+    setDetailId(null)
+  }
+
+  const confirmReset = async (interview: AdminRoundInterview) => {
+    if (resetBusy) return
+    setResetBusy(true)
+    setResetError('')
+    try {
+      await apiAdminResetOutcome(interview.id)
+      setResetting(false)
+      setNotice({
+        ok: true,
+        text: 'Issue annulée : le tour redevient « Issue à renseigner » et le recruteur est prévenu. Le candidat n’est pas notifié.',
+      })
+      await load(items.length)
+    } catch (err) {
+      // 409 : une suite existe déjà (tour suivant ou proposition), ou l'issue a changé.
+      setResetError(errorText(err, 'Annulation impossible. Réessayez.'))
+    } finally {
+      setResetBusy(false)
+    }
+  }
+
   const groups = groupInterviewsByOffer(items)
   const detail = detailId ? items.find((item) => item.interview.id === detailId) ?? null : null
-  const filtered = period !== 'a_venir' || status !== '' || offerId !== '' || recruiterId !== '' || calendarIssue
+  const filtered =
+    period !== 'a_venir' || status !== '' || offerId !== '' || recruiterId !== '' || calendarIssue || outcome !== ''
   const offerOptions = (meta?.offers ?? []).filter((o) => !recruiterId || o.recruiterId === recruiterId)
   const counts = meta?.counts
   const scoped = offerId !== '' || recruiterId !== ''
@@ -231,22 +291,36 @@ export function AdminInterviews() {
             <InterviewStat
               value={counts.upcoming}
               label={counts.upcoming > 1 ? 'entretiens à venir' : 'entretien à venir'}
-              active={period === 'a_venir' && !status && !calendarIssue}
-              onClick={() => setFilters({ periode: 'a_venir', statut: '', agenda: '' })}
+              active={period === 'a_venir' && !status && !calendarIssue && !outcome}
+              onClick={() => setFilters({ periode: 'a_venir', statut: '', agenda: '', issue: '' })}
+            />
+            <InterviewStat
+              value={counts.toRecord ?? 0}
+              label={(counts.toRecord ?? 0) > 1 ? 'issues à renseigner' : 'issue à renseigner'}
+              tone="warning"
+              active={outcome === 'a_renseigner' && !status && !calendarIssue}
+              onClick={() => setFilters({ periode: 'tous', statut: '', agenda: '', issue: 'a_renseigner' })}
+            />
+            <InterviewStat
+              value={counts.noShows ?? 0}
+              label={(counts.noShows ?? 0) > 1 ? 'absences' : 'absence'}
+              tone="warning"
+              active={outcome === 'absent' && !status && !calendarIssue}
+              onClick={() => setFilters({ periode: 'tous', statut: '', agenda: '', issue: 'absent' })}
             />
             <InterviewStat
               value={counts.impediments}
               label={counts.impediments > 1 ? 'empêchements signalés' : 'empêchement signalé'}
               tone="warning"
-              active={status === 'empechement' && !calendarIssue}
-              onClick={() => setFilters({ periode: 'tous', statut: 'empechement', agenda: '' })}
+              active={status === 'empechement' && !calendarIssue && !outcome}
+              onClick={() => setFilters({ periode: 'tous', statut: 'empechement', agenda: '', issue: '' })}
             />
             <InterviewStat
               value={counts.calendarIssues}
               label={counts.calendarIssues > 1 ? 'problèmes d’agenda' : 'problème d’agenda'}
               tone="danger"
-              active={calendarIssue}
-              onClick={() => setFilters({ periode: 'tous', statut: '', agenda: '1' })}
+              active={calendarIssue && !outcome}
+              onClick={() => setFilters({ periode: 'tous', statut: '', agenda: '1', issue: '' })}
             />
           </div>
         )}
@@ -259,6 +333,16 @@ export function AdminInterviews() {
               {INTERVIEW_STATUSES.map((value) => (
                 <option key={value} value={value}>
                   {INTERVIEW_STATUS_LABELS[value]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Issue">
+            <Select value={outcome} onChange={(e) => setFilters({ issue: e.target.value })}>
+              <option value="">Toutes les issues</option>
+              {INTERVIEW_OUTCOME_FILTERS.map((value) => (
+                <option key={value} value={value}>
+                  {OUTCOME_FILTER_LABELS[value]}
                 </option>
               ))}
             </Select>
@@ -311,7 +395,7 @@ export function AdminInterviews() {
             title={filtered ? 'Aucun entretien pour ces filtres' : 'Aucun entretien à venir'}
             description={
               filtered
-                ? 'Modifiez la période, le statut, l’offre, le recruteur ou le filtre agenda.'
+                ? 'Modifiez la période, le statut, l’issue, l’offre, le recruteur ou le filtre agenda.'
                 : 'Les recruteurs fixent les entretiens depuis « Candidats proposés » → « Ce profil m’intéresse » ; la mise en relation est faite en même temps.'
             }
             actionLabel={filtered ? 'Réinitialiser les filtres' : undefined}
@@ -354,12 +438,30 @@ export function AdminInterviews() {
                         audience="admin"
                         interview={item.interview}
                         heading={candidateLabel(item)}
-                        meta={item.suggestionStatus !== 'mise_en_relation' ? 'Dossier sorti de la mise en relation' : undefined}
+                        meta={
+                          item.suggestionStatus !== 'mise_en_relation'
+                            ? 'Dossier sorti de la mise en relation'
+                            : item.phase
+                              ? `Dossier : ${hiringPhaseLabel({ audience: 'admin', phase: item.phase })}`
+                              : undefined
+                        }
+                        flag={isOutcomeRow(item) ? 'Issue à renseigner' : undefined}
+                        badges={<RoundChips interview={item.interview} showRound showOutcome />}
                         extra={
                           <>
                             <span>{providerLabel(item.interview)}</span>
                             {item.interview.calendarError && (
                               <span className="aint-calendar-error"> · À régulariser : {item.interview.calendarError}</span>
+                            )}
+                            {item.interview.outcomeReason && (
+                              <span className="aint-outcome-line">
+                                Motif : {RESULT_REASON_LABELS[item.interview.outcomeReason]}
+                              </span>
+                            )}
+                            {item.interview.absenceReply && (
+                              <span className="aint-outcome-line">
+                                Explication du candidat : « {item.interview.absenceReply} »
+                              </span>
                             )}
                           </>
                         }
@@ -371,10 +473,7 @@ export function AdminInterviews() {
                               size="sm"
                               aria-haspopup="dialog"
                               aria-label={`Voir l’entretien de ${candidateLabel(item)}`}
-                              onClick={() => {
-                                setNotice(null)
-                                setDetailId(item.interview.id)
-                              }}
+                              onClick={() => openDetail(item.interview.id)}
                             >
                               <Eye size={14} aria-hidden />
                               Voir
@@ -406,13 +505,88 @@ export function AdminInterviews() {
           </div>
         )}
 
-        {detail && (
-          <Modal title={`Entretien de ${candidateLabel(detail)}`} onClose={() => setDetailId(null)}>
-            <p className="aint-modal-offer">
-              {detail.opportunity.title} · {detail.opportunity.companyName}
+        {detail && resetting && detail.interview.outcome && (
+          <Modal key="reset" title="Annuler l’issue ?" onClose={closeDetail}>
+            <p className="aint-modal-text">
+              L’issue « {INTERVIEW_RESULT_LABELS[detail.interview.outcome]} » du tour {detail.interview.round ?? 1}{' '}
+              (entretien de <strong>{candidateLabel(detail)}</strong> du{' '}
+              {formatMadagascarDateTime(detail.interview.scheduledAt)}) sera effacée, avec son motif et la note du
+              recruteur. Le tour redevient « Issue à renseigner » et le recruteur est prévenu ; le candidat n’est pas
+              notifié. À réserver à une erreur de saisie.
             </p>
+            {resetError && (
+              <p className="ivl-notice is-error" role="alert">
+                {resetError}
+              </p>
+            )}
+            <div className="aint-modal-actions">
+              <Button variant="ghost" size="sm" disabled={resetBusy} onClick={closeDetail}>
+                Garder l’issue
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={resetBusy}
+                aria-busy={resetBusy}
+                onClick={() => void confirmReset(detail.interview)}
+              >
+                {resetBusy ? 'Annulation…' : 'Annuler l’issue'}
+              </Button>
+            </div>
+          </Modal>
+        )}
+
+        {detail && !resetting && (
+          <Modal key="detail" title={`Entretien de ${candidateLabel(detail)}`} onClose={closeDetail}>
+            <div className="aint-modal-head">
+              <p className="aint-modal-offer">
+                {detail.opportunity.title} · {detail.opportunity.companyName}
+              </p>
+              {detail.phase && <HiringPhaseBadge audience="admin" phase={detail.phase} />}
+            </div>
             {noticeBlock}
+            {(detail.interview.outcome || (detail.interview.round ?? 1) > 1) && (
+              <dl className="aint-outcome">
+                <div>
+                  <dt>Tour</dt>
+                  <dd>{detail.interview.round ?? 1}</dd>
+                </div>
+                {detail.interview.outcome && (
+                  <div>
+                    <dt>Issue</dt>
+                    <dd>{INTERVIEW_RESULT_LABELS[detail.interview.outcome]}</dd>
+                  </div>
+                )}
+                {detail.interview.outcomeReason && (
+                  <div>
+                    <dt>Motif</dt>
+                    <dd>{RESULT_REASON_LABELS[detail.interview.outcomeReason]}</dd>
+                  </div>
+                )}
+                {detail.interview.absenceReply && (
+                  <div>
+                    <dt>Explication du candidat</dt>
+                    <dd>« {detail.interview.absenceReply} »</dd>
+                  </div>
+                )}
+              </dl>
+            )}
             <InterviewSummary interview={detail.interview} audience="admin" title="Récapitulatif">
+              {outcomeIsLastStep(detail.interview, detail.phase) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-haspopup="dialog"
+                  onClick={() => {
+                    setNotice(null)
+                    setResetError('')
+                    setResetting(true)
+                  }}
+                >
+                  <Undo2 size={14} aria-hidden />
+                  Annuler l’issue
+                </Button>
+              )}
               {calendarButton(detail.interview)}
               <Link
                 className="aint-modal-link"

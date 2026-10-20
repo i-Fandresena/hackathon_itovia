@@ -743,3 +743,63 @@ label.presel-name[for] {
 .match-detail-cv .match-detail-label {
   margin-bottom: 0;
 }
+
+/* Issue du dernier tour (après l'entretien). */
+.match-outcome {
+  overflow-wrap: anywhere;
+}
+
+.match-outcome strong {
+  color: var(--color-ink);
+}
+
+/* Sous-lot 6 : onglets de la page et dossiers mis en relation par groupe. */
+.match-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.match-tab {
+  padding: 0.6rem 0.9rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--color-ink-secondary);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.match-tab:hover {
+  color: var(--color-ink);
+}
+
+.match-tab.is-active {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-accent-hover);
+}
+
+.match-tab:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.match-connected-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0.9rem;
+}
+
+.match-proposal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
