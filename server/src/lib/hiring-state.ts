@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import type { HiringDossierState, HiringProposalState, HiringRoundState } from '../../../src/lib/hiring.js'
 import type { MatchSuggestionStatus, PlacementStage } from '../../../src/types/index.js'
 import { prisma } from './prisma.js'
@@ -68,6 +68,28 @@ const isStorageError = (err: unknown): boolean => {
 export type HiringClient = Prisma.TransactionClient | typeof prisma
 
 /**
+ * Trace du retrait d'un dossier MIS EN RELATION par son candidat (« Me
+ * retirer de mes autres dossiers », décision 2026-11-12) : une ligne du
+ * journal d'audit, jamais effacée, écrite dans la transaction du retrait sous
+ * le verrou du dossier. Sans migration : `MatchSuggestion.status` reste
+ * `mise_en_relation` (invariant « après l'entretien ») et `closedReason`
+ * n'a pas de valeur pour ce cas ; la phase dérivée devient `retrait_candidat`.
+ */
+export const CANDIDATE_WITHDREW_ACTION = 'candidate_withdrew_dossier'
+
+/** Dossiers (parmi `ids`) dont le candidat s'est retiré. Une requête pour le lot. */
+export async function loadWithdrawnDossiers(ids: readonly string[], client: HiringClient = prisma): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  const rows = await client.$queryRaw<{ suggestionId: string }[]>(Prisma.sql`
+    SELECT DISTINCT "metadata"->>'suggestionId' AS "suggestionId"
+    FROM "AuditLog"
+    WHERE "action" = ${CANDIDATE_WITHDREW_ACTION}
+      AND "metadata"->>'suggestionId' = ANY(${[...ids]}::text[])
+  `)
+  return new Set(rows.map((row) => row.suggestionId))
+}
+
+/**
  * État de chacun des dossiers donnés, à partir de leurs tours déjà chargés
  * (`rows`, tous dossiers confondus) : propositions, placement lié et date
  * « pourvue » de l'offre sont lus ici, par lot. `client` : celui d'une
@@ -92,6 +114,8 @@ export async function buildHiringContexts(
   const proposalsBySuggestion = new Map<string, HiringProposalState[]>()
   let placements = new Map<string, { stage: PlacementStage }>()
   const filledByOpportunity = new Map<string, Date | null>()
+  const connectedIds = dossiers.filter((dossier) => dossier.status === 'mise_en_relation').map((dossier) => dossier.id)
+  const withdrawn = await loadWithdrawnDossiers(connectedIds, client)
 
   if (HIRING_SUPPORTED) {
     try {
@@ -132,6 +156,7 @@ export async function buildHiringContexts(
         proposals: proposalsBySuggestion.get(dossier.id) ?? [],
         placement: placements.get(dossier.id) ?? null,
         filledAt: filledByOpportunity.get(dossier.opportunityId) ?? null,
+        ...(withdrawn.has(dossier.id) ? { candidateWithdrawn: true } : {}),
       },
     })
   }

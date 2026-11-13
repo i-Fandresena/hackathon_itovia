@@ -64,9 +64,12 @@ export const FUNNEL_SITUATION_LABELS: Record<FunnelSituation, string> = {
   poste_pourvu: 'Poste pourvu par un autre candidat',
   embauche_annulee: 'Embauche annulée',
   placement_declare: 'Placement déclaré hors proposition',
+  retrait_candidat: 'Candidat retiré après la mise en relation',
 }
 
 const SITUATION_HINTS: Partial<Record<FunnelSituation, string>> = {
+  // Neutre : ce panneau est aussi celui du recruteur (jamais « embauché ailleurs »).
+  retrait_candidat: 'Le candidat s’est retiré de lui-même du dossier',
   en_cours: 'Décision du recruteur, entretien, issue ou proposition en attente',
   placement_declare: 'Déclaration antérieure au flux de proposition : hors entonnoir',
 }
@@ -79,6 +82,7 @@ const SITUATION_ORDER: FunnelSituation[] = [
   'poste_pourvu',
   'ecarte_avant_mise_en_relation',
   'embauche_annulee',
+  'retrait_candidat',
   'placement_declare',
 ]
 

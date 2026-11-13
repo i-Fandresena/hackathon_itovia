@@ -14,13 +14,22 @@ import {
 } from '../lib/admin-candidates.js'
 import { startOfUtcDay } from '../lib/preselection.js'
 import { candidateCompletionChecks, candidateProfileCompletion } from '../../../src/lib/recommendation.js'
+import {
+  MATCHING_REINTEGRATED_ACTION,
+  MATCHING_REINTEGRATION_REVOKED_ACTION,
+  alreadyPlacedOf,
+  loadCandidatePlacementStatus,
+} from '../lib/candidate-placement.js'
+import { scheduleCandidateMatching } from '../lib/matching.js'
 
 /**
  * Comptes candidats, côté admin (`/api/admin/candidates`) — CONSULTATION
  * seulement : compte, profil confirmé, CV et sa vérification, suggestions
  * extraites du CV (présentées à part, jamais appliquées au profil), dossiers
- * de mise en relation. Aucune action ici (sanction : `/admin/moderation` ;
- * décision sur le CV : `/verification-cv` ; transmission : `/admin/matching`).
+ * de mise en relation. Une seule action ici : réintégrer au matching un
+ * candidat en poste via OffRec, ou lever cette réintégration (décision
+ * 2026-11-12). Le reste ailleurs (sanction : `/admin/moderation` ; décision
+ * sur le CV : `/verification-cv` ; transmission : `/admin/matching`).
  *
  * Réponses construites par liste blanche explicite (jamais de `passwordHash`,
  * d'empreinte de fichier ni d'objet Prisma étalé). Le téléphone n'apparaît
@@ -92,9 +101,10 @@ async function loadActivity(ids: string[]) {
       lastSubmission: new Map<string, Date | null>(),
       lastAudit: new Map<string, Date | null>(),
       reports: new Map<string, number>(),
+      placed: new Map() as Awaited<ReturnType<typeof loadCandidatePlacementStatus>>,
     }
   }
-  const [suggestions, submissions, audits, reports] = await Promise.all([
+  const [suggestions, submissions, audits, reports, placed] = await Promise.all([
     prisma.matchSuggestion.groupBy({
       by: ['candidateId', 'status'],
       where: { candidateId: { in: ids } },
@@ -116,6 +126,8 @@ async function loadActivity(ids: string[]) {
       where: { status: 'open', targetUserId: { in: ids } },
       _count: { _all: true },
     }),
+    // Badge « Déjà placé » (décision 2026-11-12).
+    loadCandidatePlacementStatus(ids),
   ])
 
   const dossiers = new Map<string, DossierCounts>()
@@ -132,6 +144,7 @@ async function loadActivity(ids: string[]) {
     lastSubmission: new Map(submissions.map((s) => [s.candidateId, s._max.createdAt])),
     lastAudit: new Map(audits.map((a) => [a.userId as string, a._max.createdAt])),
     reports: new Map(reports.map((r) => [r.targetUserId as string, r._count._all])),
+    placed,
   }
 }
 
@@ -177,6 +190,8 @@ function buildSummary(c: CandidateRow, activity: Activity) {
       flagCount: p?.cvUrl ? parseCvFlags(p.cvFlags).length : 0,
     },
     matchingConsentAt: p?.matchingConsentAt ? p.matchingConsentAt.toISOString() : null,
+    /** En poste via OffRec : placements actifs, matching en pause ou réintégré (admin seulement). */
+    alreadyPlaced: alreadyPlacedOf(activity.placed, c.id),
     counts: {
       ...dossiers,
       openReports: activity.reports.get(c.id) ?? 0,
@@ -406,6 +421,75 @@ router.get('/:id', async (req, res, next) => {
         },
       })),
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Réintégrer au matching un candidat en poste via OffRec (décision
+ * 2026-11-12), par exemple s'il cherche un second emploi : ses placements
+ * actifs ne le mettent plus en pause (un placement créé APRÈS cette décision
+ * le remet en pause). Son accord de matching n'est pas touché (D6). Stockage
+ * sans migration : ligne `candidate_matching_reintegrated` du journal
+ * d'audit (lib/candidate-placement.ts). 409 sans placement actif ;
+ * idempotent. Relance le moteur pour ce candidat. 200 `{ alreadyPlaced }`.
+ */
+router.post('/:id/matching-reintegration', async (req, res, next) => {
+  try {
+    const { id } = adminCandidateIdParamSchema.parse(req.params)
+    const candidate = await prisma.user.findFirst({ where: { id, role: 'candidate' }, select: { id: true } })
+    if (!candidate) {
+      res.status(404).json({ error: 'Compte candidat introuvable.' })
+      return
+    }
+    const before = (await loadCandidatePlacementStatus([id])).get(id)
+    if (!before) {
+      res.status(409).json({ error: 'Ce candidat n’a aucun placement actif : son matching n’est pas en pause.' })
+      return
+    }
+    if (before.excluded) {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.session!.sub,
+          action: MATCHING_REINTEGRATED_ACTION,
+          metadata: { candidateId: id, activePlacements: before.placements.length },
+        },
+      })
+    }
+    const placed = await loadCandidatePlacementStatus([id])
+    res.json({ alreadyPlaced: alreadyPlacedOf(placed, id) })
+    if (before.excluded) scheduleCandidateMatching(id, 'admin_manual')
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Lever la réintégration : le candidat en poste repasse en pause de matching
+ * (motif `candidat_en_poste`). Les dossiers déjà créés ne sont pas touchés.
+ * Idempotent. 200 `{ alreadyPlaced }` (`null` sans placement actif).
+ */
+router.delete('/:id/matching-reintegration', async (req, res, next) => {
+  try {
+    const { id } = adminCandidateIdParamSchema.parse(req.params)
+    const candidate = await prisma.user.findFirst({ where: { id, role: 'candidate' }, select: { id: true } })
+    if (!candidate) {
+      res.status(404).json({ error: 'Compte candidat introuvable.' })
+      return
+    }
+    const before = (await loadCandidatePlacementStatus([id])).get(id)
+    if (before?.reintegratedAt) {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.session!.sub,
+          action: MATCHING_REINTEGRATION_REVOKED_ACTION,
+          metadata: { candidateId: id, activePlacements: before.placements.length },
+        },
+      })
+    }
+    const placed = await loadCandidatePlacementStatus([id])
+    res.json({ alreadyPlaced: alreadyPlacedOf(placed, id) })
   } catch (err) {
     next(err)
   }

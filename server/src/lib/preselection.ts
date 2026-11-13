@@ -1,4 +1,5 @@
 import type {
+  AlreadyPlacedView,
   CandidateProfile,
   CvVerificationStatus,
   ExperienceLevel,
@@ -54,20 +55,25 @@ export function startOfUtcDay(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
 }
 
-export type CandidateIneligibility = 'compte_inactif' | 'sans_consentement' | 'sans_cv'
+export type CandidateIneligibility = 'compte_inactif' | 'candidat_en_poste' | 'sans_consentement' | 'sans_cv'
 
 /**
- * Un candidat est proposable s'il a le rôle candidat, un compte actif, un
- * consentement de matching en vigueur et un CV déposé. Retourne le premier
- * manque, ou `null` s'il est éligible.
+ * Un candidat est proposable s'il a le rôle candidat, un compte actif, aucun
+ * placement actif qui met son matching en pause (décision 2026-11-12 :
+ * `placedExcluded`, calculé par lib/candidate-placement.ts — l'accord n'est
+ * pas touché, D6), un consentement de matching en vigueur et un CV déposé.
+ * Retourne le premier manque, ou `null` s'il est éligible.
  */
 export function candidateIneligibility(candidate: {
   accountRole: string
   accountStatus: string
   consentAt: Date | string | null
   hasCv: boolean
+  /** En poste via OffRec et non réintégré par un admin. */
+  placedExcluded?: boolean
 }): CandidateIneligibility | null {
   if (candidate.accountRole !== 'candidate' || !isActiveUserStatus(candidate.accountStatus)) return 'compte_inactif'
+  if (candidate.placedExcluded) return 'candidat_en_poste'
   if (!candidate.consentAt) return 'sans_consentement'
   if (!candidate.hasCv) return 'sans_cv'
   return null
@@ -250,6 +256,7 @@ export function computeMatchFit(
 export const PRESELECTION_MOTIFS: readonly { motif: PreselectionMotif; label: string }[] = [
   { motif: 'offre_fermee', label: 'Offre fermée (pourvue, date limite dépassée ou recruteur inactif)' },
   { motif: 'compte_inactif', label: 'Compte candidat inactif' },
+  { motif: 'candidat_en_poste', label: 'Déjà en poste via OffRec (matching en pause)' },
   { motif: 'sans_consentement', label: 'Accord de matching non donné ou retiré' },
   { motif: 'sans_cv', label: 'Aucun CV déposé' },
   { motif: 'deja_ecarte', label: 'Déjà écarté pour cette offre' },
@@ -288,6 +295,10 @@ export interface PreselectionCandidateInput {
   cvSkillsSuggested: string[]
   sector: Sector | null
   suggestion: PreselectionSuggestionState | null
+  /** En poste via OffRec et non réintégré (motif `candidat_en_poste`). */
+  placedExcluded?: boolean
+  /** Badge admin « Déjà placé », `null` sans placement actif. */
+  alreadyPlaced?: AlreadyPlacedView | null
 }
 
 export interface PreselectionInput {
@@ -382,6 +393,7 @@ export function preselect(input: PreselectionInput): PreselectionResult {
       motifLabel: MOTIF_LABELS[motif],
       score: match.score,
       suggestion: candidate.suggestion,
+      alreadyPlaced: candidate.alreadyPlaced ?? null,
       order: PRESELECTION_MOTIFS.findIndex((m) => m.motif === motif),
     })
   }
@@ -412,6 +424,7 @@ export function preselect(input: PreselectionInput): PreselectionResult {
       suggestion: e.input.suggestion,
       transmissible: blockedReason === null,
       blockedReason,
+      alreadyPlaced: e.input.alreadyPlaced ?? null,
     }
   })
 

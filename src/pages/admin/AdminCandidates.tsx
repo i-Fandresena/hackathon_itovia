@@ -26,9 +26,13 @@ import {
   OPPORTUNITY_TYPE_LABELS,
   SECTOR_LABELS,
 } from '../../data/constants'
+import { AlreadyPlacedBadge, alreadyPlacedText } from '../../components/hiring/AlreadyPlacedBadge'
+import type { AlreadyPlacedView } from '../../types'
 import {
+  ApiError,
   apiAdminCandidate,
   apiAdminCandidates,
+  apiAdminSetMatchingReintegration,
   apiFileUrl,
   type AdminCandidateAccountDetail,
   type AdminCandidateConsentFilter,
@@ -451,6 +455,12 @@ function CandidateRow({
           : ''}
       </span>
       <span className="acan-row-pills">
+        {/* La ligne est un bouton : pastille simple ici, badge-lien dans le détail. */}
+        {c.alreadyPlaced && (
+          <Pill tone={c.alreadyPlaced.matchingPaused ? 'warn' : 'neutral'}>
+            Déjà placé{c.alreadyPlaced.activePlacements > 1 ? ` · ${c.alreadyPlaced.activePlacements}` : ''}
+          </Pill>
+        )}
         <CvPill cv={c.cv} />
         <ConsentPill at={c.matchingConsentAt} />
         {c.completion !== null && (
@@ -611,6 +621,7 @@ function CandidateDetail({ detail }: { detail: AdminCandidateAccountDetail }) {
         <p className="acan-muted">+ {plural(counts.legacy, 'dossier', 'dossiers')} de l’ancien parcours (candidature par offre).</p>
       )}
 
+      <PlacedBlock key={c.id} candidateId={c.id} initial={c.alreadyPlaced ?? null} />
       <CvBlock detail={detail} />
       <ExtractedBlock detail={detail} />
 
@@ -641,6 +652,77 @@ function CandidateDetail({ detail }: { detail: AdminCandidateAccountDetail }) {
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * Candidat en poste via OffRec (décision 2026-11-12) : badge « Déjà placé »,
+ * état du matching (en pause automatiquement, ou réintégré par un admin) et
+ * l'action « Réintégrer au matching » / « Remettre en pause ». L'accord de
+ * matching du candidat n'est jamais modifié ici.
+ */
+function PlacedBlock({ candidateId, initial }: { candidateId: string; initial: AlreadyPlacedView | null }) {
+  const [placed, setPlaced] = useState(initial)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  if (!placed) return null
+
+  const toggle = async () => {
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      const reintegrate = placed.matchingPaused
+      const result = await apiAdminSetMatchingReintegration(candidateId, reintegrate)
+      setPlaced(result.alreadyPlaced)
+      setMessage(
+        reintegrate
+          ? 'Candidat réintégré au matching : le moteur va de nouveau lui proposer des offres.'
+          : 'Matching de nouveau en pause pour ce candidat.',
+      )
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Action impossible. Réessayez.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card className="acan-card">
+      <div className="acan-card-head">
+        <h3 className="acan-card-title">
+          <BriefcaseBusiness size={16} aria-hidden />
+          En poste via OffRec
+        </h3>
+        <AlreadyPlacedBadge placed={placed} />
+      </div>
+      <p className="acan-muted">{alreadyPlacedText(placed)}</p>
+      <p className="acan-muted">
+        {placed.matchingPaused
+          ? 'Tant qu’il est en poste, il n’est ni proposé par le moteur ni retenu en présélection. Réintégrez-le s’il cherche un second emploi.'
+          : `Réintégré le ${formatDate(placed.reintegratedAt ?? '')} : il peut de nouveau être proposé aux entreprises. Une nouvelle embauche le remettra en pause.`}{' '}
+        Son accord de matching n’est pas modifié.
+      </p>
+      <div className="acan-actions">
+        <Button size="sm" variant={placed.matchingPaused ? 'primary' : 'outline'} disabled={busy} aria-busy={busy} onClick={() => void toggle()}>
+          {busy ? 'Enregistrement…' : placed.matchingPaused ? 'Réintégrer au matching' : 'Remettre en pause'}
+        </Button>
+        <Link to="/admin/placements" className="btn btn-ghost btn-sm">
+          Voir les placements
+        </Link>
+      </div>
+      {message && (
+        <p className="acan-note" role="status">
+          {message}
+        </p>
+      )}
+      {error && (
+        <p className="acan-note" role="alert">
+          {error}
+        </p>
+      )}
+    </Card>
   )
 }
 

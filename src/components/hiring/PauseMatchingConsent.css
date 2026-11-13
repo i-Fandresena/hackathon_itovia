@@ -1,0 +1,54 @@
+/* « Mettre en pause mon accord de matching » en un clic (décision 2026-11-12).
+   Préfixe `pmc-`. */
+
+.pmc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  min-width: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.pmc-end {
+  justify-content: flex-end;
+}
+
+.pmc-link {
+  font-weight: 600;
+}
+
+.pmc-confirm {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+}
+
+.pmc-text {
+  margin: 0;
+}
+
+.pmc-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.pmc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@media (max-width: 420px) {
+  .pmc-actions > .btn {
+    flex: 1 1 100%;
+  }
+}

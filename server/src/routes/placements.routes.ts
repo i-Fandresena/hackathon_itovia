@@ -13,6 +13,7 @@ import {
   type FilledClosure,
 } from '../lib/opportunity-fill.js'
 import { notifyRecruiter } from '../lib/interviews.js'
+import { scheduleCandidateMatching } from '../lib/matching.js'
 
 const STAGE_LABELS: Record<string, string> = {
   etape1_due: 'étape 1 due',
@@ -265,6 +266,11 @@ router.put('/:id/stage', requireRole('recruiter', 'admin'), async (req, res, nex
       })
     }
     res.json({ placement: toPlacementView(updated) })
+    // Placement d'un diplômé annulé : s'il n'est plus en poste, il redevient
+    // éligible au matching tout seul (décision 2026-11-12) — le moteur repasse.
+    if (updated.stage === 'annule' && placement.stage !== 'annule' && updated.candidateId) {
+      scheduleCandidateMatching(updated.candidateId, 'placement_cancelled')
+    }
     // Placement annulé sur une offre pourvue qui repasse sous son nombre de
     // postes (D1) : on PROPOSE au recruteur de rouvrir, jamais automatiquement.
     if (updated.stage === 'annule' && placement.stage !== 'annule' && updated.opportunityId && HIRING_SUPPORTED) {

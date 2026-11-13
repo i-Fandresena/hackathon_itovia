@@ -20,6 +20,7 @@
  */
 
 import type {
+  AlreadyPlacedView,
   ContractType,
   HireDeclineReason,
   HireProposalStatus,
@@ -259,6 +260,12 @@ export interface HiringDossierState {
   placement: { stage: PlacementStage } | null
   /** Offre pourvue (`Opportunity.filledAt`), `null` si ouverte. */
   filledAt: string | Date | null
+  /**
+   * Le candidat s'est retiré de ce dossier mis en relation (« Me retirer de
+   * mes autres dossiers » après une embauche, décision 2026-11-12) : trace
+   * `candidate_withdrew_dossier` du journal d'audit. Absent : non retiré.
+   */
+  candidateWithdrawn?: boolean
 }
 
 /**
@@ -281,6 +288,7 @@ export type HiringPhase =
   | 'clos_proposition_refusee'
   | 'non_retenu'
   | 'poste_pourvu'
+  | 'retrait_candidat'
 
 /** Phases qui ne bougent plus, même quand l'offre est pourvue ensuite. */
 export const TERMINAL_HIRING_PHASES: readonly HiringPhase[] = [
@@ -288,6 +296,7 @@ export const TERMINAL_HIRING_PHASES: readonly HiringPhase[] = [
   'embauche_annulee',
   'clos_proposition_refusee',
   'non_retenu',
+  'retrait_candidat',
 ]
 
 /**
@@ -322,6 +331,7 @@ const recruiterPhaseLabels: Record<HiringPhase, string> = {
   clos_proposition_refusee: 'Proposition déclinée',
   non_retenu: 'Non retenu',
   poste_pourvu: 'Poste pourvu',
+  retrait_candidat: 'Candidat retiré',
 }
 
 /** Badges de phase par audience (`HiringPhaseBadge`). */
@@ -331,7 +341,7 @@ export const HIRING_PHASE_LABELS: {
   candidate: Record<CandidateHiringPhase, string>
 } = {
   recruiter: recruiterPhaseLabels,
-  admin: { ...recruiterPhaseLabels, absent: 'Absent au dernier tour' },
+  admin: { ...recruiterPhaseLabels, absent: 'Absent au dernier tour', retrait_candidat: 'Retiré par le candidat' },
   candidate: {
     entretien_a_planifier: 'Entretien en préparation',
     entretien_prevu: 'Entretien prévu',
@@ -539,6 +549,8 @@ function phaseAfterRetenu(state: HiringDossierState, now: Date): HiringPhase {
 export function baseHiringPhase(state: HiringDossierState, now: Date): HiringPhase | null {
   if (state.status !== 'mise_en_relation') return null
   if (isActivePlacement(state.placement)) return 'embauche'
+  // Retrait du candidat (décision 2026-11-12) : le dossier est clos.
+  if (state.candidateWithdrawn) return 'retrait_candidat'
   if (state.rounds.length === 0) return 'entretien_a_planifier'
   const active = activeRoundOf(state.rounds)
   if (active) {
@@ -590,6 +602,7 @@ const CANDIDATE_PHASE: Record<HiringPhase, CandidateHiringPhase> = {
   clos_proposition_refusee: 'clos',
   non_retenu: 'clos',
   poste_pourvu: 'clos',
+  retrait_candidat: 'clos',
 }
 
 /** Phase vue par le candidat (`candidatePhase` de `/mine`), `null` hors `mise_en_relation`. */
@@ -649,7 +662,15 @@ export const HIRING_ACTION_ACTORS: Record<HiringAction, readonly HiringActor[]> 
   reset_outcome: ['admin'],
 }
 
-export type HiringCheck = { ok: true } | { ok: false; httpStatus: 400 | 403 | 404 | 409; error: string }
+export type HiringCheck =
+  | { ok: true }
+  | {
+      ok: false
+      httpStatus: 400 | 403 | 404 | 409
+      error: string
+      /** Code stable pour l'interface (ex. `ALREADY_PLACED_ELSEWHERE`), absent sinon. */
+      code?: string
+    }
 
 /** Même forme que `TransitionCheck` (`connectionCheck()`, lib/preselection-service.ts). */
 export type ConnectionCheckResult = { ok: true } | { ok: false; httpStatus: 400 | 409; error: string }
@@ -675,6 +696,14 @@ export interface HiringActionInput {
   /** Comptes suspendus ou bannis, relus par le serveur (acceptation). */
   candidateBlocked?: boolean
   recruiterBlocked?: boolean
+  /**
+   * Acceptation (décision 2026-11-12) : placements actifs du candidat sur
+   * d'AUTRES offres, recomptés par le serveur sous le verrou du candidat.
+   * Absent : non vérifié (UI).
+   */
+  activePlacementsElsewhere?: number
+  /** Le candidat confirme cumuler les postes (temps partiel, second emploi). */
+  confirmCumulative?: boolean
 }
 
 export const HIRING_FORBIDDEN_ERROR = 'Action non autorisée pour votre rôle.'
@@ -716,6 +745,12 @@ export const CANDIDATE_ACCOUNT_INACTIVE_ERROR = 'Votre compte n’est pas actif 
 export const RECRUITER_ACCOUNT_INACTIVE_ERROR =
   'Le compte de l’entreprise n’est plus actif : la proposition ne peut pas être acceptée pour le moment.'
 /** D4 : `POST /placements` refuse un candidat diplômé (client Prisma régénéré) : son placement naît de l'acceptation. */
+/** Décision 2026-11-12 : seconde embauche refusée sans confirmation explicite du cumul. */
+export const ALREADY_PLACED_ELSEWHERE_CODE = 'ALREADY_PLACED_ELSEWHERE'
+export const ALREADY_PLACED_ELSEWHERE_ERROR =
+  'Vous êtes déjà en poste via OffRec. Confirmez que vous souhaitez cumuler les deux postes (temps partiel, second emploi) pour accepter cette proposition.'
+/** Dossier mis en relation dont le candidat s'est retiré (décision 2026-11-12). */
+export const CANDIDATE_WITHDREW_ERROR = 'Le candidat s’est retiré de ce dossier.'
 export const GRADUATE_PLACEMENT_AUTOMATIC_ERROR =
   'Pour un candidat diplômé, le placement est créé automatiquement quand il accepte votre proposition d’embauche.'
 
@@ -726,7 +761,11 @@ export function outcomeTooEarlyError(round: RoundTiming): string {
 }
 
 const OK: HiringCheck = { ok: true }
-const fail = (httpStatus: 400 | 403 | 404 | 409, error: string): HiringCheck => ({ ok: false, httpStatus, error })
+const fail = (httpStatus: 400 | 403 | 404 | 409, error: string, code?: string): HiringCheck =>
+  code ? { ok: false, httpStatus, error, code } : { ok: false, httpStatus, error }
+
+/** Ce qui reste permis sur un dossier dont le candidat s'est retiré : rien qui le fasse avancer. */
+const ACTIONS_AFTER_WITHDRAWAL: readonly HiringAction[] = ['cancel_round', 'withdraw_proposal', 'expire_proposal']
 const connectionOf = (input: HiringActionInput): HiringCheck => input.connection ?? OK
 
 /**
@@ -740,6 +779,9 @@ export function checkHiringAction(input: HiringActionInput): HiringCheck {
   const base = baseHiringPhase(state, now)
   if (base === null) {
     return actor === 'candidate' ? fail(404, DOSSIER_NOT_FOUND_ERROR) : fail(400, HIRING_NOT_CONNECTED_ERROR)
+  }
+  if (base === 'retrait_candidat' && !ACTIONS_AFTER_WITHDRAWAL.includes(action)) {
+    return fail(409, actor === 'candidate' ? 'Vous vous êtes retiré de ce dossier.' : CANDIDATE_WITHDREW_ERROR)
   }
   const rounds = state.rounds
   const active = activeRoundOf(rounds)
@@ -866,6 +908,12 @@ export function checkHiringAction(input: HiringActionInput): HiringCheck {
       if (state.filledAt) return fail(409, POSITION_FILLED_ERROR)
       if (input.candidateBlocked) return fail(409, CANDIDATE_ACCOUNT_INACTIVE_ERROR)
       if (input.recruiterBlocked) return fail(409, RECRUITER_ACCOUNT_INACTIVE_ERROR)
+      // Décision 2026-11-12 : déjà en poste via OffRec sur une autre offre →
+      // refus tant que le candidat n'a pas confirmé le cumul (dernier contrôle :
+      // une proposition expirée ou modifiée l'emporte).
+      if ((input.activePlacementsElsewhere ?? 0) > 0 && !input.confirmCumulative) {
+        return fail(409, ALREADY_PLACED_ELSEWHERE_ERROR, ALREADY_PLACED_ELSEWHERE_CODE)
+      }
       return OK
     }
 
@@ -1174,6 +1222,68 @@ export function filledNoticeKind(state: HiringDossierState, now: Date): 'mis_en_
 }
 
 /* ------------------------------------------------------------------ */
+/* Candidat déjà en poste (décision 2026-11-12)                        */
+/* ------------------------------------------------------------------ */
+
+/** Ce que « Me retirer de mes autres dossiers » fait à un dossier mis en relation. */
+export interface CandidateWithdrawalEffect {
+  /** Tour actif sans issue (à venir, passé ou en empêchement) à annuler, ou `null`. */
+  cancelRoundId: string | null
+  /** Tour annulé encore à venir : son événement Google est supprimé après la réponse. */
+  cancelRoundUpcoming: boolean
+  /** Proposition en attente à décliner (catégorie neutre `autre`), ou `null`. */
+  declineProposalId: string | null
+}
+
+/**
+ * Effets du retrait du candidat sur un dossier `mise_en_relation` : `null`
+ * pour un dossier embauché, terminal (offre pourvue comprise) ou déjà
+ * retiré. Le tour actif sans issue est annulé même s'il est passé : un
+ * dossier retiré n'a plus d'issue à renseigner (ni rappel, ni compteur).
+ */
+export function candidateWithdrawalEffect(state: HiringDossierState, now: Date): CandidateWithdrawalEffect | null {
+  const phase = hiringPhase(state, now)
+  if (phase === null || phase === 'poste_pourvu' || TERMINAL_HIRING_PHASES.includes(phase)) return null
+  const active = activeRoundOf(state.rounds)
+  const cancellable = active && active.status !== 'annule' && !active.outcome ? active : undefined
+  return {
+    cancelRoundId: cancellable?.id ?? null,
+    cancelRoundUpcoming: Boolean(cancellable && !isRoundOver(cancellable, now)),
+    declineProposalId: pendingProposalOf(state.proposals, now)?.id ?? null,
+  }
+}
+
+/**
+ * Pause automatique du matching (décision 2026-11-12) : un candidat qui a
+ * au moins un placement actif (étape ≠ `annule`) est exclu du moteur et de
+ * la présélection, sans toucher à son accord (D6). Un admin peut le
+ * réintégrer : les placements créés AVANT la réintégration ne comptent plus,
+ * un placement plus récent le remet en pause. Placement annulé : il redevient
+ * éligible tout seul.
+ */
+export function placedMatchingExcluded(
+  activePlacementDates: readonly (string | Date)[],
+  reintegratedAt: string | Date | null,
+): boolean {
+  if (!reintegratedAt) return activePlacementDates.length > 0
+  const from = toMs(reintegratedAt)
+  return activePlacementDates.some((date) => toMs(date) > from)
+}
+
+/** Badge admin « Déjà placé » : `null` sans placement actif. */
+export function alreadyPlacedView(
+  activePlacementDates: readonly (string | Date)[],
+  reintegratedAt: string | Date | null,
+): AlreadyPlacedView | null {
+  if (activePlacementDates.length === 0) return null
+  return {
+    activePlacements: activePlacementDates.length,
+    matchingPaused: placedMatchingExcluded(activePlacementDates, reintegratedAt),
+    reintegratedAt: reintegratedAt ? new Date(toMs(reintegratedAt)).toISOString() : null,
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Visibilité par rôle (D3) — listes blanches                          */
 /* ------------------------------------------------------------------ */
 
@@ -1353,6 +1463,8 @@ export const RECRUITER_FORBIDDEN_KEYS: readonly string[] = [
   'absenceReplyAt',
   'declineNote',
   'outcomeById',
+  // Décision 2026-11-12 : « Déjà placé » est réservé aux admins.
+  'alreadyPlaced',
 ]
 
 /** Chemins (`a.b[0].c`) des clés interdites trouvées dans une valeur JSON. */

@@ -23,6 +23,7 @@ import { runHiringJobs, scheduleHiringJobs } from '../lib/hiring-jobs.js'
 import { HIRING_SUPPORTED, HIRING_UNAVAILABLE_ERROR, displayedRound, loadLinkedPlacements } from '../lib/hiring-store.js'
 import { listAdminHireProposals, loadProposalRows, proposalView } from '../lib/hire-proposals.js'
 import { hiringPhase } from '../../../src/lib/hiring.js'
+import { alreadyPlacedOf, loadCandidatePlacementStatus } from '../lib/candidate-placement.js'
 
 const router = Router()
 
@@ -118,7 +119,10 @@ router.get('/candidates/:id', async (req, res, next) => {
       res.status(404).json({ error: 'Candidat introuvable.' })
       return
     }
-    res.json({ candidate: toAdminCandidateProfile(profile, profile.user) })
+    const placed = await loadCandidatePlacementStatus([req.params.id])
+    res.json({
+      candidate: { ...toAdminCandidateProfile(profile, profile.user), alreadyPlaced: alreadyPlacedOf(placed, req.params.id) },
+    })
   } catch (err) {
     next(err)
   }
@@ -224,10 +228,12 @@ router.get('/match-suggestions', async (req, res, next) => {
     // issue du tour affiché et phase dérivée du dossier (sous-lot 3) ;
     // propositions d'embauche (vue admin, D3) et placement lié (sous-lot 5).
     const connected = rows.filter((row) => row.status === 'mise_en_relation')
-    const [contexts, proposalRows, placements] = await Promise.all([
+    const [contexts, proposalRows, placements, placed] = await Promise.all([
       loadHiringContexts(connected),
       loadProposalRows(connected.map((row) => row.id)),
       loadLinkedPlacements(connected.map((row) => row.id)),
+      // Badge « Déjà placé » (décision 2026-11-12), admin seulement.
+      loadCandidatePlacementStatus(rows.map((row) => row.candidateId)),
     ])
     const now = new Date()
     const suggestions = rows.map(({ candidate, ...suggestion }) => {
@@ -244,6 +250,7 @@ router.get('/match-suggestions', async (req, res, next) => {
           id: candidate.id,
           email: candidate.email,
           candidateProfile: profile ? { fullName: profile.fullName } : null,
+          alreadyPlaced: alreadyPlacedOf(placed, candidate.id),
         },
         cvVerificationStatus: profile?.cvUrl ? profile.cvVerificationStatus : null,
         cvFlagCount: profile?.cvUrl ? parseCvFlags(profile.cvFlags).length : 0,

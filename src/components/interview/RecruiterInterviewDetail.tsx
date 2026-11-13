@@ -530,6 +530,12 @@ function PhaseNote({ phase, planBlocked, canSend, sendBlocked, canRecord, onSend
           {canRecord ? ' Vous pouvez encore renseigner l’issue « Non retenu » ou « Absent » de l’entretien passé.' : ''}
         </p>
       )
+    case 'retrait_candidat':
+      return (
+        <p className="rivd-note">
+          Le candidat a retiré son dossier : il est clos, sans nouvel entretien ni proposition.
+        </p>
+      )
     case 'non_retenu':
       return (
         <p className="rivd-note">

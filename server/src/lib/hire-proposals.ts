@@ -33,7 +33,7 @@ import {
   type HiringPhase,
 } from '../../../src/lib/hiring.js'
 import { prisma } from './prisma.js'
-import { clip, scheduleAdminNotification, scheduleNotification } from './notify.js'
+import { clip, plural, scheduleAdminNotification, scheduleNotification } from './notify.js'
 import {
   HIRING_SUPPORTED,
   HIRING_UNAVAILABLE_ERROR,
@@ -58,6 +58,8 @@ import {
   type ServiceResult,
 } from './interviews.js'
 import { applyAutoFillTx, lockOpportunity, scheduleFilledClosureEffects, type FilledClosure } from './opportunity-fill.js'
+import { alreadyPlacedOf, countActivePlacementsElsewhere, loadCandidatePlacementStatus, lockCandidate } from './candidate-placement.js'
+import type { AlreadyPlacedView } from '../../../src/types/index.js'
 
 /**
  * Propositions d'embauche (plan du 2026-10-16, sous-lot 5 ; décisions D1–D3).
@@ -98,12 +100,13 @@ class HiringRefusal extends Error {
   constructor(
     readonly httpStatus: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message)
   }
 }
 
-const refuse = (check: Extract<HiringCheck, { ok: false }>) => new HiringRefusal(check.httpStatus, check.error)
+const refuse = (check: Extract<HiringCheck, { ok: false }>) => new HiringRefusal(check.httpStatus, check.error, check.code)
 
 function storeOrThrow(client: unknown) {
   const store = hireProposalStore(client)
@@ -124,7 +127,7 @@ async function loadContext(client: HiringClient, dossier: Dossier): Promise<Hiri
 }
 
 function mapError(err: unknown): ServiceResult<never> | null {
-  if (err instanceof HiringRefusal) return fail(err.httpStatus, err.message)
+  if (err instanceof HiringRefusal) return fail(err.httpStatus, err.message, err.code)
   if (isInterviewStorageError(err)) return hiringUnavailable()
   return null
 }
@@ -616,25 +619,38 @@ export interface AcceptBody {
  * 4. offre pourvue si le nombre de postes est atteint, autres dossiers clos.
  * Deux acceptations concurrentes sur une offre à un poste : la seconde
  * attend le verrou de l'offre, la relit pourvue et reçoit 409.
+ *
+ * Candidat déjà en poste (décision 2026-11-12) : après les verrous de
+ * l'offre et du dossier, verrou du CANDIDAT (`lockCandidate`), puis
+ * recomptage de ses placements actifs sur d'autres offres. S'il en a, 409
+ * `ALREADY_PLACED_ELSEWHERE` tant que `confirmCumulative` n'est pas envoyé ;
+ * deux acceptations simultanées sur deux offres passent l'une après l'autre
+ * et la seconde voit le placement de la première. Cumul confirmé :
+ * `AuditLog` `hire_cumulative_confirmed` et admins informés ; le matching
+ * reste en pause (seul un admin réintègre le candidat).
  */
 export async function acceptHireProposal(input: {
   suggestionId: string
   candidateId: string
   proposalId: string
   revision: number
+  confirmCumulative?: boolean
 }): Promise<ServiceResult<AcceptBody>> {
   const loaded = await loadCandidateDossier(input.suggestionId, input.candidateId)
   if (isServiceResult(loaded)) return loaded
   const dossier = loaded
   const now = new Date()
-  let result: { row: HireProposalRow; placementId: string; closure: FilledClosure | null }
+  let result: { row: HireProposalRow; placementId: string; closure: FilledClosure | null; elsewhere: number }
   try {
     result = await prisma.$transaction(async (tx) => {
       await lockOpportunity(tx, dossier.opportunityId)
       await lockDossier(tx, dossier.id)
+      // Ordre : offre → dossier → candidat (jamais l'inverse).
+      await lockCandidate(tx, dossier.candidateId)
       const fresh = await loadDossier(dossier.id, tx)
       if (!fresh || fresh.status !== 'mise_en_relation') throw new HiringRefusal(404, PROPOSAL_NOT_FOUND_ERROR)
       const recruiter = await tx.user.findUnique({ where: { id: fresh.opportunity.recruiterId }, select: { status: true } })
+      const elsewhere = await countActivePlacementsElsewhere(tx, fresh.candidateId, fresh.opportunityId)
       const context = await loadContext(tx, fresh)
       const check = checkHiringAction({
         actor: 'candidate',
@@ -645,6 +661,8 @@ export async function acceptHireProposal(input: {
         revision: input.revision,
         candidateBlocked: isBlocked(fresh.candidate.status),
         recruiterBlocked: !recruiter || isBlocked(recruiter.status),
+        activePlacementsElsewhere: elsewhere,
+        confirmCumulative: input.confirmCumulative === true,
       })
       if (!check.ok) throw refuse(check)
       const store = storeOrThrow(tx)
@@ -696,8 +714,18 @@ export async function acceptHireProposal(input: {
           metadata: { placementId: placement.id, suggestionId: fresh.id, proposalId: row.id, opportunityId: fresh.opportunityId },
         },
       })
+      if (elsewhere > 0) {
+        // Cumul confirmé par le candidat (décision 2026-11-12).
+        await tx.auditLog.create({
+          data: {
+            userId: input.candidateId,
+            action: 'hire_cumulative_confirmed',
+            metadata: { suggestionId: fresh.id, proposalId: row.id, placementId: placement.id, otherActivePlacements: elsewhere },
+          },
+        })
+      }
       const closure = await applyAutoFillTx(tx, fresh.opportunityId, { now, actorId: null })
-      return { row, placementId: placement.id, closure }
+      return { row, placementId: placement.id, closure, elsewhere }
     })
   } catch (err) {
     if (isUniqueViolation(err)) return fail(409, ALREADY_HIRED_ERROR)
@@ -706,7 +734,7 @@ export async function acceptHireProposal(input: {
     throw err
   }
 
-  const { row, closure } = result
+  const { row, closure, elsewhere } = result
   const { companyName, recruiterId } = dossier.opportunity
   scheduleNotification('Notifications de l’acceptation d’une proposition', async () => {
     await notifyCandidateNotice(
@@ -731,6 +759,19 @@ export async function acceptHireProposal(input: {
       'placement créé, étape 1 du success fee due.',
     link: '/admin/placements',
   })
+  if (elsewhere > 0) {
+    // Sans nom d'entreprise ni coordonnées : le cumul est l'information utile.
+    scheduleAdminNotification({
+      event: 'hire_cumulative_confirmed',
+      category: 'candidat',
+      title: 'Cumul de postes confirmé',
+      message:
+        `${candidateName(dossier)} était déjà en poste via OffRec (${plural(elsewhere, 'placement actif', 'placements actifs')}) ` +
+        `et a confirmé cumuler un second poste (« ${clip(row.jobTitle)} »). Son matching reste en pause : ` +
+        'réintégrez-le depuis sa fiche s’il cherche un autre emploi.',
+      link: '/admin/placements',
+    })
+  }
   scheduleFilledClosureEffects(closure)
   return {
     ok: true,
@@ -851,7 +892,8 @@ export interface AdminProposalItem {
   proposal: HireProposalView
   suggestionId: string
   opportunity: { id: string; title: string; companyName: string }
-  candidate: { id: string; fullName: string | null }
+  /** `alreadyPlaced` : badge « Déjà placé » (décision 2026-11-12). */
+  candidate: { id: string; fullName: string | null; alreadyPlaced: AlreadyPlacedView | null }
   phase: HiringPhase | null
 }
 
@@ -896,7 +938,10 @@ export async function listAdminHireProposals(
   const byId = new Map(dossiers.map((dossier) => [dossier.id, dossier]))
   const rounds = interviewStore()
   const roundRows = rounds && dossiers.length > 0 ? await rounds.findMany({ where: { suggestionId: { in: dossiers.map((d) => d.id) } } }) : []
-  const contexts = await buildHiringContexts(dossiers, roundRows)
+  const [contexts, placed] = await Promise.all([
+    buildHiringContexts(dossiers, roundRows),
+    loadCandidatePlacementStatus(dossiers.map((dossier) => dossier.candidate.id)),
+  ])
   const items: AdminProposalItem[] = []
   for (const row of rows) {
     const dossier = byId.get(row.suggestionId)
@@ -906,7 +951,11 @@ export async function listAdminHireProposals(
       proposal: proposalView(row, 'admin', '', now),
       suggestionId: dossier.id,
       opportunity: dossier.opportunity,
-      candidate: { id: dossier.candidate.id, fullName: dossier.candidate.candidateProfile?.fullName ?? null },
+      candidate: {
+        id: dossier.candidate.id,
+        fullName: dossier.candidate.candidateProfile?.fullName ?? null,
+        alreadyPlaced: alreadyPlacedOf(placed, dossier.candidate.id),
+      },
       phase: context ? hiringPhase(context.state, now) : null,
     })
   }

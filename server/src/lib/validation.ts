@@ -409,7 +409,12 @@ export const hireProposalReviseSchema = z
 export const hireProposalWithdrawSchema = z.object({ revision: revisionField })
 
 /** Acceptation par le candidat : la révision qu'il a lue. */
-export const hireProposalAcceptSchema = z.object({ proposalId: proposalIdField, revision: revisionField })
+export const hireProposalAcceptSchema = z.object({
+  proposalId: proposalIdField,
+  revision: revisionField,
+  /** Décision 2026-11-12 : le candidat déjà en poste confirme cumuler les deux postes. */
+  confirmCumulative: z.boolean().optional(),
+})
 
 /** Refus par le candidat : catégorie et précision facultatives (précision lue par les admins seuls). */
 export const hireProposalDeclineSchema = z.object({

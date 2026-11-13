@@ -331,13 +331,13 @@ export function candidateName(dossier: Dossier): string {
 /** Résultat d'un service : corps à renvoyer, ou erreur HTTP en français.
  *  (Ancien nom : `InterviewOutcome<T>`, renommé pour ne pas le confondre
  *  avec l'issue d'un entretien, enum Prisma `InterviewResult`.) */
-export type ServiceResult<T> = { ok: true; httpStatus: 200 | 201; body: T } | { ok: false; httpStatus: number; error: string }
+export type ServiceResult<T> =
+  | { ok: true; httpStatus: 200 | 201; body: T }
+  /** `code` : identifiant stable pour l'interface (ex. `ALREADY_PLACED_ELSEWHERE`), renvoyé avec `error`. */
+  | { ok: false; httpStatus: number; error: string; code?: string }
 
-export const fail = (httpStatus: number, error: string): { ok: false; httpStatus: number; error: string } => ({
-  ok: false,
-  httpStatus,
-  error,
-})
+export const fail = (httpStatus: number, error: string, code?: string): { ok: false; httpStatus: number; error: string; code?: string } =>
+  code ? { ok: false, httpStatus, error, code } : { ok: false, httpStatus, error }
 
 export const unavailable = () => fail(503, INTERVIEWS_UNAVAILABLE_ERROR)
 

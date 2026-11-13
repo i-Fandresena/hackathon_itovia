@@ -7,6 +7,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Field, Input, Select } from '../../components/ui/Form'
 import { Loading } from '../../components/ui/Loading'
 import { HiringPhaseBadge } from '../../components/hiring/HiringPhaseBadge'
+import { AlreadyPlacedBadge } from '../../components/hiring/AlreadyPlacedBadge'
 import { HireProposalSummary } from '../../components/hiring/HireProposalSummary'
 import { ApiError, apiAdminHireProposals, type AdminHireProposalItem } from '../../lib/api'
 import { DECLINE_REASON_LABELS, HIRE_DECLINE_REASONS, HIRE_PROPOSAL_STATUSES, HIRE_PROPOSAL_STATUS_LABELS } from '../../lib/hiring'
@@ -257,7 +258,9 @@ export function AdminHireProposals({ dossierId, onClearDossier }: AdminHirePropo
                 <Card className="ahp-card">
                   <div className="ahp-card-head">
                     <div className="ahp-card-id">
-                      <strong>{item.candidate.fullName ?? 'Candidat'}</strong>
+                      <strong>
+                        {item.candidate.fullName ?? 'Candidat'} <AlreadyPlacedBadge placed={item.candidate.alreadyPlaced} />
+                      </strong>
                       <span className="ahp-card-offer">
                         {item.opportunity.title} — {item.opportunity.companyName}
                       </span>

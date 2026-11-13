@@ -112,6 +112,11 @@
   margin-bottom: 1rem;
 }
 
+/* Candidat en poste : retrait de ses autres dossiers (décision 2026-11-12). */
+.dash-other-dossiers {
+  margin-bottom: 1rem;
+}
+
 .dash-feedback {
   margin-bottom: 1rem;
   padding: 0.7rem 0.85rem;

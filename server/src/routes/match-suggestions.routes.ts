@@ -31,6 +31,7 @@ import {
   withdrawHireProposal,
 } from '../lib/hire-proposals.js'
 import { STALE_SUGGESTION_ERROR, commitMatchTransition } from '../lib/preselection-service.js'
+import { otherDossiersSummary, withdrawFromOtherDossiers } from '../lib/withdraw-others.js'
 import { HIRING_SUPPORTED, displayedRound, loadLinkedPlacements, omitHiringColumns } from '../lib/hiring-store.js'
 import { candidateHiringPhase, hiringPhase } from '../../../src/lib/hiring.js'
 import type { MatchSuggestion as DbMatchSuggestion } from '@prisma/client'
@@ -291,6 +292,37 @@ router.get('/interviews', requireRole('recruiter'), async (req, res, next) => {
 })
 
 /**
+ * Candidat en poste via OffRec (décision 2026-11-12) : `{ placed,
+ * openDossiers }` — a-t-il un placement actif, et combien d'autres dossiers
+ * ouverts voit-il dans « Mes dossiers ». Sert à proposer « Me retirer de mes
+ * autres dossiers » après « Félicitations ! » et sur le tableau de bord.
+ */
+router.get('/other-dossiers', requireRole('candidate'), async (req, res, next) => {
+  try {
+    res.json(await otherDossiersSummary(req.session!.sub))
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * « Me retirer de mes autres dossiers » (décision 2026-11-12, candidat en
+ * poste seulement, sinon 409) : tous ses autres dossiers ouverts, hors les
+ * offres où il est en poste — avant la mise en relation → écartés ; mis en
+ * relation → tour actif sans issue annulé, proposition en attente déclinée
+ * (catégorie neutre), dossier clos (`retrait_candidat`). Recruteurs informés
+ * par un message neutre, admins par un résumé. 200 `{ withdrawn }`.
+ * Idempotent : un second appel répond `{ withdrawn: 0 }`.
+ */
+router.post('/withdraw-others', requireRole('candidate'), async (req, res, next) => {
+  try {
+    sendOutcome(res, await withdrawFromOtherDossiers(req.session!.sub))
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
  * Intérêt sans date — ancien parcours.
  *
  * Recruteur : RETIRÉ depuis la décision 2026-10-14. « Ce profil
@@ -494,7 +526,7 @@ router.post('/:id/decline', async (req, res, next) => {
 
 function sendOutcome<T>(res: Response, outcome: ServiceResult<T>): void {
   if (outcome.ok) res.status(outcome.httpStatus).json(outcome.body)
-  else res.status(outcome.httpStatus).json({ error: outcome.error })
+  else res.status(outcome.httpStatus).json(outcome.code ? { error: outcome.error, code: outcome.code } : { error: outcome.error })
 }
 
 /**
@@ -701,7 +733,10 @@ router.post('/:id/hire-proposal/withdraw', requireRole('recruiter'), async (req,
  * placement créé dans la même transaction, offre pourvue si le nombre de
  * postes est atteint. 200 `{ proposal, placementCreated, candidatePhase }` ;
  * 404 pas son dossier ; 409 proposition modifiée, expirée, retirée, déjà
- * répondue, poste pourvu, compte inactif, déjà embauché.
+ * répondue, poste pourvu, compte inactif, déjà embauché ; 409
+ * `{ error, code: 'ALREADY_PLACED_ELSEWHERE' }` si le candidat est déjà en
+ * poste via OffRec sur une autre offre (décision 2026-11-12) : l'interface
+ * demande de confirmer le cumul et renvoie `confirmCumulative: true`.
  */
 router.post('/:id/hire-proposal/accept', requireRole('candidate'), async (req, res, next) => {
   try {
@@ -713,6 +748,7 @@ router.post('/:id/hire-proposal/accept', requireRole('candidate'), async (req, r
         candidateId: req.session!.sub,
         proposalId: body.proposalId,
         revision: body.revision,
+        confirmCumulative: body.confirmCumulative === true,
       }),
     )
   } catch (err) {

@@ -1,5 +1,6 @@
 import type {
   AdminInterview,
+  AlreadyPlacedView,
   ContractType,
   HireDeclineReason,
   HireProposalStatus,
@@ -92,10 +93,13 @@ const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http:/
 export class ApiError extends Error {
   status: number
   body?: any
-  constructor(message: string, status: number, body?: any) {
+  /** Code stable renvoyé par le serveur avec certaines erreurs (ex. `ALREADY_PLACED_ELSEWHERE`). */
+  code?: string
+  constructor(message: string, status: number, body?: any, code?: string) {
     super(message)
     this.status = status
     this.body = body
+    this.code = code
   }
 }
 
@@ -118,7 +122,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         errorMsg = `${errorMsg} (${fieldDetails})`
       }
     }
-    throw new ApiError(errorMsg, res.status, body?.details)
+    throw new ApiError(errorMsg, res.status, body?.details, typeof body?.code === 'string' ? body.code : undefined)
   }
   return body as T
 }
@@ -732,11 +736,28 @@ export function apiWithdrawHireProposal(suggestionId: string, revision: number) 
  *  le placement est créé dans la même transaction. 409 proposition
  *  modifiée (relire la nouvelle version), expirée, retirée, déjà répondue,
  *  poste pourvu ou compte inactif ; 404 pas son dossier. */
-export function apiAcceptHireProposal(suggestionId: string, proposalId: string, revision: number) {
+export function apiAcceptHireProposal(suggestionId: string, proposalId: string, revision: number, confirmCumulative = false) {
   return request<{ proposal: HireProposalView; placementCreated: boolean; candidatePhase: CandidateHiringPhase | null }>(
     `/match-suggestions/${suggestionId}/hire-proposal/accept`,
-    { method: 'POST', body: JSON.stringify({ proposalId, revision }) },
+    {
+      method: 'POST',
+      body: JSON.stringify(confirmCumulative ? { proposalId, revision, confirmCumulative: true } : { proposalId, revision }),
+    },
   )
+}
+
+/** 409 de l'acceptation quand le candidat est déjà en poste via OffRec (décision 2026-11-12). */
+export const isAlreadyPlacedElsewhere = (err: unknown): boolean =>
+  err instanceof ApiError && err.status === 409 && err.code === 'ALREADY_PLACED_ELSEWHERE'
+
+/** Candidat : est-il en poste via OffRec, et combien d'autres dossiers ouverts a-t-il ? */
+export function apiOtherDossiers() {
+  return request<{ placed: boolean; openDossiers: number }>('/match-suggestions/other-dossiers')
+}
+
+/** Candidat en poste : « Me retirer de mes autres dossiers » (tous, hors offres où il est en poste). */
+export function apiWithdrawOtherDossiers() {
+  return request<{ withdrawn: number }>('/match-suggestions/withdraw-others', { method: 'POST' })
 }
 
 /** Candidat : décliner, avec une catégorie facultative (montrée au
@@ -757,7 +778,7 @@ export interface AdminHireProposalItem {
   proposal: HireProposalView
   suggestionId: string
   opportunity: { id: string; title: string; companyName: string }
-  candidate: { id: string; fullName: string | null }
+  candidate: { id: string; fullName: string | null; alreadyPlaced?: AlreadyPlacedView | null }
   phase: HiringPhase | null
 }
 
@@ -838,7 +859,7 @@ export interface AdminInterviewItem {
   suggestionStatus: MatchSuggestionStatus
   opportunity: { id: string; title: string; companyName: string }
   recruiter: { id: string; companyName: string }
-  candidate: { id: string; fullName: string | null }
+  candidate: { id: string; fullName: string | null; alreadyPlaced?: AlreadyPlacedView | null }
   /** Phase dérivée du dossier (sous-lot 3). */
   phase?: HiringPhase | null
   /** Dernière proposition d'embauche du dossier (sous-lot 5, vue admin). */
@@ -923,6 +944,8 @@ export interface AdminCandidateDetail {
   cvFlags?: CvFlag[] | null
   /** Date ISO du consentement de matching, `null` si absent ou retiré. */
   matchingConsentAt: string | null
+  /** Déjà en poste via OffRec (décision 2026-11-12), `null` sinon. */
+  alreadyPlaced?: AlreadyPlacedView | null
 }
 
 export function apiAdminCandidateDetail(candidateId: string) {
@@ -944,7 +967,12 @@ export function apiAdminCreateSuggestion(opportunityId: string, candidateId: str
 
 export interface AdminMatchSuggestion extends MatchSuggestion {
   opportunity: { id: string; title: string; companyName: string }
-  candidate: { id: string; email: string; candidateProfile: { fullName: string } | null }
+  candidate: {
+    id: string
+    email: string
+    candidateProfile: { fullName: string } | null
+    alreadyPlaced?: AlreadyPlacedView | null
+  }
   /** `null` si le candidat n'a pas déposé de CV. */
   cvVerificationStatus: CvVerificationStatus | null
   cvFlagCount: number
@@ -1951,6 +1979,7 @@ export type FunnelSituation =
   | 'poste_pourvu'
   | 'embauche_annulee'
   | 'placement_declare'
+  | 'retrait_candidat'
 
 export interface DelaySummary {
   count: number
@@ -2572,6 +2601,8 @@ export interface AdminCandidateSummary {
     flagCount: number
   }
   matchingConsentAt: string | null
+  /** Déjà en poste via OffRec : placements actifs, matching en pause ou réintégré. */
+  alreadyPlaced?: AlreadyPlacedView | null
   counts: AdminCandidateDossierCounts & { openReports: number }
 }
 
@@ -2673,6 +2704,14 @@ export function apiAdminCandidates(
 
 export function apiAdminCandidate(id: string) {
   return request<AdminCandidateAccountDetail>(`/admin/candidates/${encodeURIComponent(id)}`)
+}
+
+/** Admin : réintégrer au matching un candidat en poste (décision 2026-11-12), ou lever la réintégration. */
+export function apiAdminSetMatchingReintegration(id: string, reintegrate: boolean) {
+  return request<{ alreadyPlaced: AlreadyPlacedView | null }>(
+    `/admin/candidates/${encodeURIComponent(id)}/matching-reintegration`,
+    { method: reintegrate ? 'POST' : 'DELETE' },
+  )
 }
 
 /* ------------------------------------------------------------------ */

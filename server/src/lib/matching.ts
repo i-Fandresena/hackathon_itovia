@@ -13,6 +13,7 @@ import {
 } from './preselection.js'
 import { clip, notifyAdmins, plural } from './notify.js'
 import { unfilledOpportunityWhere } from './hiring-store.js'
+import { loadCandidatePlacementStatus } from './candidate-placement.js'
 
 /**
  * Moteur de matching diplômés (décision produit 2026-10-08).
@@ -41,6 +42,8 @@ export type MatchingTrigger =
   | 'opportunity_created'
   | 'opportunity_updated'
   | 'admin_manual'
+  /** Placement d'un candidat annulé : il redevient éligible (décision 2026-11-12). */
+  | 'placement_cancelled'
 
 export interface MatchingConfig {
   /** Score minimum pour créer une suggestion. */
@@ -92,6 +95,7 @@ export interface MatchingRunResult {
 
 const INELIGIBILITY_REASONS: Record<CandidateIneligibility, string> = {
   compte_inactif: 'Compte candidat inactif.',
+  candidat_en_poste: 'Candidat en poste via OffRec : matching en pause.',
   sans_consentement: 'Consentement de matching absent.',
   sans_cv: 'Aucun CV déposé.',
 }
@@ -326,11 +330,13 @@ export async function runMatchingForCandidate(userId: string, options: RunOption
   })
   const profile = user?.candidateProfile
   if (!user || user.role !== 'candidate' || !profile) return notEligible('candidate', 'Candidat introuvable.')
+  const placed = await loadCandidatePlacementStatus([userId])
   const ineligible = candidateIneligibility({
     accountRole: user.role,
     accountStatus: user.status,
     consentAt: profile.matchingConsentAt,
     hasCv: Boolean(profile.cvUrl),
+    placedExcluded: placed.get(userId)?.excluded ?? false,
   })
   if (ineligible) return notEligible('candidate', INELIGIBILITY_REASONS[ineligible])
 
@@ -369,7 +375,7 @@ export async function runMatchingForOpportunity(opportunityId: string, options: 
   }
   const { recruiter: _recruiter, ...opportunity } = found
 
-  const [candidates, existing] = await Promise.all([
+  const [candidates, existing, placed] = await Promise.all([
     prisma.candidateProfile.findMany({
       where: { user: { role: 'candidate' } },
       include: { user: { select: { role: true, status: true } } },
@@ -378,6 +384,7 @@ export async function runMatchingForOpportunity(opportunityId: string, options: 
       where: { opportunityId },
       select: { id: true, candidateId: true, status: true, score: true, reasons: true },
     }),
+    loadCandidatePlacementStatus(),
   ])
 
   const profiles = candidates.filter(
@@ -387,6 +394,7 @@ export async function runMatchingForOpportunity(opportunityId: string, options: 
         accountStatus: p.user.status,
         consentAt: p.matchingConsentAt,
         hasCv: Boolean(p.cvUrl),
+        placedExcluded: placed.get(p.userId)?.excluded ?? false,
       }) === null,
   )
 

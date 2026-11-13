@@ -67,6 +67,8 @@ export interface MetricsDossier {
   cvVerified: boolean
   /** Candidat ou recruteur sur un domaine de test (`isTestEmail`). */
   isTest: boolean
+  /** Dossier mis en relation dont le candidat s'est retiré (décision 2026-11-12). */
+  candidateWithdrawn?: boolean
 }
 
 /** Preuves de transmission lues dans le journal d'audit (lib/hiring-stats.ts). */
@@ -182,6 +184,7 @@ export const FUNNEL_SITUATIONS = [
   'poste_pourvu',
   'embauche_annulee',
   'placement_declare',
+  'retrait_candidat',
 ] as const
 export type FunnelSituation = (typeof FUNNEL_SITUATIONS)[number]
 
@@ -302,6 +305,7 @@ export function buildDossierFacts(input: {
       })),
       placement: placement ? { stage: placement.stage } : null,
       filledAt: dossier.filledAt,
+      ...(dossier.candidateWithdrawn ? { candidateWithdrawn: true } : {}),
     },
     now,
   )
@@ -315,6 +319,7 @@ export function buildDossierFacts(input: {
   else if (phase === 'non_retenu') situation = 'non_retenu'
   else if (phase === 'clos_proposition_refusee') situation = 'proposition_declinee'
   else if (phase === 'poste_pourvu') situation = 'poste_pourvu'
+  else if (phase === 'retrait_candidat') situation = 'retrait_candidat'
   // Toutes les autres phases attendent encore une suite (entretien, issue,
   // tour suivant, proposition ou réponse) : dossier en cours.
   else situation = 'en_cours'

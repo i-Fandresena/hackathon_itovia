@@ -3,7 +3,9 @@
  * plan du 2026-10-16, sous-lots 2 et 5) et des schémas Zod qui s'appuient
  * dessus (lib/validation.ts), plus les règles pures serveur de l'offre
  * pourvue (lib/preselection.ts), et la mesure du sous-lot 7 (entonnoir,
- * indicateur, export pseudonymisé : lib/hiring-metrics.ts). Aucune base,
+ * indicateur, export pseudonymisé : lib/hiring-metrics.ts), et le candidat
+ * déjà en poste (décision 2026-11-12 : cumul, retrait, pause du matching,
+ * badge admin). Aucune base,
  * aucun serveur : des cas figés, l'heure courante est passée en paramètre
  * (`NOW`).
  *
@@ -14,6 +16,12 @@
 import {
   ABSENCE_ALREADY_REPLIED_ERROR,
   ALREADY_HIRED_ERROR,
+  ALREADY_PLACED_ELSEWHERE_CODE,
+  ALREADY_PLACED_ELSEWHERE_ERROR,
+  CANDIDATE_WITHDREW_ERROR,
+  alreadyPlacedView,
+  candidateWithdrawalEffect,
+  placedMatchingExcluded,
   CANDIDATE_ACCOUNT_INACTIVE_ERROR,
   CANDIDATE_FORBIDDEN_KEYS,
   DOSSIER_NOT_FOUND_ERROR,
@@ -127,7 +135,9 @@ import {
 import {
   ADMIN_ALLOWED_TRANSITIONS,
   OPPORTUNITY_FILLED_REASON,
+  PRESELECTION_MOTIFS,
   SYSTEM_ALLOWED_TRANSITIONS,
+  candidateIneligibility,
   opportunityClosedReason,
 } from '../src/lib/preselection.js'
 import {
@@ -1198,6 +1208,105 @@ check(
 )
 check('export : stable d’un appel à l’autre', exp.csv === buildResearchExport({ facts: [...all], key: 'k1', now: NOW, excludeTest: true }).csv)
 check('export : nom de fichier daté', researchExportFilename(NOW) === 'offrec-export-recherche-2026-10-20.csv')
+
+
+/* ---------- Candidat déjà en poste (décision 2026-11-12) ---------- */
+console.log('\n— Candidat déjà en poste (décision 2026-11-12)')
+
+// 1. Deuxième embauche : refusée sans confirmation explicite du cumul.
+const cumul = answer('accept_proposal', D.proposition, { activePlacementsElsewhere: 1 })
+check(
+  'accepter déjà en poste ailleurs → 409 ALREADY_PLACED_ELSEWHERE',
+  !cumul.ok && cumul.httpStatus === 409 && cumul.code === ALREADY_PLACED_ELSEWHERE_CODE && cumul.error === ALREADY_PLACED_ELSEWHERE_ERROR,
+  describe(cumul),
+)
+expectOk('accepter déjà en poste ailleurs avec confirmCumulative → ok', answer('accept_proposal', D.proposition, { activePlacementsElsewhere: 2, confirmCumulative: true }))
+expectOk('accepter sans autre placement → ok (aucune confirmation)', answer('accept_proposal', D.proposition, { activePlacementsElsewhere: 0 }))
+expectFail(
+  'déjà en poste + révision périmée → la révision l’emporte',
+  answer('accept_proposal', D.proposition, { activePlacementsElsewhere: 1, revision: 1 }),
+  409,
+  PROPOSAL_REVISED_ERROR,
+)
+expectFail(
+  'déjà en poste + offre pourvue → poste pourvu l’emporte',
+  answer('accept_proposal', filled(D.proposition), { activePlacementsElsewhere: 1 }),
+  409,
+  POSITION_FILLED_ERROR,
+)
+check('UI : le bouton « Accepter » reste proposé (le serveur demande la confirmation)', allowedHiringActions('candidate', D.proposition, NOW).includes('accept_proposal'))
+check(
+  'les autres refus n’ont pas de code',
+  (() => {
+    const r = answer('accept_proposal', D.proposition, { revision: 1 })
+    return !r.ok && r.code === undefined
+  })(),
+)
+
+// 2. Retrait du candidat d'un dossier mis en relation.
+const withdrawn = (state: HiringDossierState): HiringDossierState => ({ ...state, candidateWithdrawn: true })
+check('retrait : tour à venir → retrait_candidat', hiringPhase(withdrawn(D.planifie), NOW) === 'retrait_candidat')
+check('retrait : proposition en attente → retrait_candidat', hiringPhase(withdrawn(D.proposition), NOW) === 'retrait_candidat')
+check('retrait : vu par le candidat → clos', candidateHiringPhase(withdrawn(D.retenu), NOW) === 'clos')
+check('retrait : embauché sur ce dossier → reste embauche', hiringPhase(withdrawn(D.embauche), NOW) === 'embauche')
+check('retrait : phase terminale même offre pourvue', hiringPhase(filled(withdrawn(D.retenu)), NOW) === 'retrait_candidat')
+check('retrait : libellé recruteur neutre', HIRING_PHASE_LABELS.recruiter.retrait_candidat === 'Candidat retiré' && !/embauch|poste/i.test(HIRING_PHASE_LABELS.recruiter.retrait_candidat))
+expectFail('retrait : envoyer une proposition → 409', act({ actor: 'recruiter', action: 'send_proposal', state: withdrawn(D.retenu) }), 409, CANDIDATE_WITHDREW_ERROR)
+expectFail('retrait : fixer un tour → 409', act({ actor: 'recruiter', action: 'schedule_round', state: withdrawn(D.absent) }), 409, CANDIDATE_WITHDREW_ERROR)
+expectFail('retrait : reprogrammer → 409', act({ actor: 'recruiter', action: 'reschedule_round', state: withdrawn(D.annule) }), 409, CANDIDATE_WITHDREW_ERROR)
+expectFail('retrait : renseigner l’issue → 409', act({ actor: 'recruiter', action: 'record_outcome', state: withdrawn(D.issue) }), 409, CANDIDATE_WITHDREW_ERROR)
+expectFail('retrait : le candidat ne peut plus accepter', answer('accept_proposal', withdrawn(D.proposition)), 409)
+expectOk('retrait : annuler un tour reste possible', act({ actor: 'recruiter', action: 'cancel_round', state: withdrawn(D.planifie) }))
+check('retrait : aucune action recruteur affichée hors annulation', allowedHiringActions('recruiter', withdrawn(D.planifie), NOW).every((a) => a === 'cancel_round'))
+check('retrait : plus d’issue à renseigner', !outcomeToRecord(D.issue.rounds[0], hiringPhase(withdrawn(D.issue), NOW), NOW))
+check('retrait : la clôture « offre pourvue » ne le touche plus', filledClosureEffect(withdrawn(D.proposition), NOW) === null)
+
+const eff = (state: HiringDossierState) => candidateWithdrawalEffect(state, NOW)
+check('effet : tour à venir → annulé (Google à supprimer)', eff(D.planifie)?.cancelRoundId === 'r1' && eff(D.planifie)?.cancelRoundUpcoming === true)
+check('effet : tour passé sans issue → annulé aussi (plus d’issue due)', eff(D.issue)?.cancelRoundId === 'r1' && eff(D.issue)?.cancelRoundUpcoming === false)
+check('effet : empêchement → annulé', eff(D.empechementPasse)?.cancelRoundId === 'r1')
+check('effet : tour déjà annulé → rien à annuler', eff(D.annule)?.cancelRoundId === null)
+check('effet : proposition en attente → déclinée', eff(D.proposition)?.declineProposalId === 'p1' && eff(D.proposition)?.cancelRoundId === null)
+check('effet : proposition échue → rien à décliner', eff(D.propositionEchue)?.declineProposalId === null)
+check('effet : retenu sans proposition → dossier clos sans autre écriture', eff(D.retenu)?.cancelRoundId === null && eff(D.retenu)?.declineProposalId === null)
+check('effet : embauché → aucun', eff(D.embauche) === null)
+check('effet : terminal (non retenu, refus, embauche annulée) → aucun', [D.nonRetenu, D.refusee, D.embaucheAnnulee].every((s) => eff(s) === null))
+check('effet : offre pourvue → aucun', eff(filled(D.planifie)) === null)
+check('effet : déjà retiré → aucun', eff(withdrawn(D.planifie)) === null)
+check('effet : hors mise en relation → aucun', eff(dossier({ status: 'proposee_recruteur' })) === null)
+
+// 3. Pause automatique du matching (D6 : l'accord n'est pas touché).
+const P1 = mDate(-30 * DAY)
+const P2 = mDate(-2 * DAY)
+check('matching : aucun placement → éligible', !placedMatchingExcluded([], null))
+check('matching : un placement actif → en pause', placedMatchingExcluded([P1], null))
+check('matching : réintégré après le placement → éligible', !placedMatchingExcluded([P1], mDate(-10 * DAY)))
+check('matching : placement créé après la réintégration → de nouveau en pause', placedMatchingExcluded([P1, P2], mDate(-10 * DAY)))
+check('badge : null sans placement', alreadyPlacedView([], null) === null)
+const badge = alreadyPlacedView([P1, P2], mDate(-10 * DAY))
+check('badge : nombre, pause, date de réintégration', badge?.activePlacements === 2 && badge.matchingPaused === true && badge.reintegratedAt === mDate(-10 * DAY).toISOString(), JSON.stringify(badge))
+const eligible = { accountRole: 'candidate', accountStatus: 'active', consentAt: NOW, hasCv: true }
+check('éligibilité : en poste → candidat_en_poste', candidateIneligibility({ ...eligible, placedExcluded: true }) === 'candidat_en_poste')
+check('éligibilité : en poste sans accord → candidat_en_poste d’abord', candidateIneligibility({ ...eligible, consentAt: null, placedExcluded: true }) === 'candidat_en_poste')
+check('éligibilité : compte inactif l’emporte', candidateIneligibility({ ...eligible, accountStatus: 'suspended', placedExcluded: true }) === 'compte_inactif')
+check('éligibilité : réintégré → éligible', candidateIneligibility({ ...eligible, placedExcluded: false }) === null)
+check(
+  'présélection : motif « candidat_en_poste » juste après « compte_inactif »',
+  PRESELECTION_MOTIFS.findIndex((m) => m.motif === 'candidat_en_poste') === PRESELECTION_MOTIFS.findIndex((m) => m.motif === 'compte_inactif') + 1,
+)
+
+// 4. Visibilité : jamais côté recruteur.
+check('RECRUITER_FORBIDDEN_KEYS contient alreadyPlaced', RECRUITER_FORBIDDEN_KEYS.includes('alreadyPlaced'))
+check(
+  'findForbiddenKeys repère alreadyPlaced',
+  findForbiddenKeys({ items: [{ candidate: { alreadyPlaced: badge } }] }, RECRUITER_FORBIDDEN_KEYS).join() === 'items[0].candidate.alreadyPlaced',
+)
+check('schéma d’acceptation : confirmCumulative accepté', hireProposalAcceptSchema.safeParse({ proposalId: '11111111-1111-4111-8111-111111111111', revision: 0, confirmCumulative: true }).success)
+check('schéma d’acceptation : confirmCumulative non booléen refusé', !hireProposalAcceptSchema.safeParse({ proposalId: '11111111-1111-4111-8111-111111111111', revision: 0, confirmCumulative: 'oui' }).success)
+
+// 5. Mesure : un dossier retiré par le candidat a sa propre situation.
+const fw = facts(mDossier({ id: 'w1', candidateWithdrawn: true }), [mRound({ suggestionId: 'w1', round: 1, status: 'annule' })])
+check('mesure : dossier retiré → situation retrait_candidat', fw?.situation === 'retrait_candidat' && fw.phase === 'retrait_candidat', JSON.stringify({ s: fw?.situation, p: fw?.phase }))
 
 console.log(failures ? `\n${failures} échec(s) sur ${total} contrôles.` : `\nTous les contrôles sont OK (${total}).`)
 process.exit(failures ? 1 : 0)

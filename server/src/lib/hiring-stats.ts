@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from './prisma.js'
 import { HIRING_SUPPORTED } from './hiring-store.js'
+import { loadWithdrawnDossiers } from './hiring-state.js'
 import {
   OUTCOME_INDICATOR_GRACE_DAYS,
   OUTCOME_INDICATOR_WINDOW_DAYS,
@@ -210,14 +211,18 @@ export async function loadHiringFacts(
   try {
     const { dossiers, truncated } = await loadDossiers(scope)
     const ids = dossiers.map((d) => d.id)
-    const [evidence, children] = await Promise.all([loadTransmissionEvidence(ids), loadChildren(ids)])
+    const [evidence, children, withdrawn] = await Promise.all([
+      loadTransmissionEvidence(ids),
+      loadChildren(ids),
+      loadWithdrawnDossiers(dossiers.filter((d) => d.status === 'mise_en_relation').map((d) => d.id)),
+    ])
     const rounds = groupBy(children.rounds)
     const proposals = groupBy(children.proposals)
     const placements = new Map(children.placements.map((p) => [p.suggestionId, p]))
     const facts: DossierFacts[] = []
     for (const dossier of dossiers) {
       const f = buildDossierFacts({
-        dossier,
+        dossier: withdrawn.has(dossier.id) ? { ...dossier, candidateWithdrawn: true } : dossier,
         evidence: evidence.get(dossier.id),
         rounds: rounds.get(dossier.id) ?? [],
         proposals: proposals.get(dossier.id) ?? [],

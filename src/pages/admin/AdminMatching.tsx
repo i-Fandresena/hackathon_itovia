@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Bot,
   CheckCircle2,
@@ -25,6 +25,7 @@ import { MatchFitDetail } from '../../components/matching/MatchFitDetail'
 import { OpportunityMissions } from '../../components/opportunity/OpportunityMissions'
 import { InterviewSummary } from '../../components/interview/InterviewSummary'
 import { HiringPhaseBadge } from '../../components/hiring/HiringPhaseBadge'
+import { AlreadyPlacedBadge, alreadyPlacedText } from '../../components/hiring/AlreadyPlacedBadge'
 import { stateText } from '../../components/hiring/HireProposalSummary'
 import { DOSSIER_GROUP_LABELS, dossierGroup, latestProposal, type DossierGroup } from '../../components/hiring/hiringState'
 import { INTERVIEW_RESULT_LABELS, RESULT_REASON_LABELS } from '../../lib/hiring'
@@ -471,6 +472,8 @@ export function AdminMatching() {
 
         <div className="match-chips">
           {legacy && <Badge variant="muted">{STATUS_LABELS[s.status]}</Badge>}
+          {/* Décision 2026-11-12 : candidat déjà en poste via OffRec (admin seulement). */}
+          <AlreadyPlacedBadge placed={s.candidate.alreadyPlaced} />
           {/* Après l'entretien : phase dérivée du dossier (sous-lot 3). */}
           {s.status === 'mise_en_relation' && s.phase && <HiringPhaseBadge audience="admin" phase={s.phase} />}
           <OriginChip origin={s.origin} />
@@ -600,6 +603,7 @@ export function AdminMatching() {
                 {entry.fullName}
               </label>
               <div className="match-chips">
+                <AlreadyPlacedBadge placed={entry.alreadyPlaced} />
                 <CvStatusBadge status={entry.cvVerificationStatus} />
                 <CvFlagCount count={entry.cvFlagCount} />
                 {entry.suggestion ? (
@@ -912,7 +916,9 @@ export function AdminMatching() {
                       return (
                         <li key={c.candidateId} className="presel-eliminated-row">
                           <div className="presel-eliminated-id">
-                            <strong>{c.fullName}</strong>
+                            <strong>
+                              {c.fullName} <AlreadyPlacedBadge placed={c.alreadyPlaced} />
+                            </strong>
                             <span className="presel-eliminated-motif">
                               {c.motifLabel} · score {c.score}%
                               {c.suggestion && c.suggestion.status !== 'ecartee'
@@ -931,6 +937,12 @@ export function AdminMatching() {
                                 <ListPlus size={14} aria-hidden />
                                 {c.motif === 'deja_ecarte' ? 'Remettre en file' : 'Mettre en file'}
                               </Button>
+                            )}
+                            {c.motif === 'candidat_en_poste' && (
+                              // Seul un admin réintègre un candidat en poste, depuis sa fiche.
+                              <Link className="btn btn-outline btn-sm" to={`/admin/candidats?id=${c.candidateId}`}>
+                                Réintégrer depuis sa fiche
+                              </Link>
                             )}
                             <Button variant="ghost" size="sm" onClick={() => openCandidateDetail(c.candidateId)}>
                               <Eye size={14} aria-hidden />
@@ -1098,6 +1110,12 @@ export function AdminMatching() {
                   <p className="match-detail-contact">
                     {candidateDetail.email} · {candidateDetail.phone}
                   </p>
+                  {candidateDetail.alreadyPlaced && (
+                    <p className="match-hint match-hint-warning">
+                      <AlreadyPlacedBadge placed={candidateDetail.alreadyPlaced} />{' '}
+                      {alreadyPlacedText(candidateDetail.alreadyPlaced)}
+                    </p>
+                  )}
                 </div>
                 <dl className="match-detail-rows">
                   <Row label="Localisation" value={`${candidateDetail.city}, ${candidateDetail.province}`} />

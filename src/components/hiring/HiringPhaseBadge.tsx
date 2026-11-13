@@ -17,6 +17,7 @@ const PHASE_TONE: Record<HiringPhase, Tone> = {
   clos_proposition_refusee: 'muted',
   non_retenu: 'muted',
   poste_pourvu: 'muted',
+  retrait_candidat: 'muted',
 }
 
 const CANDIDATE_TONE: Record<CandidateHiringPhase, Tone> = {

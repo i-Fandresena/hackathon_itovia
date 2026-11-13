@@ -19,6 +19,7 @@ import {
 } from '../../components/interview/InterviewList'
 import { InterviewSummary } from '../../components/interview/InterviewSummary'
 import { HiringPhaseBadge, hiringPhaseLabel } from '../../components/hiring/HiringPhaseBadge'
+import { AlreadyPlacedBadge } from '../../components/hiring/AlreadyPlacedBadge'
 import { outcomeIsLastStep } from '../../components/hiring/hiringState'
 import {
   ApiError,
@@ -446,7 +447,12 @@ export function AdminInterviews() {
                               : undefined
                         }
                         flag={isOutcomeRow(item) ? 'Issue à renseigner' : undefined}
-                        badges={<RoundChips interview={item.interview} showRound showOutcome />}
+                        badges={
+                          <>
+                            <AlreadyPlacedBadge placed={item.candidate.alreadyPlaced} />
+                            <RoundChips interview={item.interview} showRound showOutcome />
+                          </>
+                        }
                         extra={
                           <>
                             <span>{providerLabel(item.interview)}</span>
@@ -543,6 +549,7 @@ export function AdminInterviews() {
                 {detail.opportunity.title} · {detail.opportunity.companyName}
               </p>
               {detail.phase && <HiringPhaseBadge audience="admin" phase={detail.phase} />}
+              <AlreadyPlacedBadge placed={detail.candidate.alreadyPlaced} />
             </div>
             {noticeBlock}
             {(detail.interview.outcome || (detail.interview.round ?? 1) > 1) && (

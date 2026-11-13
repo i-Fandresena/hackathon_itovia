@@ -73,6 +73,10 @@ const ACTIONS: Record<string, ActionDef> = {
   cv_verification: { family: 'candidats', label: 'Vérification d’un CV' },
   candidate_interested: { family: 'candidats', label: 'Candidat intéressé (ancien parcours)' },
   candidate_declined: { family: 'candidats', label: 'Candidat retiré d’un dossier' },
+  // Candidat déjà en poste (décision 2026-11-12)
+  candidate_withdrew_dossier: { family: 'candidats', label: 'Candidat en poste retiré d’un dossier mis en relation' },
+  candidate_matching_reintegrated: { family: 'candidats', label: 'Candidat en poste réintégré au matching' },
+  candidate_matching_reintegration_revoked: { family: 'candidats', label: 'Réintégration au matching levée (candidat en poste)' },
 
   // Matching et mise en relation (moteur et décisions de l'admin)
   match_suggestion_created: { family: 'matching', label: 'Profil mis en file de validation' },
@@ -143,6 +147,7 @@ const ACTIONS: Record<string, ActionDef> = {
   // Abonnements et placements
   placement_declared: { family: 'placements', label: 'Placement déclaré par le recruteur' },
   placement_created_auto: { family: 'placements', label: 'Placement créé à l’acceptation d’une proposition' },
+  hire_cumulative_confirmed: { family: 'placements', label: 'Cumul de postes confirmé par le candidat' },
   placement_stage_updated: { family: 'placements', label: 'Étape de placement mise à jour par le recruteur' },
   admin_corrected_placement_stage: { family: 'placements', label: 'Étape de placement corrigée' },
 
@@ -564,7 +569,33 @@ function describe(log: ActivityLog, ctx: Context): Described {
     case 'recruiter_interested':
     case 'recruiter_declined': {
       const parts = suggestionParts(ctx, meta)
-      return { detail: parts.candidate, target: parts.target, link: parts.link }
+      return {
+        detail: joinParts([parts.candidate, str(meta, 'source') === 'withdraw_others' && 'retrait de ses autres dossiers']),
+        target: parts.target,
+        link: parts.link,
+      }
+    }
+    case 'candidate_withdrew_dossier': {
+      const parts = suggestionParts(ctx, meta)
+      return {
+        detail: joinParts([
+          parts.candidate,
+          idOf(meta, 'cancelledInterviewId') && 'entretien annulé',
+          idOf(meta, 'declinedProposalId') && 'proposition déclinée',
+        ]),
+        target: parts.target,
+        link: '/admin/mise-en-relation',
+      }
+    }
+    case 'candidate_matching_reintegrated':
+    case 'candidate_matching_reintegration_revoked': {
+      const candidateId = idOf(meta, 'candidateId')
+      const active = num(meta, 'activePlacements')
+      return {
+        detail: active !== null ? `${plural(active, 'placement actif', 'placements actifs')}` : null,
+        target: userTarget(ctx, candidateId),
+        link: candidateId ? `/admin/candidats?id=${candidateId}` : null,
+      }
     }
 
     case 'match_suggestion_created': {
@@ -869,6 +900,15 @@ function describe(log: ActivityLog, ctx: Context): Described {
     case 'placement_created_auto': {
       const parts = suggestionParts(ctx, meta)
       return { detail: joinParts(['Candidat diplômé', parts.candidate]), target: parts.target, link: '/admin/placements' }
+    }
+    case 'hire_cumulative_confirmed': {
+      const parts = suggestionParts(ctx, meta)
+      const others = num(meta, 'otherActivePlacements')
+      return {
+        detail: joinParts([parts.candidate, others !== null && `déjà ${plural(others, 'placement actif', 'placements actifs')}`]),
+        target: parts.target,
+        link: '/admin/placements',
+      }
     }
     case 'placement_stage_updated':
     case 'admin_corrected_placement_stage': {

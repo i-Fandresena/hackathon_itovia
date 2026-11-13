@@ -494,6 +494,21 @@ export type PlacementOrigin = 'declaration' | 'proposition_acceptee'
 /** Raison d'une clôture automatique d'un dossier non mis en relation. */
 export type MatchClosedReason = 'offre_pourvue'
 
+/**
+ * Candidat déjà en poste via OffRec (décision 2026-11-12) — vue ADMIN
+ * seulement, jamais dans une réponse au recruteur (`RECRUITER_FORBIDDEN_KEYS`
+ * contient `alreadyPlaced`). `null` quand le candidat n'a aucun placement
+ * actif (étape différente de `annule`).
+ */
+export interface AlreadyPlacedView {
+  /** Placements actifs du candidat, toutes offres et toutes origines. */
+  activePlacements: number
+  /** Exclu du matching et de la présélection (motif `candidat_en_poste`). */
+  matchingPaused: boolean
+  /** Date ISO de la réintégration au matching par un admin, si elle est en vigueur. */
+  reintegratedAt: string | null
+}
+
 /* -------------------------------------------------------------------------
  * Présélection ATS par offre (couche au-dessus de `scoreOpportunity`)
  * ---------------------------------------------------------------------- */
@@ -534,6 +549,7 @@ export interface MatchFit {
 export type PreselectionMotif =
   | 'offre_fermee'
   | 'compte_inactif'
+  | 'candidat_en_poste'
   | 'sans_consentement'
   | 'sans_cv'
   | 'deja_ecarte'
@@ -586,6 +602,8 @@ export interface PreselectionEntry {
   /** `false` : déjà transmis ou dossier trop avancé — voir `blockedReason`. */
   transmissible: boolean
   blockedReason: string | null
+  /** Déjà en poste via OffRec (admin seulement), `null` sinon. */
+  alreadyPlaced: AlreadyPlacedView | null
 }
 
 /** Candidat éliminé, avec le premier motif rencontré dans l'entonnoir. */
@@ -597,6 +615,8 @@ export interface PreselectionEliminated {
   /** Score `scoreOpportunity` à titre indicatif. */
   score: number
   suggestion: PreselectionSuggestionState | null
+  /** Déjà en poste via OffRec (admin seulement), `null` sinon. */
+  alreadyPlaced: AlreadyPlacedView | null
 }
 
 export interface PreselectionOpportunity {

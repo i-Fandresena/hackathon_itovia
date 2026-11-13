@@ -35,6 +35,8 @@ import {
 import { HIRING_SUPPORTED, HIRING_UNAVAILABLE_ERROR, suggestionHasInterviewWhere } from './hiring-store.js'
 import { buildHiringContexts, roundStateOf } from './hiring-state.js'
 import { latestProposalView, loadProposalRows } from './hire-proposals.js'
+import { alreadyPlacedOf, loadCandidatePlacementStatus } from './candidate-placement.js'
+import type { AlreadyPlacedView } from '../../../src/types/index.js'
 import type { adminInterviewQuerySchema, recruiterInterviewQuerySchema } from './validation.js'
 
 /**
@@ -318,7 +320,8 @@ export interface AdminInterviewItem {
   suggestionStatus: MatchSuggestionStatus
   opportunity: { id: string; title: string; companyName: string }
   recruiter: { id: string; companyName: string }
-  candidate: { id: string; fullName: string | null }
+  /** `alreadyPlaced` : badge « Déjà placé » (décision 2026-11-12), admin seulement. */
+  candidate: { id: string; fullName: string | null; alreadyPlaced: AlreadyPlacedView | null }
   /** Phase dérivée du dossier ; `null` hors `mise_en_relation` ou suite non activée. */
   phase: HiringPhase | null
   /** Dernière proposition d'embauche du dossier (vue admin), ou `null`. */
@@ -436,9 +439,10 @@ export async function listAdminInterviews(
   ])
   const byId = new Map(dossiers.map((dossier) => [dossier.id, dossier]))
   // Phase : tous les tours des dossiers de la page (pas seulement ceux affichés).
-  const [contexts, proposals] = await Promise.all([
+  const [contexts, proposals, placed] = await Promise.all([
     loadHiringContexts(dossiers),
     loadProposalRows(dossiers.map((dossier) => dossier.id)),
+    loadCandidatePlacementStatus(dossiers.map((dossier) => dossier.candidate.id)),
   ])
   const recruiterName = (o: { companyName: string; recruiter: { recruiterProfile: { companyName: string } | null } }) =>
     o.recruiter.recruiterProfile?.companyName || o.companyName
@@ -455,7 +459,11 @@ export async function listAdminInterviews(
       suggestionStatus: dossier.status as MatchSuggestionStatus,
       opportunity: { id: o.id, title: o.title, companyName: o.companyName },
       recruiter: { id: o.recruiterId, companyName: recruiterName(o) },
-      candidate: { id: dossier.candidate.id, fullName: dossier.candidate.candidateProfile?.fullName ?? null },
+      candidate: {
+        id: dossier.candidate.id,
+        fullName: dossier.candidate.candidateProfile?.fullName ?? null,
+        alreadyPlaced: alreadyPlacedOf(placed, dossier.candidate.id),
+      },
       phase: HIRING_SUPPORTED && context ? hiringPhase(context.state, now) : null,
       proposal: latestProposalView(proposals.get(dossier.id), 'admin', '', now),
     })

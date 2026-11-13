@@ -13,6 +13,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 import { WithdrawDossierButton } from '../../components/candidate/WithdrawDossierButton'
 import { HiringPhaseBadge } from '../../components/hiring/HiringPhaseBadge'
+import { OtherDossiersChoice } from '../../components/hiring/OtherDossiersChoice'
 import {
   CandidateHireProposalCard,
   CandidateHireProposalDialog,
@@ -362,6 +363,18 @@ export function CandidateDashboard() {
           <p className="dash-feedback" role="status">
             {proposalFeedback}
           </p>
+        )}
+
+        {/* En poste via OffRec (décision 2026-11-12) : se retirer plus tard de
+            ses autres dossiers. Rechargé quand « Mes dossiers » change. */}
+        {hires > 0 && (
+          <div className="dash-other-dossiers">
+            <OtherDossiersChoice
+              key={dossiers.map((s) => `${s.id}:${s.status}:${s.candidatePhase ?? ''}`).join('|')}
+              variant="card"
+              onWithdrawn={refreshDossiers}
+            />
+          </div>
         )}
 
         <FadeUp eager index={0}>

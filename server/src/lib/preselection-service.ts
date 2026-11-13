@@ -21,6 +21,7 @@ import {
   preselect,
 } from './preselection.js'
 import { closedReasonData, connectedAtData, filledAtOf } from './hiring-store.js'
+import { CANDIDATE_PLACED_TRANSMIT_ERROR, loadCandidatePlacementStatus } from './candidate-placement.js'
 
 /**
  * Accès base de la présélection ATS et des transitions admin. La logique de
@@ -47,7 +48,7 @@ export async function loadPreselection(
   })
   if (!opportunity) return null
 
-  const [profiles, suggestions] = await Promise.all([
+  const [profiles, suggestions, placed] = await Promise.all([
     prisma.candidateProfile.findMany({
       where: { user: { role: 'candidate' } },
       include: { user: { select: { email: true, role: true, status: true } } },
@@ -56,6 +57,8 @@ export async function loadPreselection(
       where: { opportunityId },
       select: { id: true, candidateId: true, status: true, origin: true },
     }),
+    // Décision 2026-11-12 : candidats en poste (motif `candidat_en_poste`, badge admin).
+    loadCandidatePlacementStatus(),
   ])
   const suggestionByCandidate = new Map(suggestions.map((s) => [s.candidateId, s]))
 
@@ -77,6 +80,8 @@ export async function loadPreselection(
         cvSkillsSuggested: p.cvSkillsSuggested,
         sector: p.sector,
         suggestion: suggestion ? { id: suggestion.id, status: suggestion.status, origin: suggestion.origin } : null,
+        placedExcluded: placed.get(p.userId)?.excluded ?? false,
+        alreadyPlaced: placed.get(p.userId)?.view ?? null,
       }
     }),
     top: options.top,
@@ -289,6 +294,14 @@ export async function applyAdminTransition(input: AdminTransitionInput): Promise
   // écarter reste possible.
   if ((to === 'proposee_recruteur' || to === 'mise_en_relation') && filledAtOf(opportunity)) {
     return { ok: false, httpStatus: 409, error: OPPORTUNITY_FILLED_REASON }
+  }
+  // Décision 2026-11-12 : un candidat en poste via OffRec (non réintégré)
+  // n'est plus transmis — même définition que le moteur et la présélection.
+  if (to === 'proposee_recruteur') {
+    const placed = await loadCandidatePlacementStatus([existing.candidateId])
+    if (placed.get(existing.candidateId)?.excluded) {
+      return { ok: false, httpStatus: 409, error: CANDIDATE_PLACED_TRANSMIT_ERROR }
+    }
   }
 
   const suggestion = await commitMatchTransition(prisma, {

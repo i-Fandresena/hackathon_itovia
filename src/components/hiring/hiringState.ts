@@ -88,6 +88,8 @@ export function connectedDossierState(
     proposals: toProposalStates(extras.proposals ?? []),
     placement: extras.placement ?? null,
     filledAt: extras.filledAt ?? (extras.phase === 'poste_pourvu' ? FILLED_FROM_PHASE : null),
+    // Retrait du candidat (décision 2026-11-12) : déduit de la phase du serveur.
+    ...(extras.phase === 'retrait_candidat' ? { candidateWithdrawn: true } : {}),
   }
 }
 
@@ -137,7 +139,13 @@ export function outcomeIsLastStep(round: { outcome?: InterviewResult | null }, p
 export type DossierGroup = 'en_cours' | 'embauche' | 'clos'
 
 /** Phases terminales qui rangent un dossier dans « Clos » (jamais une embauche). */
-const CLOSED_PHASES: readonly HiringPhase[] = ['non_retenu', 'clos_proposition_refusee', 'poste_pourvu', 'embauche_annulee']
+const CLOSED_PHASES: readonly HiringPhase[] = [
+  'non_retenu',
+  'clos_proposition_refusee',
+  'poste_pourvu',
+  'embauche_annulee',
+  'retrait_candidat',
+]
 
 /** Groupe d'un dossier d'après la phase du serveur (`null` : en cours). */
 export function dossierGroup(phase: HiringPhase | null | undefined): DossierGroup {

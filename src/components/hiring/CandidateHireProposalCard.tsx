@@ -1,11 +1,10 @@
-import { CheckCircle2, PartyPopper, PauseCircle, XCircle } from 'lucide-react'
+import { CheckCircle2, PartyPopper, XCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
 import { Button } from '../ui/Button'
 import { Field, Select, Textarea } from '../ui/Form'
 import { Modal } from '../ui/Modal'
-import { ApiError, apiAcceptHireProposal, apiDeclineHireProposal } from '../../lib/api'
+import { ApiError, apiAcceptHireProposal, apiDeclineHireProposal, isAlreadyPlacedElsewhere } from '../../lib/api'
 import {
   DECLINE_NOTE_MAX,
   DECLINE_REASON_LABELS,
@@ -18,10 +17,9 @@ import {
 import { contactDetailsError } from '../../lib/interview'
 import type { HireDeclineReason } from '../../types'
 import { HireProposalSummary } from './HireProposalSummary'
+import { OtherDossiersChoice } from './OtherDossiersChoice'
+import { PauseMatchingConsent } from './PauseMatchingConsent'
 import './CandidateHireProposalCard.css'
-
-/** Où mène « Mettre en pause mon accord de matching » (D6 : jamais automatique). */
-const CONSENT_PATH = '/candidat/profil'
 
 interface CandidateHireProposalCardProps {
   proposal: HireProposalView
@@ -77,10 +75,8 @@ export function CandidateHireProposalCard({
               <PartyPopper size={15} aria-hidden />
               Félicitations ! Embauche confirmée — début le {formatCivilDate(proposal.startDate)}.
             </p>
-            <Link to={CONSENT_PATH} className="chp-link">
-              <PauseCircle size={14} aria-hidden />
-              Mettre en pause mon accord de matching
-            </Link>
+            {/* D6 : la pause reste le choix du candidat, en un clic (décision 2026-11-12). */}
+            <PauseMatchingConsent />
           </>
         )}
         {proposal.status === 'refusee' && (
@@ -92,6 +88,10 @@ export function CandidateHireProposalCard({
 }
 
 export type CandidateProposalStep = 'accept' | 'decline'
+
+/** Confirmation demandée au candidat déjà en poste via OffRec (décision 2026-11-12). */
+export const CUMULATIVE_QUESTION =
+  'Vous êtes déjà en poste via OffRec. Confirmez-vous cumuler les deux postes (temps partiel, second emploi) ?'
 
 interface CandidateHireProposalDialogProps {
   step: CandidateProposalStep
@@ -114,8 +114,11 @@ interface CandidateHireProposalDialogProps {
  * - « Accepter » : confirmation, puis envoi de la révision AFFICHÉE. Un 409
  *   (proposition modifiée entre-temps) recharge le dossier et ré-affiche la
  *   nouvelle version en le signalant ; il faut la relire et confirmer à
- *   nouveau. Succès : écran « Félicitations ! », avec le lien facultatif
- *   « Mettre en pause mon accord de matching » (D6).
+ *   nouveau. Candidat déjà en poste via OffRec (409 `ALREADY_PLACED_ELSEWHERE`,
+ *   décision 2026-11-12) : étape « Cumuler deux postes ? », puis même
+ *   révision renvoyée avec `confirmCumulative`. Succès : écran
+ *   « Félicitations ! », avec « Me retirer de mes autres dossiers / Les
+ *   garder » et la pause de l'accord en un clic (D6 : toujours son choix).
  * - « Décliner » : motif facultatif (liste fermée, montré à l'entreprise) et
  *   précision facultative sans coordonnées (lue par OffRec seulement).
  */
@@ -129,7 +132,7 @@ export function CandidateHireProposalDialog({
   onRefresh,
   onDone,
 }: CandidateHireProposalDialogProps) {
-  const [step, setStep] = useState<CandidateProposalStep | 'accepted' | 'declined'>(initialStep)
+  const [step, setStep] = useState<CandidateProposalStep | 'cumulative' | 'accepted' | 'declined'>(initialStep)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [changed, setChanged] = useState(false)
@@ -144,7 +147,7 @@ export function CandidateHireProposalDialog({
     const key = `${proposal.id}:${proposal.revision}`
     if (seen.current === key) return
     seen.current = key
-    if (step === 'accept' || step === 'decline') setChanged(true)
+    if (step === 'accept' || step === 'decline' || step === 'cumulative') setChanged(true)
   }, [proposal.id, proposal.revision, step])
 
   const close = () => {
@@ -163,7 +166,7 @@ export function CandidateHireProposalDialog({
     setBusy(false)
   }
 
-  const accept = async () => {
+  const accept = async (confirmCumulative = false) => {
     if (busy || !pending) return
     setBusy(true)
     setError('')
@@ -171,13 +174,20 @@ export function CandidateHireProposalDialog({
     try {
       // La révision AFFICHÉE : si l'entreprise a modifié sa proposition
       // entre-temps, le serveur répond 409 « modifiée ».
-      const response = await apiAcceptHireProposal(suggestionId, proposal.id, proposal.revision)
+      const response = await apiAcceptHireProposal(suggestionId, proposal.id, proposal.revision, confirmCumulative)
       setAccepted(response.proposal)
       setBusy(false)
       setStep('accepted')
       await onRefresh()
       onDone?.(proposalAcceptedNotice({ jobTitle: response.proposal.jobTitle, companyName: company, startDate: response.proposal.startDate }).message)
     } catch (err) {
+      // Déjà en poste via OffRec : on demande de confirmer le cumul, puis on
+      // renvoie la même révision avec `confirmCumulative`.
+      if (!confirmCumulative && isAlreadyPlacedElsewhere(err)) {
+        setBusy(false)
+        setStep('cumulative')
+        return
+      }
       await fail(err, 'Acceptation impossible. Réessayez.')
     }
   }
@@ -220,15 +230,13 @@ export function CandidateHireProposalDialog({
             {proposalAcceptedNotice({ jobTitle: done.jobTitle, companyName: company, startDate: done.startDate }).message}
           </p>
           <p className="chp-text">
-            OffRec informe l’entreprise et vous transmet les modalités de votre premier jour. Votre accord de matching
-            reste actif : c’est votre choix. Si vous ne souhaitez plus recevoir de propositions pour l’instant, vous
-            pouvez le mettre en pause depuis votre profil.
+            OffRec informe l’entreprise et vous transmet les modalités de votre premier jour. Tant que vous êtes en
+            poste, OffRec ne vous propose plus de nouvelles offres. Votre accord de matching reste le vôtre : vous
+            pouvez aussi le mettre en pause.
           </p>
+          <OtherDossiersChoice onWithdrawn={onRefresh} />
+          <PauseMatchingConsent />
           <div className="chp-actions">
-            <Link to={CONSENT_PATH} className="btn btn-outline btn-sm">
-              <PauseCircle size={14} aria-hidden />
-              Mettre en pause mon accord de matching
-            </Link>
             <Button size="sm" onClick={onClose}>
               Fermer
             </Button>
@@ -267,6 +275,39 @@ export function CandidateHireProposalDialog({
       {error}
     </p>
   )
+
+  if (step === 'cumulative') {
+    return (
+      <Modal key="chp-cumulative" title="Cumuler deux postes ?" onClose={close}>
+        <div className="chp-dialog">
+          <p className="chp-offer">
+            {companyName ? `${companyName} · ` : ''}
+            {opportunityTitle}
+          </p>
+          {changedNotice}
+          <p className="chp-text">
+            <strong>{CUMULATIVE_QUESTION}</strong>
+          </p>
+          <p className="chp-text">
+            En confirmant, vous acceptez aussi ce poste « {proposal.jobTitle} » chez {company}. Votre autre emploi
+            n’est pas modifié. OffRec en est informé.
+          </p>
+          {errorLine}
+          <div className="chp-actions">
+            <Button variant="ghost" size="sm" disabled={busy} onClick={close}>
+              Ne pas accepter
+            </Button>
+            {pending && (
+              <Button size="sm" disabled={busy} aria-busy={busy} onClick={() => void accept(true)}>
+                <CheckCircle2 size={14} aria-hidden />
+                {busy ? 'Confirmation…' : 'Oui, je cumule les deux postes'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </Modal>
+    )
+  }
 
   if (step === 'decline') {
     return (
